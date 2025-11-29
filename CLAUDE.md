@@ -2,45 +2,35 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Mandatory Rules
+
+- **English Only**: All code, comments, documentation, and commit messages MUST be in English
+- **No Emoji**: Never use emoji in any file (code, docs, comments, commits)
+- **No Local Paths**: Never expose local machine paths in code, tests, or documentation
+- **Design Focus**: RFC documents focus on design decisions, avoid large code blocks
+
 ## Project Overview
 
-**things3** is a Go library providing read-only access to the Things 3 macOS application's SQLite database. It is a Go port of the Python [things.py](https://github.com/thingsapi/things.py) library with full API parity.
+**things3** is a Go library providing read-only access to the Things 3 macOS application's SQLite database. It is a Go port of the Python things.py library with full API parity.
 
-**Goal**: Provide a clean, idiomatic Go API for querying Things 3 tasks, projects, areas, and tags.
-
-## Build & Development Commands
+## Build and Development Commands
 
 ```bash
-# Run all tests
-go test ./...
-
-# Run tests with coverage
-go test -cover ./...
-
-# Run a single test
-go test -run TestTaskQuery ./...
-
-# Run linter (golangci-lint required)
-golangci-lint run
-
-# Format code
-gofmt -w .
-goimports -w -local github.com/moond4rk/things3 .
-
-# Generate documentation
-go doc -all
-
-# Build (library only, no main)
-go build ./...
+go test ./...                              # Run all tests
+go test -cover ./...                       # Run tests with coverage
+go test -run TestTaskQuery ./...           # Run single test
+golangci-lint run                          # Run linter
+gofmt -w . && goimports -w -local github.com/moond4rk/things3 .  # Format
+go build ./...                             # Build
 ```
 
 ## Architecture
 
 ### Design Patterns
 
-- **Client Configuration**: Functional Options pattern (`New(WithDatabasePath(...))`)
-- **Query Building**: Builder pattern with chainable methods (`client.Tasks().WithTag("home").All(ctx)`)
-- **Convenience Methods**: Direct access for common queries (`Inbox()`, `Today()`, etc.)
+- **Client Configuration**: Functional Options pattern
+- **Query Building**: Builder pattern with chainable methods
+- **Convenience Methods**: Direct access for common queries
 
 ### Core Components
 
@@ -54,7 +44,7 @@ go build ./...
 | `convenience.go` | Inbox(), Today(), Todos(), etc. |
 | `models.go` | Task, Area, Tag, ChecklistItem structs |
 | `types.go` | TaskType, Status, StartBucket enums |
-| `date.go` | Things date format conversion (critical) |
+| `date.go` | Things date format conversion |
 | `sql.go` | SQL query building and execution |
 | `database.go` | Database connection and path discovery |
 | `url.go` | Things URL scheme support |
@@ -63,112 +53,92 @@ go build ./...
 
 ### Type System
 
-```go
-// Enums (integer-based for database mapping)
-type TaskType int     // 0=to-do, 1=project, 2=heading
-type Status int       // 0=incomplete, 2=canceled, 3=completed
-type StartBucket int  // 0=Inbox, 1=Anytime, 2=Someday
-```
-
-### Database Path
-
-Things 3 database location:
-- Things 3.15.16+: `~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-*/Things Database.thingsdatabase/main.sqlite`
-- Legacy: `~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/Things Database.thingsdatabase/main.sqlite`
-- Override via `THINGSDB` environment variable
+Enums are integer-based for database mapping:
+- TaskType: 0=to-do, 1=project, 2=heading
+- Status: 0=incomplete, 2=canceled, 3=completed
+- StartBucket: 0=Inbox, 1=Anytime, 2=Someday
 
 ### Things Date Format
 
-Things uses a custom binary date format that must be converted:
-- **Date**: `YYYYYYYYYYYMMMMDDDDD0000000` (27-bit integer)
-- **Time**: `hhhhhmmmmmm00000000000000000000`
-
-The `date.go` file handles all conversions between Things format and Go `time.Time`.
+Things uses custom binary date formats:
+- Date: YYYYYYYYYYYMMMMDDDDD0000000 (27-bit integer)
+- Time: hhhhhmmmmmm00000000000000000000
 
 ## API Design
 
 ### Query Builder Pattern
 
-```go
-// All filter methods are chainable
-client.Tasks().
-    WithType(TaskTypeTodo).
-    WithStatus(StatusIncomplete).
-    InProject("project-uuid").
-    WithTag("urgent").
-    WithDeadline(DateOpExists).
-    IncludeItems(true).
-    All(ctx)
+Filter methods are chainable, terminal methods execute the query:
+- `.All(ctx)` - Get all matching results
+- `.First(ctx)` - Get first match
+- `.Count(ctx)` - Count matches
 
-// Terminal methods
-.All(ctx) ([]Task, error)    // Get all matching
-.First(ctx) (*Task, error)   // Get first match
-.Count(ctx) (int, error)     // Count matches
-```
-
-### Python → Go API Mapping
+### Python to Go API Mapping
 
 | Python | Go |
 |--------|-----|
 | `tasks(uuid=X)` | `client.Tasks().WithUUID(X).First(ctx)` |
 | `tasks(**kwargs)` | `client.Tasks().<filters>.All(ctx)` |
-| `tasks(count_only=True)` | `client.Tasks().<filters>.Count(ctx)` |
 | `todos()` | `client.Todos(ctx)` |
 | `inbox()` | `client.Inbox(ctx)` |
 | `today()` | `client.Today(ctx)` |
-| `search(query)` | `client.Search(ctx, query)` |
 
 ## Code Quality Standards
 
 ### Naming Conventions
 
-- **Exported types**: PascalCase (`TaskQuery`, `ChecklistItem`)
-- **Private functions**: camelCase (`buildWhereClause`)
-- **Constants**: PascalCase for exported, camelCase for internal
-- **Enums**: Type prefix (`TaskTypeTodo`, `StatusCompleted`)
-- **Query methods**: `With*` for filters, `In*` for relationships
+- Exported types: PascalCase (TaskQuery, ChecklistItem)
+- Private functions: camelCase (buildWhereClause)
+- Enums: Type prefix (TaskTypeTodo, StatusCompleted)
+- Query methods: With* for filters, In* for relationships
 
 ### Documentation Requirements
 
-Every exported type and function MUST have:
-- Package-level doc comment in `doc.go`
-- Function doc starting with function name
-- Example code for complex APIs
-
-```go
-// TaskQuery builds queries for Things 3 tasks.
-// Use [Client.Tasks] to create a new TaskQuery.
-type TaskQuery struct { ... }
-
-// WithTag filters tasks by tag title.
-// Use [TaskQuery.HasTags] to filter by tag existence.
-func (q *TaskQuery) WithTag(title string) *TaskQuery { ... }
-```
+Every exported type and function MUST have Go doc comments starting with the identifier name.
 
 ### Testing Requirements
 
 - Table-driven tests for query building
-- Integration tests with test database
-- Test file naming: `*_test.go`
-- Use `testdata/` for test fixtures
+- Integration tests with test database in testdata/
+- Never hardcode local paths in tests
+
+## RFC Documentation
+
+RFC documents are stored in `rfcs/` directory with naming format `NNN_snake_case_title.md`.
+
+### RFC Template
+
+```
+# RFC NNN: Title
+
+Status: Draft | Accepted | Implemented
+Author: @username
+Date: YYYY-MM-DD
+
+## Summary
+One paragraph describing the core content.
+
+## Design
+Detailed design decisions with rationale.
+
+## Implementation Notes
+Key implementation details and considerations.
+```
+
+### Planned RFCs
+
+- 001_rfc_project_overview.md - Project goals, non-goals, core decisions
+- 002_rfc_api_design.md - API patterns and public interface
+- 003_rfc_database_schema.md - Things 3 database structure
+- 004_rfc_types_and_models.md - Type system design
+- 005_rfc_error_handling.md - Error handling strategy
 
 ## Dependencies
 
-- `modernc.org/sqlite` - Pure Go SQLite driver (no CGO)
+- `github.com/mattn/go-sqlite3` - SQLite driver (CGO, optimal for macOS-only)
 - `github.com/stretchr/testify` - Testing (dev only)
 
 ## Reference
 
-**Python Source** (for porting logic):
-- `/Users/leeroger/Developer/python/opython/things.py/things/api.py`
-- `/Users/leeroger/Developer/python/opython/things.py/things/database.py`
-
-**Database Tables**:
-| Table | Purpose |
-|-------|---------|
-| TMTask | Tasks (to-do, project, heading) |
-| TMArea | Areas/workspaces |
-| TMTag | Tags |
-| TMChecklistItem | Checklist items |
-| TMTaskTag | Task-Tag relationship |
-| TMSettings | App settings (auth token) |
+- Python Source: https://github.com/thingsapi/things.py
+- Database path discoverable via THINGSDB environment variable

@@ -8,6 +8,8 @@ Neon = "Neon"
 typ = "typ"
 moond4rk = "moond4rk"
 Webhook = "Webhook"
+# UUID fragments that look like typos
+Fof = "Fof"
 
 [files]
 # A list of glob patterns to ignore.

@@ -241,4 +241,6 @@ things3
 !rfcs/*.md
 !*.go
 
-
+# test data for sqlite
+!testdata/*.sqlite
+!testdata/db2022/*.sqlite

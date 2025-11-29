@@ -1,0 +1,15 @@
+# See https://github.com/crate-ci/typos/blob/master/docs/reference.md to configure typos
+[default.extend-words]
+# A list of words to add to the dictionary.
+# Add any project-specific terms or names here to prevent false positives.
+# For example:
+Ent = "Ent"
+Neon = "Neon"
+typ = "typ"
+moond4rk = "moond4rk"
+Webhook = "Webhook"
+
+[files]
+# A list of glob patterns to ignore.
+# We are ignoring go.sum as it often contains foreign words.
+extend-exclude = ["go.sum", "*.html", "*.json"]

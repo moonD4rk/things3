@@ -44,10 +44,13 @@ jobs:
           skip-cache: false
           skip-save-cache: false
 
-  # Build and test in parallel job
+  # Build and test on multiple platforms
   test:
-    name: Test & Build
-    runs-on: ubuntu-latest
+    name: Test & Build (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout Code
@@ -67,8 +70,9 @@ jobs:
       - name: Run Tests
         run: go test -v -race -coverprofile=coverage.out ./...
 
-      # Upload coverage for analysis
+      # Upload coverage only from Ubuntu to avoid duplicate reports
       - name: Upload coverage reports
+        if: matrix.os == 'ubuntu-latest'
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

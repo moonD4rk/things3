@@ -21,9 +21,8 @@ coverage:
 
 # Paths excluded from coverage calculation
 ignore:
-  # ===== Ent ORM generated code =====
-  - "internal/adapter/storage/ent/migrate/migrations/*.sql"  # Migration files
-  - "cmd/*/main.go"                                 # Main entry points
+  - "cmd/*/main.go"       # Main entry points (minimal code, hard to test)
+  - "testdata/**/*"       # Test fixtures
 
 # PR comment configuration - Show detailed coverage information in PRs
 comment:
@@ -42,9 +41,8 @@ comment:
 flags:
   unittests:
     paths:
-      - internal/               # Only include internal directory
+      - "*.go"                  # Root level library code
     carryforward: false         # Don't use previous coverage data
-    # Note: No target set, so no enforced coverage requirement
 
 # ===== Configuration Explanation =====
 #
@@ -57,14 +55,9 @@ flags:
 # - Auto-compare with previous commit instead of fixed target
 # - Shows trends without hard requirements
 #
-# No threshold setting
-# - Removed to avoid validation errors
-# - Without threshold, coverage drops won't fail CI
-#
 # ===== What You Get =====
-# ✅ Codecov Dashboard: Coverage trends, file-level details, historical data
-# ✅ PR Comments: Detailed coverage changes, file lists, uncovered lines
-# ✅ GitHub Status: Shows coverage info, marked as "Informational"
-# ✅ Flag Classification: See unittest coverage separately
-# ✅ Accurate Stats: Real coverage after excluding Ent generated code
-# ❌ Won't Block: CI won't fail due to coverage issues
+# - Codecov Dashboard: Coverage trends, file-level details, historical data
+# - PR Comments: Detailed coverage changes, file lists, uncovered lines
+# - GitHub Status: Shows coverage info, marked as "Informational"
+# - Flag Classification: See unittest coverage separately
+# - CI won't fail due to coverage issues (informational only)

@@ -329,11 +329,11 @@ func TestThingsDateFilter(t *testing.T) {
 		// Relative to today
 		{
 			"future", "startDate", dateOpFuture, "",
-			"startDate > " + TodayThingsDateSQL(), false,
+			"startDate > " + todayThingsDateSQL(), false,
 		},
 		{
 			"past", "deadline", dateOpPast, "",
-			"deadline <= " + TodayThingsDateSQL(), false,
+			"deadline <= " + todayThingsDateSQL(), false,
 		},
 
 		// Date comparisons (2024-06-15 = year:2024, month:6, day:15)

@@ -270,14 +270,14 @@ func (f thingsDateFilter) SQL() string {
 	case dateOpNotExists:
 		return fmt.Sprintf("%s IS NULL", f.column)
 	case dateOpFuture:
-		return fmt.Sprintf("%s > %s", f.column, TodayThingsDateSQL())
+		return fmt.Sprintf("%s > %s", f.column, todayThingsDateSQL())
 	case dateOpPast:
-		return fmt.Sprintf("%s <= %s", f.column, TodayThingsDateSQL())
+		return fmt.Sprintf("%s <= %s", f.column, todayThingsDateSQL())
 	case dateOpEqual, dateOpBefore, dateOpBeforeEq, dateOpAfter, dateOpAfterEq:
 		if f.value == "" {
 			return ""
 		}
-		thingsDate, err := StringToThingsDate(f.value)
+		thingsDate, err := stringToThingsDate(f.value)
 		if err != nil || thingsDate == 0 {
 			return ""
 		}
@@ -448,9 +448,9 @@ func (f parsedDateFilter) SQL() string {
 func (f parsedDateFilter) parseThingsDateString(value string) string {
 	switch value {
 	case dateFuture:
-		return fmt.Sprintf("%s > %s", f.column, TodayThingsDateSQL())
+		return fmt.Sprintf("%s > %s", f.column, todayThingsDateSQL())
 	case datePast:
-		return fmt.Sprintf("%s <= %s", f.column, TodayThingsDateSQL())
+		return fmt.Sprintf("%s <= %s", f.column, todayThingsDateSQL())
 	}
 
 	match := matchDateWithOperator(value)
@@ -463,7 +463,7 @@ func (f parsedDateFilter) parseThingsDateString(value string) string {
 		operator = defaultDateOperator
 	}
 
-	thingsDate, err := StringToThingsDate(isoDate)
+	thingsDate, err := stringToThingsDate(isoDate)
 	if err != nil {
 		return ""
 	}

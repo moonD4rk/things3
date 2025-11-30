@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestThingsDateToTime(t *testing.T) {
+func Test_thingsDateToTime(t *testing.T) {
 	tests := []struct {
 		name       string
 		thingsDate int64
@@ -41,9 +41,9 @@ func TestThingsDateToTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ThingsDateToTime(tt.thingsDate)
+			got := thingsDateToTime(tt.thingsDate)
 			if tt.thingsDate <= 0 {
-				assert.True(t, got.IsZero(), "ThingsDateToTime(%d) should return zero time", tt.thingsDate)
+				assert.True(t, got.IsZero(), "thingsDateToTime(%d) should return zero time", tt.thingsDate)
 				return
 			}
 			assert.Equal(t, tt.wantYear, got.Year())
@@ -53,7 +53,7 @@ func TestThingsDateToTime(t *testing.T) {
 	}
 }
 
-func TestTimeToThingsDate(t *testing.T) {
+func Test_timeToThingsDate(t *testing.T) {
 	tests := []struct {
 		name string
 		time time.Time
@@ -73,13 +73,13 @@ func TestTimeToThingsDate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := TimeToThingsDate(tt.time)
+			got := timeToThingsDate(tt.time)
 			assert.Equal(t, tt.want, got)
 		})
 	}
 }
 
-func TestThingsDateToString(t *testing.T) {
+func Test_thingsDateToString(t *testing.T) {
 	tests := []struct {
 		name       string
 		thingsDate int64
@@ -104,13 +104,13 @@ func TestThingsDateToString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ThingsDateToString(tt.thingsDate)
+			got := thingsDateToString(tt.thingsDate)
 			assert.Equal(t, tt.want, got)
 		})
 	}
 }
 
-func TestStringToThingsDate(t *testing.T) {
+func Test_stringToThingsDate(t *testing.T) {
 	tests := []struct {
 		name    string
 		isoDate string
@@ -145,7 +145,7 @@ func TestStringToThingsDate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := StringToThingsDate(tt.isoDate)
+			got, err := stringToThingsDate(tt.isoDate)
 			if tt.wantErr {
 				require.Error(t, err)
 				return
@@ -156,7 +156,7 @@ func TestStringToThingsDate(t *testing.T) {
 	}
 }
 
-func TestThingsTimeToString(t *testing.T) {
+func Test_thingsTimeToString(t *testing.T) {
 	tests := []struct {
 		name       string
 		thingsTime int64
@@ -181,31 +181,31 @@ func TestThingsTimeToString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ThingsTimeToString(tt.thingsTime)
+			got := thingsTimeToString(tt.thingsTime)
 			assert.Equal(t, tt.want, got)
 		})
 	}
 }
 
-func TestNowThingsDate(t *testing.T) {
+func Test_nowThingsDate(t *testing.T) {
 	now := time.Now()
-	thingsDate := NowThingsDate()
+	thingsDate := nowThingsDate()
 
 	// Convert back and check
-	converted := ThingsDateToTime(thingsDate)
+	converted := thingsDateToTime(thingsDate)
 
 	assert.Equal(t, now.Year(), converted.Year())
 	assert.Equal(t, now.Month(), converted.Month())
 	assert.Equal(t, now.Day(), converted.Day())
 }
 
-func TestTodayThingsDateSQL(t *testing.T) {
-	sql := TodayThingsDateSQL()
+func Test_todayThingsDateSQL(t *testing.T) {
+	sql := todayThingsDateSQL()
 	assert.NotEmpty(t, sql)
-	assert.Greater(t, len(sql), 50, "TodayThingsDateSQL() seems too short")
+	assert.Greater(t, len(sql), 50, "todayThingsDateSQL() seems too short")
 }
 
-func TestUnixToTime(t *testing.T) {
+func Test_unixToTime(t *testing.T) {
 	tests := []struct {
 		name     string
 		unixTime float64
@@ -225,7 +225,7 @@ func TestUnixToTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := UnixToTime(tt.unixTime)
+			got := unixToTime(tt.unixTime)
 			if tt.wantZero {
 				assert.True(t, got.IsZero())
 			} else {

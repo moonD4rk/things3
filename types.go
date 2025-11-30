@@ -92,39 +92,70 @@ func (s StartBucket) String() string {
 	}
 }
 
-// DateOp represents comparison operators for date-based queries.
-type DateOp int
+// dateOp represents comparison operators for date-based queries.
+type dateOp int
 
 const (
-	// DateOpExists checks if a date value exists (is not null).
-	DateOpExists DateOp = iota
-	// DateOpNotExists checks if a date value does not exist (is null).
-	DateOpNotExists
-	// DateOpBefore checks if a date is before a given value.
-	DateOpBefore
-	// DateOpAfter checks if a date is after a given value.
-	DateOpAfter
-	// DateOpOn checks if a date equals a given value.
-	DateOpOn
-	// DateOpBetween checks if a date is between two values.
-	DateOpBetween
+	// dateOpExists checks if a date value exists (is not null).
+	dateOpExists dateOp = iota
+	// dateOpNotExists checks if a date value does not exist (is null).
+	dateOpNotExists
+	// dateOpEqual checks if a date equals a given value (=).
+	dateOpEqual
+	// dateOpBefore checks if a date is before a given value (<).
+	dateOpBefore
+	// dateOpBeforeEq checks if a date is before or equal to a given value (<=).
+	dateOpBeforeEq
+	// dateOpAfter checks if a date is after a given value (>).
+	dateOpAfter
+	// dateOpAfterEq checks if a date is after or equal to a given value (>=).
+	dateOpAfterEq
+	// dateOpFuture checks if a date is in the future (> today).
+	dateOpFuture
+	// dateOpPast checks if a date is in the past (<= today).
+	dateOpPast
 )
 
-// String returns the string representation of the DateOp.
-func (d DateOp) String() string {
+// SQLOperator returns the SQL operator for comparison operations.
+// Returns empty string for non-comparison operations like Exists/Future/Past.
+func (d dateOp) SQLOperator() string {
 	switch d {
-	case DateOpExists:
+	case dateOpEqual:
+		return "="
+	case dateOpBefore:
+		return "<"
+	case dateOpBeforeEq:
+		return "<="
+	case dateOpAfter:
+		return ">"
+	case dateOpAfterEq:
+		return ">="
+	default:
+		return ""
+	}
+}
+
+// String returns the string representation of the dateOp.
+func (d dateOp) String() string {
+	switch d {
+	case dateOpExists:
 		return "exists"
-	case DateOpNotExists:
+	case dateOpNotExists:
 		return "not_exists"
-	case DateOpBefore:
+	case dateOpEqual:
+		return "equal"
+	case dateOpBefore:
 		return "before"
-	case DateOpAfter:
+	case dateOpBeforeEq:
+		return "before_eq"
+	case dateOpAfter:
 		return "after"
-	case DateOpOn:
-		return "on"
-	case DateOpBetween:
-		return "between"
+	case dateOpAfterEq:
+		return "after_eq"
+	case dateOpFuture:
+		return "future"
+	case dateOpPast:
+		return "past"
 	default:
 		return unknownString
 	}

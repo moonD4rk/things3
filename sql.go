@@ -2,7 +2,6 @@ package things3
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 )
 
@@ -13,212 +12,6 @@ const sqlTrue = "TRUE"
 // In SQLite, single quotes within strings are escaped by doubling them.
 func escapeString(s string) string {
 	return strings.ReplaceAll(s, "'", "''")
-}
-
-// makeFilter creates a SQL filter clause for a column and value.
-// Returns empty string if value is nil.
-// Returns "IS NULL" or "IS NOT NULL" for bool values.
-func makeFilter(column string, value any) string {
-	if value == nil {
-		return ""
-	}
-
-	switch v := value.(type) {
-	case bool:
-		if v {
-			return fmt.Sprintf("AND %s IS NOT NULL", column)
-		}
-		return fmt.Sprintf("AND %s IS NULL", column)
-	case string:
-		return fmt.Sprintf("AND %s = '%s'", column, escapeString(v))
-	default:
-		return fmt.Sprintf("AND %s = '%v'", column, v)
-	}
-}
-
-// makeTruthyFilter creates a SQL filter that matches truthy or falsy values.
-// Truthy means TRUE. Falsy means FALSE or NULL.
-func makeTruthyFilter(column string, value *bool) string {
-	if value == nil {
-		return ""
-	}
-	if *value {
-		return fmt.Sprintf("AND %s", column)
-	}
-	return fmt.Sprintf("AND NOT IFNULL(%s, 0)", column)
-}
-
-// makeOrFilter joins multiple filters with OR.
-func makeOrFilter(filters ...string) string {
-	var nonEmpty []string
-	for _, f := range filters {
-		f = strings.TrimPrefix(f, "AND ")
-		if f != "" {
-			nonEmpty = append(nonEmpty, f)
-		}
-	}
-	if len(nonEmpty) == 0 {
-		return ""
-	}
-	return fmt.Sprintf("AND (%s)", strings.Join(nonEmpty, " OR "))
-}
-
-// makeSearchFilter creates a SQL filter for searching tasks by title, notes, and area title.
-func makeSearchFilter(query string) string {
-	if query == "" {
-		return ""
-	}
-
-	escaped := escapeString(query)
-	columns := []string{"TASK.title", "TASK.notes", "AREA.title"}
-
-	var searches []string
-	for _, col := range columns {
-		searches = append(searches, fmt.Sprintf("%s LIKE '%%%s%%'", col, escaped))
-	}
-
-	return fmt.Sprintf("AND (%s)", strings.Join(searches, " OR "))
-}
-
-// makeThingsDateFilter creates a SQL filter for Things date columns.
-// Supports: bool (IS NULL/IS NOT NULL), "future", "past", or ISO 8601 date with optional operator.
-func makeThingsDateFilter(column string, value any) string {
-	if value == nil {
-		return ""
-	}
-
-	switch v := value.(type) {
-	case bool:
-		return makeFilter(column, v)
-	case string:
-		return makeThingsDateStringFilter(column, v)
-	default:
-		return ""
-	}
-}
-
-// makeThingsDateStringFilter handles string-based date filters.
-func makeThingsDateStringFilter(column, value string) string {
-	if value == "" {
-		return ""
-	}
-
-	// Check for "future" or "past"
-	switch value {
-	case "future":
-		return fmt.Sprintf("AND %s > %s", column, TodayThingsDateSQL())
-	case "past":
-		return fmt.Sprintf("AND %s <= %s", column, TodayThingsDateSQL())
-	}
-
-	// Check for ISO 8601 date with optional operator
-	match := matchDateWithOperator(value)
-	if match == nil {
-		return ""
-	}
-
-	operator, isoDate := match[1], match[2]
-	if operator == "" {
-		operator = "=="
-	}
-
-	thingsDate, err := StringToThingsDate(isoDate)
-	if err != nil {
-		return ""
-	}
-
-	return fmt.Sprintf("AND %s %s %d", column, operator, thingsDate)
-}
-
-// makeUnixTimeFilter creates a SQL filter for Unix timestamp columns.
-func makeUnixTimeFilter(column string, value any) string {
-	if value == nil {
-		return ""
-	}
-
-	switch v := value.(type) {
-	case bool:
-		return makeFilter(column, v)
-	case string:
-		return makeUnixTimeStringFilter(column, v)
-	default:
-		return ""
-	}
-}
-
-// makeUnixTimeStringFilter handles string-based Unix time filters.
-func makeUnixTimeStringFilter(column, value string) string {
-	if value == "" {
-		return ""
-	}
-
-	dateExpr := fmt.Sprintf("date(%s, 'unixepoch', 'localtime')", column)
-
-	switch value {
-	case "future":
-		return fmt.Sprintf("AND %s > date('now', 'localtime')", dateExpr)
-	case "past":
-		return fmt.Sprintf("AND %s <= date('now', 'localtime')", dateExpr)
-	}
-
-	match := matchDateWithOperator(value)
-	if match == nil {
-		return ""
-	}
-
-	operator, isoDate := match[1], match[2]
-	if operator == "" {
-		operator = "=="
-	}
-
-	return fmt.Sprintf("AND %s %s date('%s')", dateExpr, operator, isoDate)
-}
-
-// makeUnixTimeRangeFilter creates a SQL filter to limit results to the last X days/weeks/years.
-func makeUnixTimeRangeFilter(column, offset string) string {
-	if offset == "" {
-		return ""
-	}
-
-	if len(offset) < 2 {
-		return ""
-	}
-
-	number := offset[:len(offset)-1]
-	suffix := offset[len(offset)-1]
-
-	var modifier string
-	switch suffix {
-	case 'd':
-		modifier = fmt.Sprintf("-%s days", number)
-	case 'w':
-		// Convert weeks to days
-		var weeks int
-		if _, err := fmt.Sscanf(number, "%d", &weeks); err != nil {
-			return ""
-		}
-		modifier = fmt.Sprintf("-%d days", weeks*7)
-	case 'y':
-		modifier = fmt.Sprintf("-%s years", number)
-	default:
-		return ""
-	}
-
-	columnDatetime := fmt.Sprintf("datetime(%s, 'unixepoch', 'localtime')", column)
-	offsetDatetime := fmt.Sprintf("datetime('now', '%s')", modifier)
-
-	return fmt.Sprintf("AND %s > %s", columnDatetime, offsetDatetime)
-}
-
-// matchDateWithOperator matches an ISO 8601 date string with optional comparison operator.
-// Returns [fullMatch, operator, date] or nil if no match.
-func matchDateWithOperator(value string) []string {
-	re := regexp.MustCompile(`^(=|==|<|<=|>|>=)?(\d{4}-\d{2}-\d{2})$`)
-	matches := re.FindStringSubmatch(value)
-	if len(matches) != 3 {
-		return nil
-	}
-	return matches
 }
 
 // thingsDateExpressionToISODate creates a SQL expression to convert Things date to ISO format.
@@ -246,12 +39,12 @@ func buildTasksSQL(wherePredicate, orderPredicate string) string {
 		wherePredicate = sqlTrue
 	}
 	if orderPredicate == "" {
-		orderPredicate = fmt.Sprintf("TASK.%q", IndexDefault)
+		orderPredicate = fmt.Sprintf("TASK.%q", indexDefault)
 	}
 
-	startDateExpr := thingsDateExpressionToISODate(fmt.Sprintf("TASK.%s", ColStartDate))
-	deadlineExpr := thingsDateExpressionToISODate(fmt.Sprintf("TASK.%s", ColDeadline))
-	reminderTimeExpr := thingsTimeExpressionToISOTime(fmt.Sprintf("TASK.%s", ColReminderTime))
+	startDateExpr := thingsDateExpressionToISODate(fmt.Sprintf("TASK.%s", colStartDate))
+	deadlineExpr := thingsDateExpressionToISODate(fmt.Sprintf("TASK.%s", colDeadline))
+	reminderTimeExpr := thingsTimeExpressionToISOTime(fmt.Sprintf("TASK.%s", colReminderTime))
 
 	return fmt.Sprintf(`
 		SELECT DISTINCT
@@ -329,14 +122,14 @@ func buildTasksSQL(wherePredicate, orderPredicate string) string {
 		ORDER BY
 			%s
 	`,
-		FilterIsTodo, FilterIsProject, FilterIsHeading,
-		FilterIsTrashed,
-		FilterIsIncomplete, FilterIsCanceled, FilterIsCompleted,
-		FilterIsInbox, FilterIsAnytime, FilterIsSomeday,
+		filterIsTodo, filterIsProject, filterIsHeading,
+		filterIsTrashed,
+		filterIsIncomplete, filterIsCanceled, filterIsCompleted,
+		filterIsInbox, filterIsAnytime, filterIsSomeday,
 		startDateExpr, deadlineExpr, reminderTimeExpr,
-		ColStopDate, ColCreationDate, ColModificationDate,
-		TableTask, TableTask, TableArea, TableTask, TableTask,
-		TableTaskTag, TableTag, TableChecklistItem,
+		colStopDate, colCreationDate, colModificationDate,
+		tableTask, tableTask, tableArea, tableTask, tableTask,
+		tableTaskTag, tableTag, tableChecklistItem,
 		wherePredicate, orderPredicate,
 	)
 }
@@ -364,7 +157,7 @@ func buildAreasSQL(wherePredicate string) string {
 		WHERE
 			%s
 		ORDER BY AREA."index"
-	`, TableArea, TableAreaTag, TableTag, wherePredicate)
+	`, tableArea, tableAreaTag, tableTag, wherePredicate)
 }
 
 // buildTagsSQL builds the SQL query for fetching tags.
@@ -381,7 +174,7 @@ func buildTagsSQL(wherePredicate string) string {
 		WHERE
 			%s
 		ORDER BY "index"
-	`, TableTag, wherePredicate)
+	`, tableTag, wherePredicate)
 }
 
 // buildChecklistItemsSQL builds the SQL query for fetching checklist items.
@@ -404,8 +197,8 @@ func buildChecklistItemsSQL() string {
 		WHERE
 			CHECKLIST_ITEM.task = ?
 		ORDER BY CHECKLIST_ITEM."index"
-	`, FilterIsIncomplete, FilterIsCanceled, FilterIsCompleted,
-		ColModificationDate, ColModificationDate, TableChecklistItem)
+	`, filterIsIncomplete, filterIsCanceled, filterIsCompleted,
+		colModificationDate, colModificationDate, tableChecklistItem)
 }
 
 // buildTagsOfTaskSQL builds the SQL query for fetching tags of a task.
@@ -420,7 +213,7 @@ func buildTagsOfTaskSQL() string {
 		WHERE
 			TASK_TAG.tasks = ?
 		ORDER BY TAG."index"
-	`, TableTaskTag, TableTag)
+	`, tableTaskTag, tableTag)
 }
 
 // buildTagsOfAreaSQL builds the SQL query for fetching tags of an area.
@@ -435,7 +228,7 @@ func buildTagsOfAreaSQL() string {
 		WHERE
 			AREA_TAG.areas = ?
 		ORDER BY TAG."index"
-	`, TableAreaTag, TableTag)
+	`, tableAreaTag, tableTag)
 }
 
 // buildCountSQL wraps a SQL query to return only the count.
@@ -449,5 +242,5 @@ func buildAuthTokenSQL() string {
 		SELECT uriSchemeAuthenticationToken
 		FROM %s
 		WHERE uuid = '%s'
-	`, TableSettings, SettingsUUID)
+	`, tableSettings, settingsUUID)
 }

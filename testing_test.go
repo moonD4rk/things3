@@ -16,7 +16,6 @@ var (
 
 func initTestPaths() {
 	testPathOnce.Do(func() {
-		//nolint:dogsled // runtime.Caller returns 4 values, we only need filename
 		_, filename, _, _ := runtime.Caller(0)
 		dir := filepath.Dir(filename)
 		testDatabasePath = filepath.Join(dir, "testdata", "main.sqlite")

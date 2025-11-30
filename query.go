@@ -3,7 +3,6 @@ package things3
 import (
 	"context"
 	"fmt"
-	"strings"
 )
 
 // TaskQuery provides a fluent interface for building task queries.
@@ -37,7 +36,7 @@ type TaskQuery struct {
 func (c *Client) Tasks() *TaskQuery {
 	return &TaskQuery{
 		client: c,
-		index:  IndexDefault,
+		index:  indexDefault,
 	}
 }
 
@@ -158,7 +157,7 @@ func (q *TaskQuery) Search(query string) *TaskQuery {
 
 // OrderByTodayIndex orders results by today index instead of default index.
 func (q *TaskQuery) OrderByTodayIndex() *TaskQuery {
-	q.index = IndexToday
+	q.index = indexToday
 	return q
 }
 
@@ -168,59 +167,47 @@ func (q *TaskQuery) IncludeItems(include bool) *TaskQuery {
 	return q
 }
 
-// buildWhere builds the WHERE clause for the query.
-//
-//nolint:gocyclo,funlen // Complexity is inherent to handling many filter conditions
+// buildWhere builds the WHERE clause for the query using filterBuilder.
+
+//nolint:gocyclo
 func (q *TaskQuery) buildWhere() string {
-	var conditions []string
+	fb := newFilterBuilder()
 
 	// Always exclude recurring tasks
-	conditions = append(conditions, fmt.Sprintf("TASK.%s", FilterIsNotRecurring))
+	fb.addStatic(fmt.Sprintf("TASK.%s", filterIsNotRecurring))
 
 	// Trashed filter (default: not trashed)
-	if q.trashed != nil {
-		if *q.trashed {
-			conditions = append(conditions, fmt.Sprintf("TASK.%s", FilterIsTrashed))
-		} else {
-			conditions = append(conditions, fmt.Sprintf("TASK.%s", FilterIsNotTrashed))
-		}
+	if q.trashed != nil && *q.trashed {
+		fb.addStatic(fmt.Sprintf("TASK.%s", filterIsTrashed))
 	} else {
-		conditions = append(conditions, fmt.Sprintf("TASK.%s", FilterIsNotTrashed))
+		fb.addStatic(fmt.Sprintf("TASK.%s", filterIsNotTrashed))
 	}
 
 	// Context trashed filter
-	if q.contextTrashed != nil {
-		projectFilter := makeTruthyFilter("PROJECT.trashed", q.contextTrashed)
-		headingFilter := makeTruthyFilter("PROJECT_OF_HEADING.trashed", q.contextTrashed)
-		if projectFilter != "" {
-			conditions = append(conditions, strings.TrimPrefix(projectFilter, "AND "))
-		}
-		if headingFilter != "" {
-			conditions = append(conditions, strings.TrimPrefix(headingFilter, "AND "))
-		}
-	}
+	fb.addTruthy("PROJECT.trashed", q.contextTrashed)
+	fb.addTruthy("PROJECT_OF_HEADING.trashed", q.contextTrashed)
 
 	// Type filter
 	if q.taskType != nil {
 		switch *q.taskType {
 		case TaskTypeTodo:
-			conditions = append(conditions, fmt.Sprintf("TASK.%s", FilterIsTodo))
+			fb.addStatic(fmt.Sprintf("TASK.%s", filterIsTodo))
 		case TaskTypeProject:
-			conditions = append(conditions, fmt.Sprintf("TASK.%s", FilterIsProject))
+			fb.addStatic(fmt.Sprintf("TASK.%s", filterIsProject))
 		case TaskTypeHeading:
-			conditions = append(conditions, fmt.Sprintf("TASK.%s", FilterIsHeading))
+			fb.addStatic(fmt.Sprintf("TASK.%s", filterIsHeading))
 		}
 	}
 
-	// Status filter (default: incomplete)
+	// Status filter
 	if q.status != nil {
 		switch *q.status {
 		case StatusIncomplete:
-			conditions = append(conditions, fmt.Sprintf("TASK.%s", FilterIsIncomplete))
+			fb.addStatic(fmt.Sprintf("TASK.%s", filterIsIncomplete))
 		case StatusCanceled:
-			conditions = append(conditions, fmt.Sprintf("TASK.%s", FilterIsCanceled))
+			fb.addStatic(fmt.Sprintf("TASK.%s", filterIsCanceled))
 		case StatusCompleted:
-			conditions = append(conditions, fmt.Sprintf("TASK.%s", FilterIsCompleted))
+			fb.addStatic(fmt.Sprintf("TASK.%s", filterIsCompleted))
 		}
 	}
 
@@ -228,79 +215,57 @@ func (q *TaskQuery) buildWhere() string {
 	if q.start != nil {
 		switch *q.start {
 		case StartInbox:
-			conditions = append(conditions, fmt.Sprintf("TASK.%s", FilterIsInbox))
+			fb.addStatic(fmt.Sprintf("TASK.%s", filterIsInbox))
 		case StartAnytime:
-			conditions = append(conditions, fmt.Sprintf("TASK.%s", FilterIsAnytime))
+			fb.addStatic(fmt.Sprintf("TASK.%s", filterIsAnytime))
 		case StartSomeday:
-			conditions = append(conditions, fmt.Sprintf("TASK.%s", FilterIsSomeday))
+			fb.addStatic(fmt.Sprintf("TASK.%s", filterIsSomeday))
 		}
 	}
 
 	// UUID filter
 	if q.uuid != nil {
-		conditions = append(conditions, fmt.Sprintf("TASK.uuid = '%s'", escapeString(*q.uuid)))
+		fb.addEqual("TASK.uuid", *q.uuid)
 	}
 
 	// Area filter
-	if filter := makeFilter("TASK.area", q.areaUUID); filter != "" {
-		conditions = append(conditions, strings.TrimPrefix(filter, "AND "))
-	}
+	fb.addEqual("TASK.area", q.areaUUID)
 
 	// Project filter (also check PROJECT_OF_HEADING for tasks in headings)
 	if q.projectUUID != nil {
-		projectFilter := makeFilter("TASK.project", q.projectUUID)
-		headingProjectFilter := makeFilter("PROJECT_OF_HEADING.uuid", q.projectUUID)
-		orFilter := makeOrFilter(projectFilter, headingProjectFilter)
-		if orFilter != "" {
-			conditions = append(conditions, strings.TrimPrefix(orFilter, "AND "))
-		}
+		fb.addOr(
+			equal("TASK.project", q.projectUUID),
+			equal("PROJECT_OF_HEADING.uuid", q.projectUUID),
+		)
 	}
 
 	// Heading filter
-	if filter := makeFilter("TASK.heading", q.headingUUID); filter != "" {
-		conditions = append(conditions, strings.TrimPrefix(filter, "AND "))
-	}
+	fb.addEqual("TASK.heading", q.headingUUID)
 
 	// Tag filter
-	if filter := makeFilter("TAG.title", q.tagTitle); filter != "" {
-		conditions = append(conditions, strings.TrimPrefix(filter, "AND "))
-	}
+	fb.addEqual("TAG.title", q.tagTitle)
 
 	// Deadline suppressed filter
 	if q.deadlineSuppressed != nil {
-		if *q.deadlineSuppressed {
-			conditions = append(conditions, "TASK.deadlineSuppressionDate IS NOT NULL")
-		} else {
-			conditions = append(conditions, "TASK.deadlineSuppressionDate IS NULL")
-		}
+		fb.addEqual("TASK.deadlineSuppressionDate", *q.deadlineSuppressed)
 	}
 
 	// Date filters
-	if filter := makeThingsDateFilter(fmt.Sprintf("TASK.%s", ColStartDate), q.startDate); filter != "" {
-		conditions = append(conditions, strings.TrimPrefix(filter, "AND "))
-	}
-	if filter := makeUnixTimeFilter(fmt.Sprintf("TASK.%s", ColStopDate), q.stopDate); filter != "" {
-		conditions = append(conditions, strings.TrimPrefix(filter, "AND "))
-	}
-	if filter := makeThingsDateFilter(fmt.Sprintf("TASK.%s", ColDeadline), q.deadline); filter != "" {
-		conditions = append(conditions, strings.TrimPrefix(filter, "AND "))
-	}
+	fb.addParsedThingsDateValue(fmt.Sprintf("TASK.%s", colStartDate), q.startDate)
+	fb.addParsedUnixTimeValue(fmt.Sprintf("TASK.%s", colStopDate), q.stopDate)
+	fb.addParsedThingsDateValue(fmt.Sprintf("TASK.%s", colDeadline), q.deadline)
 
 	// Last filter
 	if q.last != nil {
-		if filter := makeUnixTimeRangeFilter(fmt.Sprintf("TASK.%s", ColCreationDate), *q.last); filter != "" {
-			conditions = append(conditions, strings.TrimPrefix(filter, "AND "))
-		}
+		fb.addUnixTimeRangeValue(fmt.Sprintf("TASK.%s", colCreationDate), *q.last)
 	}
 
 	// Search filter
 	if q.searchQuery != nil {
-		if filter := makeSearchFilter(*q.searchQuery); filter != "" {
-			conditions = append(conditions, strings.TrimPrefix(filter, "AND "))
-		}
+		fb.addSearch(*q.searchQuery)
 	}
 
-	return strings.Join(conditions, "\n            AND ")
+	return fb.sql()
 }
 
 // buildOrder builds the ORDER BY clause.

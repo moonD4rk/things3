@@ -35,7 +35,7 @@ func discoverDatabasePath(customPath string) (string, error) {
 	}
 
 	// 2. Check environment variable
-	if envPath := os.Getenv(EnvDatabasePath); envPath != "" {
+	if envPath := os.Getenv(envDatabasePath); envPath != "" {
 		expanded := expandPath(envPath)
 		if _, err := os.Stat(expanded); err != nil {
 			return "", fmt.Errorf("%w: %s", ErrDatabaseNotFound, expanded)
@@ -92,7 +92,7 @@ func openDatabase(path string) (*sql.DB, error) {
 // getDatabaseVersion retrieves the Things database version.
 func getDatabaseVersion(db *sql.DB) (int, error) {
 	var plistValue string
-	query := fmt.Sprintf("SELECT value FROM %s WHERE key = 'databaseVersion'", TableMeta)
+	query := fmt.Sprintf("SELECT value FROM %s WHERE key = 'databaseVersion'", tableMeta)
 	if err := db.QueryRowContext(context.Background(), query).Scan(&plistValue); err != nil {
 		return 0, fmt.Errorf("failed to get database version: %w", err)
 	}
@@ -122,7 +122,7 @@ func validateDatabaseVersion(db *sql.DB) error {
 		return err
 	}
 
-	if version <= MinDatabaseVersion {
+	if version <= minDatabaseVersion {
 		return fmt.Errorf("%w: got version %d", ErrDatabaseVersionTooOld, version)
 	}
 

@@ -311,28 +311,21 @@ func (q *AreaQuery) IncludeItems(include bool) *AreaQuery {
 	return q
 }
 
-// All executes the query and returns all matching areas.
-func (q *AreaQuery) All(ctx context.Context) ([]Area, error) {
-	var conditions []string
-	conditions = append(conditions, "TRUE")
+// buildWhere builds the WHERE clause for the area query using filterBuilder.
+func (q *AreaQuery) buildWhere() string {
+	fb := newFilterBuilder()
 
 	if q.uuid != nil {
-		conditions = append(conditions, makeFilter("AREA.uuid", *q.uuid)[4:]) // Remove "AND "
+		fb.addEqual("AREA.uuid", *q.uuid)
 	}
-	if filter := makeFilter("TAG.title", q.tagTitle); filter != "" {
-		conditions = append(conditions, filter[4:]) // Remove "AND "
-	}
+	fb.addEqual("TAG.title", q.tagTitle)
 
-	where := ""
-	for i, c := range conditions {
-		if i == 0 {
-			where = c
-		} else {
-			where += " AND " + c
-		}
-	}
+	return fb.sql()
+}
 
-	sql := buildAreasSQL(where)
+// All executes the query and returns all matching areas.
+func (q *AreaQuery) All(ctx context.Context) ([]Area, error) {
+	sql := buildAreasSQL(q.buildWhere())
 	rows, err := q.client.executeQuery(ctx, sql)
 	if err != nil {
 		return nil, err
@@ -387,26 +380,7 @@ func (q *AreaQuery) First(ctx context.Context) (*Area, error) {
 
 // Count executes the query and returns the count of matching areas.
 func (q *AreaQuery) Count(ctx context.Context) (int, error) {
-	var conditions []string
-	conditions = append(conditions, "TRUE")
-
-	if q.uuid != nil {
-		conditions = append(conditions, makeFilter("AREA.uuid", *q.uuid)[4:])
-	}
-	if filter := makeFilter("TAG.title", q.tagTitle); filter != "" {
-		conditions = append(conditions, filter[4:])
-	}
-
-	where := ""
-	for i, c := range conditions {
-		if i == 0 {
-			where = c
-		} else {
-			where += " AND " + c
-		}
-	}
-
-	areaSQL := buildAreasSQL(where)
+	areaSQL := buildAreasSQL(q.buildWhere())
 	countSQL := buildCountSQL(areaSQL)
 
 	var count int
@@ -443,25 +417,20 @@ func (q *TagQuery) IncludeItems(include bool) *TagQuery {
 	return q
 }
 
-// All executes the query and returns all matching tags.
-func (q *TagQuery) All(ctx context.Context) ([]Tag, error) {
-	var conditions []string
-	conditions = append(conditions, "TRUE")
+// buildWhere builds the WHERE clause for the tag query using filterBuilder.
+func (q *TagQuery) buildWhere() string {
+	fb := newFilterBuilder()
 
 	if q.title != nil {
-		conditions = append(conditions, makeFilter("title", *q.title)[4:])
+		fb.addEqual("title", *q.title)
 	}
 
-	where := ""
-	for i, c := range conditions {
-		if i == 0 {
-			where = c
-		} else {
-			where += " AND " + c
-		}
-	}
+	return fb.sql()
+}
 
-	sql := buildTagsSQL(where)
+// All executes the query and returns all matching tags.
+func (q *TagQuery) All(ctx context.Context) ([]Tag, error) {
+	sql := buildTagsSQL(q.buildWhere())
 	rows, err := q.client.executeQuery(ctx, sql)
 	if err != nil {
 		return nil, err

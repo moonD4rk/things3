@@ -9,11 +9,11 @@ import (
 )
 
 func TestTaskQueryChaining(t *testing.T) {
-	client := newTestClient(t)
+	db := newTestDB(t)
 	ctx := context.Background()
 
 	// Test method chaining
-	tasks, err := client.Tasks().
+	tasks, err := db.Tasks().
 		WithType(TaskTypeTodo).
 		WithStatus(StatusIncomplete).
 		WithStart(StartAnytime).
@@ -23,28 +23,28 @@ func TestTaskQueryChaining(t *testing.T) {
 }
 
 func TestTaskQueryWithUUID(t *testing.T) {
-	client := newTestClient(t)
+	db := newTestDB(t)
 	ctx := context.Background()
 
 	// First get a valid task UUID from the database
-	tasks, err := client.Tasks().WithStatus(StatusIncomplete).All(ctx)
+	tasks, err := db.Tasks().WithStatus(StatusIncomplete).All(ctx)
 	require.NoError(t, err)
 	require.NotEmpty(t, tasks, "No tasks in test database")
 
 	targetUUID := tasks[0].UUID
 
 	// Now test WithUUID with the valid UUID
-	task, err := client.Tasks().WithUUID(targetUUID).First(ctx)
+	task, err := db.Tasks().WithUUID(targetUUID).First(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, targetUUID, task.UUID)
 }
 
 func TestTaskQueryWithType(t *testing.T) {
-	client := newTestClient(t)
+	db := newTestDB(t)
 	ctx := context.Background()
 
 	// Test todos
-	todos, err := client.Tasks().
+	todos, err := db.Tasks().
 		WithType(TaskTypeTodo).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -54,7 +54,7 @@ func TestTaskQueryWithType(t *testing.T) {
 	}
 
 	// Test projects
-	projects, err := client.Tasks().
+	projects, err := db.Tasks().
 		WithType(TaskTypeProject).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -65,25 +65,25 @@ func TestTaskQueryWithType(t *testing.T) {
 }
 
 func TestTaskQueryWithStatus(t *testing.T) {
-	client := newTestClient(t)
+	db := newTestDB(t)
 	ctx := context.Background()
 
 	// Test incomplete
-	tasks, err := client.Tasks().WithStatus(StatusIncomplete).All(ctx)
+	tasks, err := db.Tasks().WithStatus(StatusIncomplete).All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
 		assert.Equal(t, StatusIncomplete, task.Status)
 	}
 
 	// Test completed
-	tasks, err = client.Tasks().WithStatus(StatusCompleted).All(ctx)
+	tasks, err = db.Tasks().WithStatus(StatusCompleted).All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
 		assert.Equal(t, StatusCompleted, task.Status)
 	}
 
 	// Test canceled
-	tasks, err = client.Tasks().WithStatus(StatusCanceled).All(ctx)
+	tasks, err = db.Tasks().WithStatus(StatusCanceled).All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
 		assert.Equal(t, StatusCanceled, task.Status)
@@ -91,11 +91,11 @@ func TestTaskQueryWithStatus(t *testing.T) {
 }
 
 func TestTaskQueryWithStart(t *testing.T) {
-	client := newTestClient(t)
+	db := newTestDB(t)
 	ctx := context.Background()
 
 	// Test Inbox
-	tasks, err := client.Tasks().
+	tasks, err := db.Tasks().
 		WithStart(StartInbox).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -105,7 +105,7 @@ func TestTaskQueryWithStart(t *testing.T) {
 	}
 
 	// Test Anytime
-	tasks, err = client.Tasks().
+	tasks, err = db.Tasks().
 		WithStart(StartAnytime).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -115,7 +115,7 @@ func TestTaskQueryWithStart(t *testing.T) {
 	}
 
 	// Test Someday
-	tasks, err = client.Tasks().
+	tasks, err = db.Tasks().
 		WithStart(StartSomeday).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -126,11 +126,11 @@ func TestTaskQueryWithStart(t *testing.T) {
 }
 
 func TestTaskQueryInArea(t *testing.T) {
-	client := newTestClient(t)
+	db := newTestDB(t)
 	ctx := context.Background()
 
 	// Test with specific area
-	tasks, err := client.Tasks().
+	tasks, err := db.Tasks().
 		InArea(testUUIDArea).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -141,7 +141,7 @@ func TestTaskQueryInArea(t *testing.T) {
 	}
 
 	// Test with has area
-	tasks, err = client.Tasks().
+	tasks, err = db.Tasks().
 		InArea(true).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -151,7 +151,7 @@ func TestTaskQueryInArea(t *testing.T) {
 	}
 
 	// Test without area
-	tasks, err = client.Tasks().
+	tasks, err = db.Tasks().
 		InArea(false).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -162,11 +162,11 @@ func TestTaskQueryInArea(t *testing.T) {
 }
 
 func TestTaskQueryInProject(t *testing.T) {
-	client := newTestClient(t)
+	db := newTestDB(t)
 	ctx := context.Background()
 
 	// Test with specific project
-	tasks, err := client.Tasks().
+	tasks, err := db.Tasks().
 		InProject(testUUIDProject).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -175,11 +175,11 @@ func TestTaskQueryInProject(t *testing.T) {
 }
 
 func TestTaskQueryWithTag(t *testing.T) {
-	client := newTestClient(t)
+	db := newTestDB(t)
 	ctx := context.Background()
 
 	// Test with specific tag
-	tasks, err := client.Tasks().
+	tasks, err := db.Tasks().
 		WithTag("Errand").
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -187,7 +187,7 @@ func TestTaskQueryWithTag(t *testing.T) {
 	assert.Len(t, tasks, 1)
 
 	// Test with has tags
-	tasks, err = client.Tasks().
+	tasks, err = db.Tasks().
 		WithTag(true).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -198,11 +198,11 @@ func TestTaskQueryWithTag(t *testing.T) {
 }
 
 func TestTaskQueryWithDeadline(t *testing.T) {
-	client := newTestClient(t)
+	db := newTestDB(t)
 	ctx := context.Background()
 
 	// Test has deadline
-	tasks, err := client.Tasks().
+	tasks, err := db.Tasks().
 		WithDeadline(true).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -212,7 +212,7 @@ func TestTaskQueryWithDeadline(t *testing.T) {
 	}
 
 	// Test no deadline
-	tasks, err = client.Tasks().
+	tasks, err = db.Tasks().
 		WithDeadline(false).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -223,11 +223,11 @@ func TestTaskQueryWithDeadline(t *testing.T) {
 }
 
 func TestTaskQueryWithStartDate(t *testing.T) {
-	client := newTestClient(t)
+	db := newTestDB(t)
 	ctx := context.Background()
 
 	// Test has start date
-	tasks, err := client.Tasks().
+	tasks, err := db.Tasks().
 		WithStartDate(true).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -238,11 +238,11 @@ func TestTaskQueryWithStartDate(t *testing.T) {
 }
 
 func TestTaskQueryTrashed(t *testing.T) {
-	client := newTestClient(t)
+	db := newTestDB(t)
 	ctx := context.Background()
 
 	// Test trashed
-	tasks, err := client.Tasks().
+	tasks, err := db.Tasks().
 		Trashed(true).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -252,7 +252,7 @@ func TestTaskQueryTrashed(t *testing.T) {
 	}
 
 	// Test not trashed
-	tasks, err = client.Tasks().
+	tasks, err = db.Tasks().
 		Trashed(false).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -263,11 +263,11 @@ func TestTaskQueryTrashed(t *testing.T) {
 }
 
 func TestTaskQuerySearch(t *testing.T) {
-	client := newTestClient(t)
+	db := newTestDB(t)
 	ctx := context.Background()
 
 	// Test search
-	tasks, err := client.Tasks().
+	tasks, err := db.Tasks().
 		Search("To-Do in Today").
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -275,7 +275,7 @@ func TestTaskQuerySearch(t *testing.T) {
 	assert.NotEmpty(t, tasks, "Search() returned no results")
 
 	// Test search with no results
-	tasks, err = client.Tasks().
+	tasks, err = db.Tasks().
 		Search("xyznonexistent123").
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -284,11 +284,11 @@ func TestTaskQuerySearch(t *testing.T) {
 }
 
 func TestTaskQueryLast(t *testing.T) {
-	client := newTestClient(t)
+	db := newTestDB(t)
 	ctx := context.Background()
 
 	// Test last 0 days
-	tasks, err := client.Tasks().
+	tasks, err := db.Tasks().
 		Last("0d").
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -296,7 +296,7 @@ func TestTaskQueryLast(t *testing.T) {
 	assert.Empty(t, tasks)
 
 	// Test last many years
-	tasks, err = client.Tasks().
+	tasks, err = db.Tasks().
 		Last("100y").
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -305,10 +305,10 @@ func TestTaskQueryLast(t *testing.T) {
 }
 
 func TestTaskQueryCount(t *testing.T) {
-	client := newTestClient(t)
+	db := newTestDB(t)
 	ctx := context.Background()
 
-	count, err := client.Tasks().
+	count, err := db.Tasks().
 		WithStatus(StatusIncomplete).
 		Count(ctx)
 	require.NoError(t, err)
@@ -316,29 +316,29 @@ func TestTaskQueryCount(t *testing.T) {
 }
 
 func TestTaskQueryFirst(t *testing.T) {
-	client := newTestClient(t)
+	db := newTestDB(t)
 	ctx := context.Background()
 
 	// Test First with results
-	task, err := client.Tasks().
+	task, err := db.Tasks().
 		WithStatus(StatusIncomplete).
 		First(ctx)
 	require.NoError(t, err)
 	assert.NotNil(t, task)
 
 	// Test First with no results (should return ErrTaskNotFound)
-	_, err = client.Tasks().
+	_, err = db.Tasks().
 		WithUUID("nonexistent-uuid").
 		First(ctx)
 	require.ErrorIs(t, err, ErrTaskNotFound)
 }
 
 func TestTaskQueryIncludeItems(t *testing.T) {
-	client := newTestClient(t)
+	db := newTestDB(t)
 	ctx := context.Background()
 
 	// Test include items on project
-	projects, err := client.Tasks().
+	projects, err := db.Tasks().
 		WithType(TaskTypeProject).
 		WithStatus(StatusIncomplete).
 		IncludeItems(true).
@@ -350,7 +350,7 @@ func TestTaskQueryIncludeItems(t *testing.T) {
 	}
 
 	// Test include items on todo with checklist
-	task, err := client.Tasks().
+	task, err := db.Tasks().
 		WithUUID(testUUIDTodoChecklist).
 		IncludeItems(true).
 		First(ctx)
@@ -359,10 +359,10 @@ func TestTaskQueryIncludeItems(t *testing.T) {
 }
 
 func TestTaskQueryOrderByTodayIndex(t *testing.T) {
-	client := newTestClient(t)
+	db := newTestDB(t)
 	ctx := context.Background()
 
-	tasks, err := client.Tasks().
+	tasks, err := db.Tasks().
 		WithStartDate(true).
 		WithStart(StartAnytime).
 		WithStatus(StatusIncomplete).

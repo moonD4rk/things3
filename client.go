@@ -7,18 +7,18 @@ import (
 	"time"
 )
 
-// Client provides read-only access to the Things 3 database.
-type Client struct {
+// DB provides read-only access to the Things 3 database.
+type DB struct {
 	db         *sql.DB
 	filepath   string
 	printSQL   bool
 	queryCount int
 }
 
-// New creates a new Things 3 client.
-// Options can be provided to configure the client behavior.
-func New(opts ...Option) (*Client, error) {
-	options := &clientOptions{}
+// NewDB creates a new Things 3 database connection.
+// Options can be provided to configure the database behavior.
+func NewDB(opts ...DBOption) (*DB, error) {
+	options := &dbOptions{}
 	for _, opt := range opts {
 		opt(options)
 	}
@@ -41,7 +41,7 @@ func New(opts ...Option) (*Client, error) {
 		return nil, err
 	}
 
-	return &Client{
+	return &DB{
 		db:       db,
 		filepath: filepath,
 		printSQL: options.printSQL,
@@ -49,23 +49,23 @@ func New(opts ...Option) (*Client, error) {
 }
 
 // Close closes the database connection.
-func (c *Client) Close() error {
-	if c.db != nil {
-		return c.db.Close()
+func (d *DB) Close() error {
+	if d.db != nil {
+		return d.db.Close()
 	}
 	return nil
 }
 
 // Filepath returns the path to the Things database file.
-func (c *Client) Filepath() string {
-	return c.filepath
+func (d *DB) Filepath() string {
+	return d.filepath
 }
 
 // executeQuery executes a SQL query and returns the results.
-func (c *Client) executeQuery(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	if c.printSQL {
-		c.queryCount++
-		fmt.Printf("/* Query %d */\n", c.queryCount)
+func (d *DB) executeQuery(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	if d.printSQL {
+		d.queryCount++
+		fmt.Printf("/* Query %d */\n", d.queryCount)
 		if len(args) > 0 {
 			fmt.Printf("/* Parameters: %v */\n", args)
 		}
@@ -74,14 +74,14 @@ func (c *Client) executeQuery(ctx context.Context, query string, args ...any) (*
 		fmt.Println()
 	}
 
-	return c.db.QueryContext(ctx, query, args...)
+	return d.db.QueryContext(ctx, query, args...)
 }
 
 // executeQueryRow executes a SQL query that returns a single row.
-func (c *Client) executeQueryRow(ctx context.Context, query string, args ...any) *sql.Row {
-	if c.printSQL {
-		c.queryCount++
-		fmt.Printf("/* Query %d */\n", c.queryCount)
+func (d *DB) executeQueryRow(ctx context.Context, query string, args ...any) *sql.Row {
+	if d.printSQL {
+		d.queryCount++
+		fmt.Printf("/* Query %d */\n", d.queryCount)
 		if len(args) > 0 {
 			fmt.Printf("/* Parameters: %v */\n", args)
 		}
@@ -90,7 +90,7 @@ func (c *Client) executeQueryRow(ctx context.Context, query string, args ...any)
 		fmt.Println()
 	}
 
-	return c.db.QueryRowContext(ctx, query, args...)
+	return d.db.QueryRowContext(ctx, query, args...)
 }
 
 // scanTask scans a row into a Task struct.
@@ -305,9 +305,9 @@ func scanChecklistItem(rows *sql.Rows) (*ChecklistItem, error) {
 }
 
 // getTagsOfTask returns the tag titles for a task.
-func (c *Client) getTagsOfTask(ctx context.Context, taskUUID string) ([]string, error) {
+func (d *DB) getTagsOfTask(ctx context.Context, taskUUID string) ([]string, error) {
 	query := buildTagsOfTaskSQL()
-	rows, err := c.executeQuery(ctx, query, taskUUID)
+	rows, err := d.executeQuery(ctx, query, taskUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -326,9 +326,9 @@ func (c *Client) getTagsOfTask(ctx context.Context, taskUUID string) ([]string, 
 }
 
 // getTagsOfArea returns the tag titles for an area.
-func (c *Client) getTagsOfArea(ctx context.Context, areaUUID string) ([]string, error) {
+func (d *DB) getTagsOfArea(ctx context.Context, areaUUID string) ([]string, error) {
 	query := buildTagsOfAreaSQL()
-	rows, err := c.executeQuery(ctx, query, areaUUID)
+	rows, err := d.executeQuery(ctx, query, areaUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -347,9 +347,9 @@ func (c *Client) getTagsOfArea(ctx context.Context, areaUUID string) ([]string, 
 }
 
 // getChecklistItems returns the checklist items for a to-do.
-func (c *Client) getChecklistItems(ctx context.Context, todoUUID string) ([]ChecklistItem, error) {
+func (d *DB) getChecklistItems(ctx context.Context, todoUUID string) ([]ChecklistItem, error) {
 	query := buildChecklistItemsSQL()
-	rows, err := c.executeQuery(ctx, query, todoUUID)
+	rows, err := d.executeQuery(ctx, query, todoUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -368,10 +368,10 @@ func (c *Client) getChecklistItems(ctx context.Context, todoUUID string) ([]Chec
 }
 
 // Token returns the Things URL scheme authentication token.
-func (c *Client) Token(ctx context.Context) (string, error) {
+func (d *DB) Token(ctx context.Context) (string, error) {
 	query := buildAuthTokenSQL()
 	var token sql.NullString
-	if err := c.executeQueryRow(ctx, query).Scan(&token); err != nil {
+	if err := d.executeQueryRow(ctx, query).Scan(&token); err != nil {
 		if err == sql.ErrNoRows {
 			return "", ErrAuthTokenNotFound
 		}

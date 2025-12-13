@@ -30,12 +30,32 @@ type Task struct {
 	HeadingTitle *string `json:"heading_title,omitempty"`
 
 	// Dates
-	StartDate    *string    `json:"start_date,omitempty"`    // ISO 8601 date
-	Deadline     *string    `json:"deadline,omitempty"`      // ISO 8601 date
-	ReminderTime *string    `json:"reminder_time,omitempty"` // HH:MM format
-	StopDate     *time.Time `json:"stop_date,omitempty"`     // Completion/cancellation date
-	Created      time.Time  `json:"created"`
-	Modified     time.Time  `json:"modified"`
+	// All date/time fields are converted from SQLite string formats to time.Time.
+	//
+	// StartDate: scheduled start date.
+	//   Database: "2024-01-15" (date only, format "YYYY-MM-DD")
+	//   Parsed:   time.Time with zero time component
+	StartDate *time.Time `json:"start_date,omitempty"`
+	// Deadline: task deadline date.
+	//   Database: "2024-01-15" (date only, format "YYYY-MM-DD")
+	//   Parsed:   time.Time with zero time component
+	Deadline *time.Time `json:"deadline,omitempty"`
+	// ReminderTime: time-only reminder (date component is zero value).
+	//   Database: "14:30" (time only, format "HH:MM")
+	//   Parsed:   time.Time with zero date (0000-01-01), only Hour/Minute meaningful
+	ReminderTime *time.Time `json:"reminder_time,omitempty"`
+	// StopDate: completion or cancellation timestamp.
+	//   Database: "2024-01-15 10:30:45" (datetime, format "YYYY-MM-DD HH:MM:SS")
+	//   Parsed:   time.Time with full date and time
+	StopDate *time.Time `json:"stop_date,omitempty"`
+	// Created: task creation timestamp.
+	//   Database: "2024-01-15 10:30:45" (datetime, format "YYYY-MM-DD HH:MM:SS")
+	//   Parsed:   time.Time with full date and time
+	Created time.Time `json:"created"`
+	// Modified: last modification timestamp.
+	//   Database: "2024-01-15 10:30:45" (datetime, format "YYYY-MM-DD HH:MM:SS")
+	//   Parsed:   time.Time with full date and time
+	Modified time.Time `json:"modified"`
 
 	// Index values for ordering
 	Index      int `json:"index"`
@@ -111,13 +131,22 @@ type Tag struct {
 
 // ChecklistItem represents a checklist item within a to-do.
 type ChecklistItem struct {
-	UUID     string     `json:"uuid"`
-	Type     string     `json:"type"` // Always "checklist-item"
-	Title    string     `json:"title"`
-	Status   string     `json:"status"` // "incomplete", "completed", or "canceled"
+	UUID   string `json:"uuid"`
+	Type   string `json:"type"` // Always "checklist-item"
+	Title  string `json:"title"`
+	Status string `json:"status"` // "incomplete", "completed", or "canceled"
+	// StopDate: completion date.
+	//   Database: "2024-01-15" (date only, format "YYYY-MM-DD")
+	//   Parsed:   time.Time with zero time component
 	StopDate *time.Time `json:"stop_date,omitempty"`
-	Created  time.Time  `json:"created"`
-	Modified time.Time  `json:"modified"`
+	// Created: item creation timestamp.
+	//   Database: "2024-01-15 10:30:45" (datetime, format "YYYY-MM-DD HH:MM:SS")
+	//   Parsed:   time.Time with full date and time
+	Created time.Time `json:"created"`
+	// Modified: last modification timestamp.
+	//   Database: "2024-01-15 10:30:45" (datetime, format "YYYY-MM-DD HH:MM:SS")
+	//   Parsed:   time.Time with full date and time
+	Modified time.Time `json:"modified"`
 }
 
 // IsIncomplete returns true if the checklist item is incomplete.

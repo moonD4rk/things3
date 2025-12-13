@@ -142,22 +142,22 @@ func TestTaskQueryInArea(t *testing.T) {
 
 	// Test with has area
 	tasks, err = db.Tasks().
-		InArea(true).
+		HasArea(true).
 		WithStatus(StatusIncomplete).
 		All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
-		assert.NotNil(t, task.AreaUUID, "InArea(true) returned task without area")
+		assert.NotNil(t, task.AreaUUID, "HasArea(true) returned task without area")
 	}
 
 	// Test without area
 	tasks, err = db.Tasks().
-		InArea(false).
+		HasArea(false).
 		WithStatus(StatusIncomplete).
 		All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
-		assert.Nil(t, task.AreaUUID, "InArea(false) returned task with area")
+		assert.Nil(t, task.AreaUUID, "HasArea(false) returned task with area")
 	}
 }
 
@@ -188,12 +188,12 @@ func TestTaskQueryWithTag(t *testing.T) {
 
 	// Test with has tags
 	tasks, err = db.Tasks().
-		WithTag(true).
+		HasTags(true).
 		WithStatus(StatusIncomplete).
 		All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
-		assert.NotEmpty(t, task.Tags, "WithTag(true) returned task without tags")
+		assert.NotEmpty(t, task.Tags, "HasTags(true) returned task without tags")
 	}
 }
 

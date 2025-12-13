@@ -431,5 +431,6 @@ func TestReminderTime(t *testing.T) {
 	task, err := db.Tasks().WithUUID(testUUIDTodoReminder).First(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, task.ReminderTime)
-	assert.Equal(t, "12:34", *task.ReminderTime)
+	assert.Equal(t, 12, task.ReminderTime.Hour())
+	assert.Equal(t, 34, task.ReminderTime.Minute())
 }

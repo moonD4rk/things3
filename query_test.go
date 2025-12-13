@@ -3,6 +3,7 @@ package things3
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,9 +15,9 @@ func TestTaskQueryChaining(t *testing.T) {
 
 	// Test method chaining
 	tasks, err := db.Tasks().
-		WithType(TaskTypeTodo).
-		WithStatus(StatusIncomplete).
-		WithStart(StartAnytime).
+		Type().Todo().
+		Status().Incomplete().
+		Start().Anytime().
 		All(ctx)
 	require.NoError(t, err)
 	assert.Len(t, tasks, testTodosAnytime)
@@ -27,7 +28,7 @@ func TestTaskQueryWithUUID(t *testing.T) {
 	ctx := context.Background()
 
 	// First get a valid task UUID from the database
-	tasks, err := db.Tasks().WithStatus(StatusIncomplete).All(ctx)
+	tasks, err := db.Tasks().Status().Incomplete().All(ctx)
 	require.NoError(t, err)
 	require.NotEmpty(t, tasks, "No tasks in test database")
 
@@ -45,8 +46,8 @@ func TestTaskQueryWithType(t *testing.T) {
 
 	// Test todos
 	todos, err := db.Tasks().
-		WithType(TaskTypeTodo).
-		WithStatus(StatusIncomplete).
+		Type().Todo().
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	for _, task := range todos {
@@ -55,8 +56,8 @@ func TestTaskQueryWithType(t *testing.T) {
 
 	// Test projects
 	projects, err := db.Tasks().
-		WithType(TaskTypeProject).
-		WithStatus(StatusIncomplete).
+		Type().Project().
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	for _, task := range projects {
@@ -69,21 +70,21 @@ func TestTaskQueryWithStatus(t *testing.T) {
 	ctx := context.Background()
 
 	// Test incomplete
-	tasks, err := db.Tasks().WithStatus(StatusIncomplete).All(ctx)
+	tasks, err := db.Tasks().Status().Incomplete().All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
 		assert.Equal(t, StatusIncomplete, task.Status)
 	}
 
 	// Test completed
-	tasks, err = db.Tasks().WithStatus(StatusCompleted).All(ctx)
+	tasks, err = db.Tasks().Status().Completed().All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
 		assert.Equal(t, StatusCompleted, task.Status)
 	}
 
 	// Test canceled
-	tasks, err = db.Tasks().WithStatus(StatusCanceled).All(ctx)
+	tasks, err = db.Tasks().Status().Canceled().All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
 		assert.Equal(t, StatusCanceled, task.Status)
@@ -96,8 +97,8 @@ func TestTaskQueryWithStart(t *testing.T) {
 
 	// Test Inbox
 	tasks, err := db.Tasks().
-		WithStart(StartInbox).
-		WithStatus(StatusIncomplete).
+		Start().Inbox().
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
@@ -106,8 +107,8 @@ func TestTaskQueryWithStart(t *testing.T) {
 
 	// Test Anytime
 	tasks, err = db.Tasks().
-		WithStart(StartAnytime).
-		WithStatus(StatusIncomplete).
+		Start().Anytime().
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
@@ -116,8 +117,8 @@ func TestTaskQueryWithStart(t *testing.T) {
 
 	// Test Someday
 	tasks, err = db.Tasks().
-		WithStart(StartSomeday).
-		WithStatus(StatusIncomplete).
+		Start().Someday().
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
@@ -132,7 +133,7 @@ func TestTaskQueryInArea(t *testing.T) {
 	// Test with specific area
 	tasks, err := db.Tasks().
 		InArea(testUUIDArea).
-		WithStatus(StatusIncomplete).
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
@@ -143,7 +144,7 @@ func TestTaskQueryInArea(t *testing.T) {
 	// Test with has area
 	tasks, err = db.Tasks().
 		HasArea(true).
-		WithStatus(StatusIncomplete).
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
@@ -153,7 +154,7 @@ func TestTaskQueryInArea(t *testing.T) {
 	// Test without area
 	tasks, err = db.Tasks().
 		HasArea(false).
-		WithStatus(StatusIncomplete).
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
@@ -168,32 +169,32 @@ func TestTaskQueryInProject(t *testing.T) {
 	// Test with specific project
 	tasks, err := db.Tasks().
 		InProject(testUUIDProject).
-		WithStatus(StatusIncomplete).
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	assert.Len(t, tasks, testTasksInProject)
 }
 
-func TestTaskQueryWithTag(t *testing.T) {
+func TestTaskQueryInTag(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
 	// Test with specific tag
 	tasks, err := db.Tasks().
-		WithTag("Errand").
-		WithStatus(StatusIncomplete).
+		InTag("Errand").
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	assert.Len(t, tasks, 1)
 
-	// Test with has tags
+	// Test with has tag
 	tasks, err = db.Tasks().
-		HasTags(true).
-		WithStatus(StatusIncomplete).
+		HasTag(true).
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
-		assert.NotEmpty(t, task.Tags, "HasTags(true) returned task without tags")
+		assert.NotEmpty(t, task.Tags, "HasTag(true) returned task without tags")
 	}
 }
 
@@ -203,22 +204,22 @@ func TestTaskQueryWithDeadline(t *testing.T) {
 
 	// Test has deadline
 	tasks, err := db.Tasks().
-		WithDeadline(true).
-		WithStatus(StatusIncomplete).
+		Deadline().Exists(true).
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
-		assert.NotNil(t, task.Deadline, "WithDeadline(true) returned task without deadline")
+		assert.NotNil(t, task.Deadline, "Deadline().Exists(true) returned task without deadline")
 	}
 
 	// Test no deadline
 	tasks, err = db.Tasks().
-		WithDeadline(false).
-		WithStatus(StatusIncomplete).
+		Deadline().Exists(false).
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
-		assert.Nil(t, task.Deadline, "WithDeadline(false) returned task with deadline")
+		assert.Nil(t, task.Deadline, "Deadline().Exists(false) returned task with deadline")
 	}
 }
 
@@ -228,12 +229,12 @@ func TestTaskQueryWithStartDate(t *testing.T) {
 
 	// Test has start date
 	tasks, err := db.Tasks().
-		WithStartDate(true).
-		WithStatus(StatusIncomplete).
+		StartDate().Exists(true).
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
-		assert.NotNil(t, task.StartDate, "WithStartDate(true) returned task without start date")
+		assert.NotNil(t, task.StartDate, "StartDate().Exists(true) returned task without start date")
 	}
 }
 
@@ -244,7 +245,7 @@ func TestTaskQueryTrashed(t *testing.T) {
 	// Test trashed
 	tasks, err := db.Tasks().
 		Trashed(true).
-		WithStatus(StatusIncomplete).
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
@@ -254,7 +255,7 @@ func TestTaskQueryTrashed(t *testing.T) {
 	// Test not trashed
 	tasks, err = db.Tasks().
 		Trashed(false).
-		WithStatus(StatusIncomplete).
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
@@ -269,7 +270,7 @@ func TestTaskQuerySearch(t *testing.T) {
 	// Test search
 	tasks, err := db.Tasks().
 		Search("To-Do in Today").
-		WithStatus(StatusIncomplete).
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	assert.NotEmpty(t, tasks, "Search() returned no results")
@@ -277,31 +278,45 @@ func TestTaskQuerySearch(t *testing.T) {
 	// Test search with no results
 	tasks, err = db.Tasks().
 		Search("xyznonexistent123").
-		WithStatus(StatusIncomplete).
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	assert.Empty(t, tasks)
 }
 
-func TestTaskQueryLast(t *testing.T) {
+func TestTaskQueryCreatedWithin(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	// Test last 0 days
+	// Test 0 days - zero duration means no filter, returns all incomplete tasks
 	tasks, err := db.Tasks().
-		Last("0d").
-		WithStatus(StatusIncomplete).
+		CreatedWithin(Days(0)).
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
-	assert.Empty(t, tasks)
+	assert.Len(t, tasks, testTasksIncomplete, "Days(0) should be a no-op filter")
 
-	// Test last many years
+	// Test many years - should return results
 	tasks, err = db.Tasks().
-		Last("100y").
-		WithStatus(StatusIncomplete).
+		CreatedWithin(Years(100)).
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
-	assert.NotEmpty(t, tasks, "Last(100y) returned no results")
+	assert.Len(t, tasks, testTasksIncomplete, "Years(100) should include all test tasks")
+
+	// Test weeks
+	_, err = db.Tasks().
+		CreatedWithin(Weeks(2)).
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+
+	// Test months
+	_, err = db.Tasks().
+		CreatedWithin(Months(1)).
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
 }
 
 func TestTaskQueryCount(t *testing.T) {
@@ -309,7 +324,7 @@ func TestTaskQueryCount(t *testing.T) {
 	ctx := context.Background()
 
 	count, err := db.Tasks().
-		WithStatus(StatusIncomplete).
+		Status().Incomplete().
 		Count(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, testTasksIncomplete, count)
@@ -321,7 +336,7 @@ func TestTaskQueryFirst(t *testing.T) {
 
 	// Test First with results
 	task, err := db.Tasks().
-		WithStatus(StatusIncomplete).
+		Status().Incomplete().
 		First(ctx)
 	require.NoError(t, err)
 	assert.NotNil(t, task)
@@ -339,8 +354,8 @@ func TestTaskQueryIncludeItems(t *testing.T) {
 
 	// Test include items on project
 	projects, err := db.Tasks().
-		WithType(TaskTypeProject).
-		WithStatus(StatusIncomplete).
+		Type().Project().
+		Status().Incomplete().
 		IncludeItems(true).
 		All(ctx)
 	require.NoError(t, err)
@@ -363,9 +378,9 @@ func TestTaskQueryOrderByTodayIndex(t *testing.T) {
 	ctx := context.Background()
 
 	tasks, err := db.Tasks().
-		WithStartDate(true).
-		WithStart(StartAnytime).
-		WithStatus(StatusIncomplete).
+		StartDate().Exists(true).
+		Start().Anytime().
+		Status().Incomplete().
 		OrderByTodayIndex().
 		All(ctx)
 	require.NoError(t, err)
@@ -375,4 +390,247 @@ func TestTaskQueryOrderByTodayIndex(t *testing.T) {
 		assert.GreaterOrEqual(t, tasks[i].TodayIndex, tasks[i-1].TodayIndex,
 			"OrderByTodayIndex() not properly ordered at index %d", i)
 	}
+}
+
+// =============================================================================
+// Type-Safe Sub-Builder Tests
+// =============================================================================
+
+func TestStatusFilter(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	// Test Incomplete
+	tasks, err := db.Tasks().
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+	for _, task := range tasks {
+		assert.Equal(t, StatusIncomplete, task.Status)
+	}
+
+	// Test Completed
+	tasks, err = db.Tasks().
+		Status().Completed().
+		All(ctx)
+	require.NoError(t, err)
+	for _, task := range tasks {
+		assert.Equal(t, StatusCompleted, task.Status)
+	}
+
+	// Test Canceled
+	tasks, err = db.Tasks().
+		Status().Canceled().
+		All(ctx)
+	require.NoError(t, err)
+	for _, task := range tasks {
+		assert.Equal(t, StatusCanceled, task.Status)
+	}
+}
+
+func TestStartFilter(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	// Test Inbox
+	tasks, err := db.Tasks().
+		Start().Inbox().
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+	for _, task := range tasks {
+		assert.Equal(t, "Inbox", task.Start)
+	}
+
+	// Test Anytime
+	tasks, err = db.Tasks().
+		Start().Anytime().
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+	for _, task := range tasks {
+		assert.Equal(t, "Anytime", task.Start)
+	}
+
+	// Test Someday
+	tasks, err = db.Tasks().
+		Start().Someday().
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+	for _, task := range tasks {
+		assert.Equal(t, "Someday", task.Start)
+	}
+}
+
+func TestTypeFilter(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	// Test Todo
+	tasks, err := db.Tasks().
+		Type().Todo().
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+	for _, task := range tasks {
+		assert.Equal(t, TaskTypeTodo, task.Type)
+	}
+
+	// Test Project
+	tasks, err = db.Tasks().
+		Type().Project().
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+	for _, task := range tasks {
+		assert.Equal(t, TaskTypeProject, task.Type)
+	}
+
+	// Test Heading
+	tasks, err = db.Tasks().
+		Type().Heading().
+		All(ctx)
+	require.NoError(t, err)
+	for _, task := range tasks {
+		assert.Equal(t, TaskTypeHeading, task.Type)
+	}
+}
+
+func TestDateFilterExists(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	// Test StartDate exists
+	tasks, err := db.Tasks().
+		StartDate().Exists(true).
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+	for _, task := range tasks {
+		assert.NotNil(t, task.StartDate, "StartDate().Exists(true) returned task without start date")
+	}
+
+	// Test StartDate not exists
+	tasks, err = db.Tasks().
+		StartDate().Exists(false).
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+	for _, task := range tasks {
+		assert.Nil(t, task.StartDate, "StartDate().Exists(false) returned task with start date")
+	}
+
+	// Test Deadline exists
+	tasks, err = db.Tasks().
+		Deadline().Exists(true).
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+	for _, task := range tasks {
+		assert.NotNil(t, task.Deadline, "Deadline().Exists(true) returned task without deadline")
+	}
+
+	// Test Deadline not exists
+	tasks, err = db.Tasks().
+		Deadline().Exists(false).
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+	for _, task := range tasks {
+		assert.Nil(t, task.Deadline, "Deadline().Exists(false) returned task with deadline")
+	}
+}
+
+func TestDateFilterRelative(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	// Test StartDate future - should return tasks (may be empty depending on test data)
+	_, err := db.Tasks().
+		StartDate().Future().
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+
+	// Test StartDate past - should return tasks (may be empty depending on test data)
+	_, err = db.Tasks().
+		StartDate().Past().
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+
+	// Test Deadline future
+	_, err = db.Tasks().
+		Deadline().Future().
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+
+	// Test Deadline past
+	_, err = db.Tasks().
+		Deadline().Past().
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+}
+
+func TestDateFilterComparison(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	// Test Deadline OnOrBefore
+	deadline := time.Date(2025, 12, 31, 0, 0, 0, 0, time.Local)
+	_, err := db.Tasks().
+		Deadline().OnOrBefore(deadline).
+		Status().Incomplete().
+		Count(ctx)
+	require.NoError(t, err)
+
+	// Test Deadline After
+	afterDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.Local)
+	_, err = db.Tasks().
+		Deadline().After(afterDate).
+		Status().Incomplete().
+		Count(ctx)
+	require.NoError(t, err)
+
+	// Test StartDate On
+	onDate := time.Date(2024, 6, 15, 0, 0, 0, 0, time.Local)
+	_, err = db.Tasks().
+		StartDate().On(onDate).
+		Status().Incomplete().
+		Count(ctx)
+	require.NoError(t, err)
+}
+
+func TestSubBuilderChaining(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	// Test complex chaining with multiple sub-builders
+	tasks, err := db.Tasks().
+		Type().Todo().
+		Status().Incomplete().
+		Start().Anytime().
+		All(ctx)
+	require.NoError(t, err)
+	assert.Len(t, tasks, testTodosAnytime)
+
+	// Test chaining with date filters
+	count, err := db.Tasks().
+		Status().Incomplete().
+		StartDate().Exists(true).
+		Start().Anytime().
+		Count(ctx)
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, count, 0)
+
+	// Test multiple date filters
+	_, err = db.Tasks().
+		Status().Incomplete().
+		StartDate().Exists(true).
+		Deadline().Exists(true).
+		All(ctx)
+	require.NoError(t, err)
 }

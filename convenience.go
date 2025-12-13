@@ -9,24 +9,24 @@ import (
 // Todos returns all incomplete to-do items.
 func (d *DB) Todos(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
-		WithType(TaskTypeTodo).
-		WithStatus(StatusIncomplete).
+		Type().Todo().
+		Status().Incomplete().
 		All(ctx)
 }
 
 // Projects returns all incomplete projects.
 func (d *DB) Projects(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
-		WithType(TaskTypeProject).
-		WithStatus(StatusIncomplete).
+		Type().Project().
+		Status().Incomplete().
 		All(ctx)
 }
 
 // Inbox returns all tasks in the Inbox.
 func (d *DB) Inbox(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
-		WithStart(StartInbox).
-		WithStatus(StatusIncomplete).
+		Start().Inbox().
+		Status().Incomplete().
 		All(ctx)
 }
 
@@ -38,9 +38,9 @@ func (d *DB) Inbox(ctx context.Context) ([]Task, error) {
 func (d *DB) Today(ctx context.Context) ([]Task, error) {
 	// Regular Today tasks
 	regularTasks, err := d.Tasks().
-		WithStartDate(true).
-		WithStart(StartAnytime).
-		WithStatus(StatusIncomplete).
+		StartDate().Exists(true).
+		Start().Anytime().
+		Status().Incomplete().
 		OrderByTodayIndex().
 		All(ctx)
 	if err != nil {
@@ -49,9 +49,9 @@ func (d *DB) Today(ctx context.Context) ([]Task, error) {
 
 	// Unconfirmed scheduled tasks (yellow dot)
 	scheduledTasks, err := d.Tasks().
-		WithStartDate("past").
-		WithStart(StartSomeday).
-		WithStatus(StatusIncomplete).
+		StartDate().Past().
+		Start().Someday().
+		Status().Incomplete().
 		OrderByTodayIndex().
 		All(ctx)
 	if err != nil {
@@ -60,10 +60,10 @@ func (d *DB) Today(ctx context.Context) ([]Task, error) {
 
 	// Unconfirmed overdue tasks
 	overdueTasks, err := d.Tasks().
-		WithStartDate(false).
-		WithDeadline("past").
+		StartDate().Exists(false).
+		Deadline().Past().
 		WithDeadlineSuppressed(false).
-		WithStatus(StatusIncomplete).
+		Status().Incomplete().
 		All(ctx)
 	if err != nil {
 		return nil, err
@@ -89,26 +89,26 @@ func (d *DB) Today(ctx context.Context) ([]Task, error) {
 // Upcoming returns tasks scheduled for future dates.
 func (d *DB) Upcoming(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
-		WithStartDate("future").
-		WithStart(StartSomeday).
-		WithStatus(StatusIncomplete).
+		StartDate().Future().
+		Start().Someday().
+		Status().Incomplete().
 		All(ctx)
 }
 
 // Anytime returns tasks in the Anytime list.
 func (d *DB) Anytime(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
-		WithStart(StartAnytime).
-		WithStatus(StatusIncomplete).
+		Start().Anytime().
+		Status().Incomplete().
 		All(ctx)
 }
 
 // Someday returns tasks in the Someday list (without a start date).
 func (d *DB) Someday(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
-		WithStartDate(false).
-		WithStart(StartSomeday).
-		WithStatus(StatusIncomplete).
+		StartDate().Exists(false).
+		Start().Someday().
+		Status().Incomplete().
 		All(ctx)
 }
 
@@ -147,22 +147,22 @@ func (d *DB) Trash(ctx context.Context) ([]Task, error) {
 // Completed returns completed tasks.
 func (d *DB) Completed(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
-		WithStatus(StatusCompleted).
+		Status().Completed().
 		All(ctx)
 }
 
 // Canceled returns canceled tasks.
 func (d *DB) Canceled(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
-		WithStatus(StatusCanceled).
+		Status().Canceled().
 		All(ctx)
 }
 
 // Deadlines returns tasks with deadlines, sorted by deadline.
 func (d *DB) Deadlines(ctx context.Context) ([]Task, error) {
 	tasks, err := d.Tasks().
-		WithDeadline(true).
-		WithStatus(StatusIncomplete).
+		Deadline().Exists(true).
+		Status().Incomplete().
 		All(ctx)
 	if err != nil {
 		return nil, err
@@ -176,16 +176,16 @@ func (d *DB) Deadlines(ctx context.Context) ([]Task, error) {
 	return tasks, nil
 }
 
-// Last returns tasks created within the last X days/weeks/years.
-// Format: "3d" (3 days), "2w" (2 weeks), "1y" (1 year).
-func (d *DB) Last(ctx context.Context, offset string) ([]Task, error) {
-	if offset == "" {
+// CreatedWithin returns tasks created within the specified duration.
+// Example: db.CreatedWithin(ctx, Days(7))
+func (d *DB) CreatedWithin(ctx context.Context, duration Duration) ([]Task, error) {
+	if duration.IsZero() {
 		return nil, ErrInvalidParameter
 	}
 
 	tasks, err := d.Tasks().
-		Last(offset).
-		WithStatus(StatusIncomplete).
+		CreatedWithin(duration).
+		Status().Incomplete().
 		All(ctx)
 	if err != nil {
 		return nil, err
@@ -204,7 +204,7 @@ func (d *DB) Last(ctx context.Context, offset string) ([]Task, error) {
 func (d *DB) Search(ctx context.Context, query string) ([]Task, error) {
 	return d.Tasks().
 		Search(query).
-		WithStatus(StatusIncomplete).
+		Status().Incomplete().
 		All(ctx)
 }
 
@@ -271,8 +271,8 @@ func (q *AreaQuery) WithUUID(uuid string) *AreaQuery {
 	return q
 }
 
-// WithTag filters areas by tag.
-func (q *AreaQuery) WithTag(tag any) *AreaQuery {
+// InTag filters areas by tag.
+func (q *AreaQuery) InTag(tag any) *AreaQuery {
 	q.tagTitle = tag
 	return q
 }
@@ -418,11 +418,11 @@ func (q *TagQuery) All(ctx context.Context) ([]Tag, error) {
 
 		// Load items if requested
 		if q.includeItems {
-			areas, err := q.db.Areas().WithTag(tag.Title).All(ctx)
+			areas, err := q.db.Areas().InTag(tag.Title).All(ctx)
 			if err != nil {
 				return nil, err
 			}
-			tasks, err := q.db.Tasks().WithTag(tag.Title).All(ctx)
+			tasks, err := q.db.Tasks().InTag(tag.Title).All(ctx)
 			if err != nil {
 				return nil, err
 			}

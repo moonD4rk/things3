@@ -7,7 +7,7 @@ var (
 	// ErrDatabaseNotFound is returned when the Things database cannot be located.
 	ErrDatabaseNotFound = errors.New("things3: database not found")
 	// ErrDatabaseVersionTooOld is returned when the database version is not supported.
-	ErrDatabaseVersionTooOld = errors.New("things3: database version too old (requires version > 21)")
+	ErrDatabaseVersionTooOld = errors.New("things3: database version too old (requires things3 version > 21)")
 )
 
 // Query Errors

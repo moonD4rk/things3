@@ -5,45 +5,45 @@
 //
 // # Basic Usage
 //
-// Create a client and query tasks:
+// Create a database connection and query tasks:
 //
-//	client, err := things3.New()
+//	db, err := things3.NewDB()
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
-//	defer client.Close()
+//	defer db.Close()
 //
 //	// Get inbox tasks
-//	inbox, err := client.Inbox(ctx)
+//	inbox, err := db.Inbox(ctx)
 //
 //	// Get all incomplete to-dos
-//	todos, err := client.Todos(ctx)
+//	todos, err := db.Todos(ctx)
 //
 // # Query Builder
 //
 // For complex queries, use the fluent query builder:
 //
-//	tasks, err := client.Tasks().
+//	tasks, err := db.Tasks().
 //	    WithType(things3.TaskTypeTodo).
 //	    WithStatus(things3.StatusIncomplete).
 //	    InProject("project-uuid").
-//	    WithDeadline(things3.DateOpExists).
+//	    WithDeadline(true).
 //	    All(ctx)
 //
 // # Configuration
 //
-// Configure the client with functional options:
+// Configure the database with functional options:
 //
 //	// Use custom database path
-//	client, err := things3.New(things3.WithDatabasePath("/path/to/main.sqlite"))
+//	db, err := things3.NewDB(things3.WithDBPath("/path/to/main.sqlite"))
 //
 //	// Enable SQL query logging
-//	client, err := things3.New(things3.WithPrintSQL(true))
+//	db, err := things3.NewDB(things3.WithPrintSQL(true))
 //
 // # Database Discovery
 //
 // The database path is discovered in the following order:
-//  1. Custom path provided via WithDatabasePath option
+//  1. Custom path provided via WithDBPath option
 //  2. THINGSDB environment variable
 //  3. Auto-discovery of default Things 3 database location
 //

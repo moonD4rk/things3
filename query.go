@@ -7,7 +7,7 @@ import (
 
 // TaskQuery provides a fluent interface for building task queries.
 type TaskQuery struct {
-	client *Client
+	db *DB
 
 	// Filters
 	uuid               *string
@@ -33,10 +33,10 @@ type TaskQuery struct {
 }
 
 // Tasks creates a new TaskQuery for querying tasks.
-func (c *Client) Tasks() *TaskQuery {
+func (d *DB) Tasks() *TaskQuery {
 	return &TaskQuery{
-		client: c,
-		index:  indexDefault,
+		db:    d,
+		index: indexDefault,
 	}
 }
 
@@ -279,7 +279,7 @@ func (q *TaskQuery) All(ctx context.Context) ([]Task, error) {
 	order := q.buildOrder()
 	sql := buildTasksSQL(where, order)
 
-	rows, err := q.client.executeQuery(ctx, sql)
+	rows, err := q.db.executeQuery(ctx, sql)
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +294,7 @@ func (q *TaskQuery) All(ctx context.Context) ([]Task, error) {
 
 		// Load tags if present
 		if task.Tags != nil {
-			tags, err := q.client.getTagsOfTask(ctx, task.UUID)
+			tags, err := q.db.getTagsOfTask(ctx, task.UUID)
 			if err != nil {
 				return nil, err
 			}
@@ -337,7 +337,7 @@ func (q *TaskQuery) Count(ctx context.Context) (int, error) {
 	countSQL := buildCountSQL(taskSQL)
 
 	var count int
-	if err := q.client.executeQueryRow(ctx, countSQL).Scan(&count); err != nil {
+	if err := q.db.executeQueryRow(ctx, countSQL).Scan(&count); err != nil {
 		return 0, err
 	}
 	return count, nil
@@ -348,14 +348,14 @@ func (q *TaskQuery) loadTaskItems(ctx context.Context, task *Task) error {
 	switch task.Type {
 	case TaskTypeTodo:
 		if task.Checklist != nil {
-			items, err := q.client.getChecklistItems(ctx, task.UUID)
+			items, err := q.db.getChecklistItems(ctx, task.UUID)
 			if err != nil {
 				return err
 			}
 			task.Checklist = items
 		}
 	case TaskTypeProject:
-		items, err := q.client.Tasks().
+		items, err := q.db.Tasks().
 			InProject(task.UUID).
 			ContextTrashed(false).
 			IncludeItems(true).
@@ -365,7 +365,7 @@ func (q *TaskQuery) loadTaskItems(ctx context.Context, task *Task) error {
 		}
 		task.Items = items
 	case TaskTypeHeading:
-		items, err := q.client.Tasks().
+		items, err := q.db.Tasks().
 			WithType(TaskTypeTodo).
 			InHeading(task.UUID).
 			ContextTrashed(false).

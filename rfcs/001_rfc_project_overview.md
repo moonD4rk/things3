@@ -5,26 +5,88 @@ Author: @moond4rk
 
 ## Summary
 
-things3 is a Go library providing read-only access to the Things 3 macOS application's SQLite database. It is a complete port of the Python things.py library with full API parity, enabling Go developers to programmatically query tasks, projects, areas, and tags from the Things 3 app.
+things3 is a Go library providing read-only access to the Things 3 macOS application's SQLite database and type-safe URL Scheme building. It is a complete port of the Python things.py library with full API parity, plus a modern URL builder API.
 
-## Design
+## Architecture
 
-### Goals
+The library provides two independent entry points with clear separation of concerns:
+
+```
+things3 library
+|
++-- NewDB()      -> *DB      (Database operations, stateful)
+|   |
+|   +-- Connection: Close(), Filepath()
+|   +-- Convenience: Inbox(), Today(), Upcoming(), Anytime(), Someday(), Logbook(), Trash()
+|   +-- Query Builders: Todos(), Projects(), Areas(), Tags()
+|   +-- Auth Token: Token() -> for URL Scheme update operations
+|
++-- NewScheme()  -> *Scheme  (URL building, stateless)
+    |
+    +-- [No Auth Required]
+    |   +-- Todo()        -> *TodoBuilder       -> Build() string
+    |   +-- Project()     -> *ProjectBuilder    -> Build() string
+    |   +-- Show()        -> *ShowBuilder       -> Build() string
+    |   +-- JSON()        -> *JSONBuilder       -> Build() string
+    |   +-- Search(query) -> string
+    |   +-- Version()     -> string
+    |
+    +-- WithToken(token)  -> *AuthScheme  (Authenticated operations)
+        +-- UpdateTodo(id)    -> *UpdateTodoBuilder    -> Build() string
+        +-- UpdateProject(id) -> *UpdateProjectBuilder -> Build() string
+        +-- JSON()            -> *AuthJSONBuilder      -> Build() string
+```
+
+### Design Principles
+
+| Principle | Implementation |
+|-----------|----------------|
+| Separation of Concerns | `NewDB()` for data, `NewScheme()` for URLs |
+| Compile-time Safety | `WithToken()` enforces auth requirements at compile time |
+| Builder Pattern | Chainable methods with terminal execution |
+| Context-First | DB queries accept `context.Context` |
+| Stateless URL Building | `Scheme` is pure, no side effects |
+
+## RFC Index
+
+| RFC | Title | Status | Description |
+|-----|-------|--------|-------------|
+| 001 | Project Overview | Accepted | Goals, architecture, dependencies (this document) |
+| 002 | Database Schema | Accepted | Things 3 SQLite schema and SQL patterns |
+| 003 | Database API | Draft | `NewDB()`, query builders, convenience methods |
+| 004 | URL Scheme | Draft | `NewScheme()`, URL builders, official reference |
+
+### RFC Dependencies
+
+```
+001 Project Overview
+ |
+ +-- 002 Database Schema
+ |    |
+ |    +-- 003 Database API (uses schema)
+ |
+ +-- 004 URL Scheme (uses Token from 003)
+```
+
+## Goals
 
 1. **Full API Parity**: Replicate all 30+ APIs from Python things.py
 2. **Optimal Performance**: Use native SQLite driver for best query performance
 3. **Idiomatic Go API**: Follow Go conventions while maintaining familiar semantics
-4. **Read-Only Access**: Safe database queries without modification risk
-5. **Minimal Dependencies**: Only essential dependencies (SQLite driver, testing)
+4. **Read-Only Database**: Safe database queries without modification risk
+5. **Type-Safe URLs**: Builder pattern with compile-time safety for URL Scheme
+6. **Minimal Dependencies**: Only essential dependencies (SQLite driver, testing)
 
-### Non-Goals
+## Non-Goals
 
 1. Write operations to the Things 3 database
 2. HTTP/gRPC service wrapper (library only)
 3. Cross-platform support (macOS only, matching Things 3 availability)
 4. Real-time sync or change detection
+5. URL execution via AppleScript (belongs in consumers)
+6. x-callback-url response handling
 
-### Core Decisions
+## Core Decisions
 
 **Module Path**: `github.com/moond4rk/things3`
 
@@ -34,30 +96,24 @@ things3 is a Go library providing read-only access to the Things 3 macOS applica
 - Most widely used and battle-tested Go SQLite driver
 - Appropriate choice since Things 3 is macOS-only
 
-**API Style**: Hybrid Pattern
-- Functional Options for Client configuration
-- Query Builder with chainable methods for task queries
-- Direct convenience methods for common operations
+**Entry Points**:
+- `NewDB()` - Database operations (stateful, requires connection)
+- `NewScheme()` - URL building (stateless, pure functions)
 
-**Package Structure**: Simplified single-package layout
-- All public types and functions in the main `things3` package
-- No internal subpackages for this scope
-- Clear separation between files by responsibility
+**Token Handling**: `WithToken()` pattern
+- Token required upfront for update operations
+- Compile-time enforcement via separate `AuthScheme` type
+- IDE autocomplete shows only valid methods
 
-### API Design Principles
-
-1. **Context-First**: All query methods accept `context.Context` as first parameter
-2. **Nil-Safe**: Optional fields use pointer types with proper nil handling
-3. **Builder Pattern**: Query filters are chainable and composable
-4. **Terminal Methods**: `All()`, `First()`, `Count()` execute queries
-
-### Database Compatibility
+## Database Compatibility
 
 The library reads from the Things 3 SQLite database located at:
 - Default: `~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/Things Database.thingsdatabase/main.sqlite`
-- Override via `THINGSDB` environment variable or `WithDatabasePath()` option
+- Override via `THINGSDB` environment variable or `WithDBPath()` option
 
-### Type System
+## Type System
+
+### Database Enums
 
 Integer-based enums for direct database mapping:
 
@@ -67,41 +123,32 @@ Integer-based enums for direct database mapping:
 | Status | 0=incomplete, 2=canceled, 3=completed |
 | StartBucket | 0=Inbox, 1=Anytime, 2=Someday |
 
-## Implementation Notes
+### URL Scheme Enums
 
-### File Organization
+String-based enums for URL parameters:
 
-| File | Responsibility |
-|------|----------------|
-| client.go | Client type, New(), Close() |
-| client_options.go | Functional options (WithDatabasePath, WithPrintSQL) |
-| query.go | TaskQuery builder with filter methods |
-| query_area.go | AreaQuery builder |
-| query_tag.go | TagQuery builder |
-| convenience.go | Inbox(), Today(), Todos(), etc. |
-| models.go | Task, Area, Tag, ChecklistItem structs |
-| types.go | TaskType, Status, StartBucket enums |
-| date.go | Things date format conversion |
-| sql.go | SQL query building and execution |
-| database.go | Connection and path discovery |
-| url.go | Things URL scheme support |
-| errors.go | Error definitions |
-| constants.go | Table names, column mappings |
+| Type | Values |
+|------|--------|
+| When | today, tomorrow, evening, anytime, someday |
+| ListID | inbox, today, anytime, upcoming, someday, logbook, etc. |
+| Command | add, add-project, update, update-project, show, search, version, json |
 
-### Dependencies
+## Dependencies
 
 | Package | Purpose |
 |---------|---------|
 | github.com/mattn/go-sqlite3 | SQLite database driver (CGO) |
 | github.com/stretchr/testify | Testing assertions (dev only) |
 
-### Quality Requirements
+## Quality Requirements
 
 - All exported types and functions must have Go doc comments
-- Table-driven tests for query building
+- Table-driven tests for query building and URL generation
 - Integration tests using test database in testdata/
 - golangci-lint compliance with project configuration
+- English only for code, comments, documentation
 
-### Reference
+## References
 
-Python Source: https://github.com/thingsapi/things.py
+- Python Source: https://github.com/thingsapi/things.py
+- Things URL Scheme: https://culturedcode.com/things/support/articles/2803573/

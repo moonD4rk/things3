@@ -7,24 +7,24 @@ import (
 )
 
 // Todos returns all incomplete to-do items.
-func (c *Client) Todos(ctx context.Context) ([]Task, error) {
-	return c.Tasks().
+func (d *DB) Todos(ctx context.Context) ([]Task, error) {
+	return d.Tasks().
 		WithType(TaskTypeTodo).
 		WithStatus(StatusIncomplete).
 		All(ctx)
 }
 
 // Projects returns all incomplete projects.
-func (c *Client) Projects(ctx context.Context) ([]Task, error) {
-	return c.Tasks().
+func (d *DB) Projects(ctx context.Context) ([]Task, error) {
+	return d.Tasks().
 		WithType(TaskTypeProject).
 		WithStatus(StatusIncomplete).
 		All(ctx)
 }
 
 // Inbox returns all tasks in the Inbox.
-func (c *Client) Inbox(ctx context.Context) ([]Task, error) {
-	return c.Tasks().
+func (d *DB) Inbox(ctx context.Context) ([]Task, error) {
+	return d.Tasks().
 		WithStart(StartInbox).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -35,9 +35,9 @@ func (c *Client) Inbox(ctx context.Context) ([]Task, error) {
 // - Tasks with a start date set to today or earlier and in Anytime
 // - Scheduled tasks from Someday with past start dates (yellow dot tasks)
 // - Overdue tasks with deadlines that haven't been suppressed
-func (c *Client) Today(ctx context.Context) ([]Task, error) {
+func (d *DB) Today(ctx context.Context) ([]Task, error) {
 	// Regular Today tasks
-	regularTasks, err := c.Tasks().
+	regularTasks, err := d.Tasks().
 		WithStartDate(true).
 		WithStart(StartAnytime).
 		WithStatus(StatusIncomplete).
@@ -48,7 +48,7 @@ func (c *Client) Today(ctx context.Context) ([]Task, error) {
 	}
 
 	// Unconfirmed scheduled tasks (yellow dot)
-	scheduledTasks, err := c.Tasks().
+	scheduledTasks, err := d.Tasks().
 		WithStartDate("past").
 		WithStart(StartSomeday).
 		WithStatus(StatusIncomplete).
@@ -59,7 +59,7 @@ func (c *Client) Today(ctx context.Context) ([]Task, error) {
 	}
 
 	// Unconfirmed overdue tasks
-	overdueTasks, err := c.Tasks().
+	overdueTasks, err := d.Tasks().
 		WithStartDate(false).
 		WithDeadline("past").
 		WithDeadlineSuppressed(false).
@@ -97,8 +97,8 @@ func (c *Client) Today(ctx context.Context) ([]Task, error) {
 }
 
 // Upcoming returns tasks scheduled for future dates.
-func (c *Client) Upcoming(ctx context.Context) ([]Task, error) {
-	return c.Tasks().
+func (d *DB) Upcoming(ctx context.Context) ([]Task, error) {
+	return d.Tasks().
 		WithStartDate("future").
 		WithStart(StartSomeday).
 		WithStatus(StatusIncomplete).
@@ -106,16 +106,16 @@ func (c *Client) Upcoming(ctx context.Context) ([]Task, error) {
 }
 
 // Anytime returns tasks in the Anytime list.
-func (c *Client) Anytime(ctx context.Context) ([]Task, error) {
-	return c.Tasks().
+func (d *DB) Anytime(ctx context.Context) ([]Task, error) {
+	return d.Tasks().
 		WithStart(StartAnytime).
 		WithStatus(StatusIncomplete).
 		All(ctx)
 }
 
 // Someday returns tasks in the Someday list (without a start date).
-func (c *Client) Someday(ctx context.Context) ([]Task, error) {
-	return c.Tasks().
+func (d *DB) Someday(ctx context.Context) ([]Task, error) {
+	return d.Tasks().
 		WithStartDate(false).
 		WithStart(StartSomeday).
 		WithStatus(StatusIncomplete).
@@ -123,13 +123,13 @@ func (c *Client) Someday(ctx context.Context) ([]Task, error) {
 }
 
 // Logbook returns completed and canceled tasks, sorted by stop date.
-func (c *Client) Logbook(ctx context.Context) ([]Task, error) {
-	completed, err := c.Completed(ctx)
+func (d *DB) Logbook(ctx context.Context) ([]Task, error) {
+	completed, err := d.Completed(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	canceled, err := c.Canceled(ctx)
+	canceled, err := d.Canceled(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -156,30 +156,30 @@ func (c *Client) Logbook(ctx context.Context) ([]Task, error) {
 }
 
 // Trash returns trashed tasks.
-func (c *Client) Trash(ctx context.Context) ([]Task, error) {
-	q := c.Tasks().Trashed(true)
+func (d *DB) Trash(ctx context.Context) ([]Task, error) {
+	q := d.Tasks().Trashed(true)
 	// Remove default status filter for trash
 	q.status = nil
 	return q.All(ctx)
 }
 
 // Completed returns completed tasks.
-func (c *Client) Completed(ctx context.Context) ([]Task, error) {
-	return c.Tasks().
+func (d *DB) Completed(ctx context.Context) ([]Task, error) {
+	return d.Tasks().
 		WithStatus(StatusCompleted).
 		All(ctx)
 }
 
 // Canceled returns canceled tasks.
-func (c *Client) Canceled(ctx context.Context) ([]Task, error) {
-	return c.Tasks().
+func (d *DB) Canceled(ctx context.Context) ([]Task, error) {
+	return d.Tasks().
 		WithStatus(StatusCanceled).
 		All(ctx)
 }
 
 // Deadlines returns tasks with deadlines, sorted by deadline.
-func (c *Client) Deadlines(ctx context.Context) ([]Task, error) {
-	tasks, err := c.Tasks().
+func (d *DB) Deadlines(ctx context.Context) ([]Task, error) {
+	tasks, err := d.Tasks().
 		WithDeadline(true).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -206,12 +206,12 @@ func (c *Client) Deadlines(ctx context.Context) ([]Task, error) {
 
 // Last returns tasks created within the last X days/weeks/years.
 // Format: "3d" (3 days), "2w" (2 weeks), "1y" (1 year).
-func (c *Client) Last(ctx context.Context, offset string) ([]Task, error) {
+func (d *DB) Last(ctx context.Context, offset string) ([]Task, error) {
 	if offset == "" {
 		return nil, ErrInvalidParameter
 	}
 
-	tasks, err := c.Tasks().
+	tasks, err := d.Tasks().
 		Last(offset).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -229,8 +229,8 @@ func (c *Client) Last(ctx context.Context, offset string) ([]Task, error) {
 
 // Search searches for tasks matching the query.
 // Searches in task title, notes, and area title.
-func (c *Client) Search(ctx context.Context, query string) ([]Task, error) {
-	return c.Tasks().
+func (d *DB) Search(ctx context.Context, query string) ([]Task, error) {
+	return d.Tasks().
 		Search(query).
 		WithStatus(StatusIncomplete).
 		All(ctx)
@@ -239,9 +239,9 @@ func (c *Client) Search(ctx context.Context, query string) ([]Task, error) {
 // Get retrieves an object by UUID.
 // Returns a Task, Area, or Tag depending on what is found.
 // Returns nil if not found.
-func (c *Client) Get(ctx context.Context, uuid string) (any, error) {
+func (d *DB) Get(ctx context.Context, uuid string) (any, error) {
 	// Try to find as task
-	task, err := c.Tasks().WithUUID(uuid).First(ctx)
+	task, err := d.Tasks().WithUUID(uuid).First(ctx)
 	if err == nil {
 		return task, nil
 	}
@@ -250,7 +250,7 @@ func (c *Client) Get(ctx context.Context, uuid string) (any, error) {
 	}
 
 	// Try to find as area
-	area, err := c.Areas().WithUUID(uuid).First(ctx)
+	area, err := d.Areas().WithUUID(uuid).First(ctx)
 	if err == nil {
 		return area, nil
 	}
@@ -259,7 +259,7 @@ func (c *Client) Get(ctx context.Context, uuid string) (any, error) {
 	}
 
 	// Try to find as tag
-	tags, err := c.Tags().All(ctx)
+	tags, err := d.Tags().All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -273,13 +273,13 @@ func (c *Client) Get(ctx context.Context, uuid string) (any, error) {
 }
 
 // ChecklistItems returns the checklist items for a to-do.
-func (c *Client) ChecklistItems(ctx context.Context, todoUUID string) ([]ChecklistItem, error) {
-	return c.getChecklistItems(ctx, todoUUID)
+func (d *DB) ChecklistItems(ctx context.Context, todoUUID string) ([]ChecklistItem, error) {
+	return d.getChecklistItems(ctx, todoUUID)
 }
 
 // AreaQuery provides a fluent interface for building area queries.
 type AreaQuery struct {
-	client *Client
+	db *DB
 
 	uuid         *string
 	tagTitle     any // string, bool, or nil
@@ -287,9 +287,9 @@ type AreaQuery struct {
 }
 
 // Areas creates a new AreaQuery for querying areas.
-func (c *Client) Areas() *AreaQuery {
+func (d *DB) Areas() *AreaQuery {
 	return &AreaQuery{
-		client: c,
+		db: d,
 	}
 }
 
@@ -326,7 +326,7 @@ func (q *AreaQuery) buildWhere() string {
 // All executes the query and returns all matching areas.
 func (q *AreaQuery) All(ctx context.Context) ([]Area, error) {
 	sql := buildAreasSQL(q.buildWhere())
-	rows, err := q.client.executeQuery(ctx, sql)
+	rows, err := q.db.executeQuery(ctx, sql)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +341,7 @@ func (q *AreaQuery) All(ctx context.Context) ([]Area, error) {
 
 		// Load tags if present
 		if area.Tags != nil {
-			tags, err := q.client.getTagsOfArea(ctx, area.UUID)
+			tags, err := q.db.getTagsOfArea(ctx, area.UUID)
 			if err != nil {
 				return nil, err
 			}
@@ -350,7 +350,7 @@ func (q *AreaQuery) All(ctx context.Context) ([]Area, error) {
 
 		// Load items if requested
 		if q.includeItems {
-			items, err := q.client.Tasks().
+			items, err := q.db.Tasks().
 				InArea(area.UUID).
 				IncludeItems(true).
 				All(ctx)
@@ -384,7 +384,7 @@ func (q *AreaQuery) Count(ctx context.Context) (int, error) {
 	countSQL := buildCountSQL(areaSQL)
 
 	var count int
-	if err := q.client.executeQueryRow(ctx, countSQL).Scan(&count); err != nil {
+	if err := q.db.executeQueryRow(ctx, countSQL).Scan(&count); err != nil {
 		return 0, err
 	}
 	return count, nil
@@ -392,16 +392,16 @@ func (q *AreaQuery) Count(ctx context.Context) (int, error) {
 
 // TagQuery provides a fluent interface for building tag queries.
 type TagQuery struct {
-	client *Client
+	db *DB
 
 	title        *string
 	includeItems bool
 }
 
 // Tags creates a new TagQuery for querying tags.
-func (c *Client) Tags() *TagQuery {
+func (d *DB) Tags() *TagQuery {
 	return &TagQuery{
-		client: c,
+		db: d,
 	}
 }
 
@@ -431,7 +431,7 @@ func (q *TagQuery) buildWhere() string {
 // All executes the query and returns all matching tags.
 func (q *TagQuery) All(ctx context.Context) ([]Tag, error) {
 	sql := buildTagsSQL(q.buildWhere())
-	rows, err := q.client.executeQuery(ctx, sql)
+	rows, err := q.db.executeQuery(ctx, sql)
 	if err != nil {
 		return nil, err
 	}
@@ -446,11 +446,11 @@ func (q *TagQuery) All(ctx context.Context) ([]Tag, error) {
 
 		// Load items if requested
 		if q.includeItems {
-			areas, err := q.client.Areas().WithTag(tag.Title).All(ctx)
+			areas, err := q.db.Areas().WithTag(tag.Title).All(ctx)
 			if err != nil {
 				return nil, err
 			}
-			tasks, err := q.client.Tasks().WithTag(tag.Title).All(ctx)
+			tasks, err := q.db.Tasks().WithTag(tag.Title).All(ctx)
 			if err != nil {
 				return nil, err
 			}

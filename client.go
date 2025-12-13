@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 )
 
 // DB provides read-only access to the Things 3 database.
@@ -158,53 +157,23 @@ func scanTask(rows *sql.Rows) (*Task, error) {
 	task.Trashed = trashed.Valid && trashed.Int64 == 1
 
 	// Set optional string fields
-	if notes.Valid {
-		task.Notes = notes.String
+	task.Notes = nullStringValue(notes)
+	task.Start = nullStringValue(start)
+	task.AreaUUID = nullString(areaUUID)
+	task.AreaTitle = nullString(areaTitle)
+	task.ProjectUUID = nullString(projectUUID)
+	task.ProjectTitle = nullString(projectTitle)
+	task.HeadingUUID = nullString(headingUUID)
+	task.HeadingTitle = nullString(headingTitle)
+	task.StartDate = parseDate(startDate)
+	task.Deadline = parseDate(deadline)
+	task.ReminderTime = parseTime(reminderTime)
+	task.StopDate = parseDateTime(stopDate)
+	if t := parseDateTime(created); t != nil {
+		task.Created = *t
 	}
-	if start.Valid {
-		task.Start = start.String
-	}
-	if areaUUID.Valid {
-		task.AreaUUID = &areaUUID.String
-	}
-	if areaTitle.Valid {
-		task.AreaTitle = &areaTitle.String
-	}
-	if projectUUID.Valid {
-		task.ProjectUUID = &projectUUID.String
-	}
-	if projectTitle.Valid {
-		task.ProjectTitle = &projectTitle.String
-	}
-	if headingUUID.Valid {
-		task.HeadingUUID = &headingUUID.String
-	}
-	if headingTitle.Valid {
-		task.HeadingTitle = &headingTitle.String
-	}
-	if startDate.Valid && startDate.String != "" {
-		task.StartDate = &startDate.String
-	}
-	if deadline.Valid && deadline.String != "" {
-		task.Deadline = &deadline.String
-	}
-	if reminderTime.Valid && reminderTime.String != "" {
-		task.ReminderTime = &reminderTime.String
-	}
-	if stopDate.Valid {
-		if t, err := time.Parse("2006-01-02 15:04:05", stopDate.String); err == nil {
-			task.StopDate = &t
-		}
-	}
-	if created.Valid {
-		if t, err := time.Parse("2006-01-02 15:04:05", created.String); err == nil {
-			task.Created = t
-		}
-	}
-	if modified.Valid {
-		if t, err := time.Parse("2006-01-02 15:04:05", modified.String); err == nil {
-			task.Modified = t
-		}
+	if t := parseDateTime(modified); t != nil {
+		task.Modified = *t
 	}
 
 	// Mark if task has tags or checklist (actual items loaded separately)
@@ -285,20 +254,12 @@ func scanChecklistItem(rows *sql.Rows) (*ChecklistItem, error) {
 	}
 
 	item.Type = "checklist-item"
-	if stopDate.Valid {
-		if t, err := time.Parse("2006-01-02", stopDate.String); err == nil {
-			item.StopDate = &t
-		}
+	item.StopDate = parseDate(stopDate)
+	if t := parseDateTime(created); t != nil {
+		item.Created = *t
 	}
-	if created.Valid {
-		if t, err := time.Parse("2006-01-02 15:04:05", created.String); err == nil {
-			item.Created = t
-		}
-	}
-	if modified.Valid {
-		if t, err := time.Parse("2006-01-02 15:04:05", modified.String); err == nil {
-			item.Modified = t
-		}
+	if t := parseDateTime(modified); t != nil {
+		item.Modified = *t
 	}
 
 	return &item, nil

@@ -80,17 +80,7 @@ func (d *DB) Today(ctx context.Context) ([]Task, error) {
 		if result[i].TodayIndex != result[j].TodayIndex {
 			return result[i].TodayIndex < result[j].TodayIndex
 		}
-		// If today_index is the same, sort by start_date
-		if result[i].StartDate == nil && result[j].StartDate == nil {
-			return false
-		}
-		if result[i].StartDate == nil {
-			return false
-		}
-		if result[j].StartDate == nil {
-			return true
-		}
-		return *result[i].StartDate < *result[j].StartDate
+		return comparePtrTime(result[i].StartDate, result[j].StartDate)
 	})
 
 	return result, nil
@@ -140,16 +130,7 @@ func (d *DB) Logbook(ctx context.Context) ([]Task, error) {
 
 	// Sort by stop_date (newest first)
 	sort.Slice(result, func(i, j int) bool {
-		if result[i].StopDate == nil && result[j].StopDate == nil {
-			return false
-		}
-		if result[i].StopDate == nil {
-			return false
-		}
-		if result[j].StopDate == nil {
-			return true
-		}
-		return result[i].StopDate.After(*result[j].StopDate)
+		return comparePtrTimeDesc(result[i].StopDate, result[j].StopDate)
 	})
 
 	return result, nil
@@ -189,16 +170,7 @@ func (d *DB) Deadlines(ctx context.Context) ([]Task, error) {
 
 	// Sort by deadline
 	sort.Slice(tasks, func(i, j int) bool {
-		if tasks[i].Deadline == nil && tasks[j].Deadline == nil {
-			return false
-		}
-		if tasks[i].Deadline == nil {
-			return false
-		}
-		if tasks[j].Deadline == nil {
-			return true
-		}
-		return *tasks[i].Deadline < *tasks[j].Deadline
+		return comparePtrTime(tasks[i].Deadline, tasks[j].Deadline)
 	})
 
 	return tasks, nil

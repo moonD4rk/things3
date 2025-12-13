@@ -430,52 +430,61 @@ func TestUnixTimeFilter(t *testing.T) {
 	}
 }
 
-func TestUnixTimeRangeFilter(t *testing.T) {
+func TestDurationFilter(t *testing.T) {
 	tests := []struct {
-		name    string
-		column  string
-		offset  string
-		want    string
-		isEmpty bool
+		name     string
+		column   string
+		duration Duration
+		want     string
+		isEmpty  bool
 	}{
 		// Days
 		{
-			"7 days", "creationDate", "7d",
+			"7 days", "creationDate", Days(7),
 			"datetime(creationDate, 'unixepoch', 'localtime') > datetime('now', '-7 days')", false,
 		},
 		{
-			"30 days", "creationDate", "30d",
+			"30 days", "creationDate", Days(30),
 			"datetime(creationDate, 'unixepoch', 'localtime') > datetime('now', '-30 days')", false,
 		},
 
 		// Weeks (converted to days)
 		{
-			"2 weeks", "creationDate", "2w",
+			"2 weeks", "creationDate", Weeks(2),
 			"datetime(creationDate, 'unixepoch', 'localtime') > datetime('now', '-14 days')", false,
 		},
 		{
-			"4 weeks", "creationDate", "4w",
+			"4 weeks", "creationDate", Weeks(4),
 			"datetime(creationDate, 'unixepoch', 'localtime') > datetime('now', '-28 days')", false,
+		},
+
+		// Months
+		{
+			"1 month", "creationDate", Months(1),
+			"datetime(creationDate, 'unixepoch', 'localtime') > datetime('now', '-1 months')", false,
+		},
+		{
+			"6 months", "creationDate", Months(6),
+			"datetime(creationDate, 'unixepoch', 'localtime') > datetime('now', '-6 months')", false,
 		},
 
 		// Years
 		{
-			"1 year", "creationDate", "1y",
+			"1 year", "creationDate", Years(1),
 			"datetime(creationDate, 'unixepoch', 'localtime') > datetime('now', '-1 years')", false,
 		},
 		{
-			"2 years", "creationDate", "2y",
+			"2 years", "creationDate", Years(2),
 			"datetime(creationDate, 'unixepoch', 'localtime') > datetime('now', '-2 years')", false,
 		},
 
-		// Empty/invalid cases
-		{"empty offset", "creationDate", "", "", true},
-		{"too short", "creationDate", "d", "", true},
-		{"invalid suffix", "creationDate", "7x", "", true},
+		// Empty/zero cases
+		{"zero duration", "creationDate", Duration{}, "", true},
+		{"zero days", "creationDate", Days(0), "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := unixTimeRange(tt.column, tt.offset)
+			f := duration(tt.column, tt.duration)
 			assert.Equal(t, tt.want, f.SQL())
 			assert.Equal(t, tt.isEmpty, f.IsEmpty())
 		})
@@ -488,7 +497,7 @@ func TestFilterBuilderWithDateFilters(t *testing.T) {
 			addStatic(filterIsTodo).
 			addThingsDateValue("TASK.startDate", dateOpAfter, "2024-01-01").
 			addUnixTimeValue("TASK.stopDate", dateOpPast, "").
-			addUnixTimeRangeValue("TASK.creationDate", "30d")
+			addDurationFilter("TASK.creationDate", Days(30))
 
 		sql := fb.sql()
 		assert.Contains(t, sql, "type = 0")

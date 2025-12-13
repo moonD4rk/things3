@@ -3,6 +3,7 @@ package things3
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 )
 
@@ -333,7 +334,7 @@ func (d *DB) Token(ctx context.Context) (string, error) {
 	query := buildAuthTokenSQL()
 	var token sql.NullString
 	if err := d.executeQueryRow(ctx, query).Scan(&token); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return "", ErrAuthTokenNotFound
 		}
 		return "", err

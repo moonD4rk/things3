@@ -22,15 +22,17 @@ type TaskQuery struct {
 	hasHeading         *bool   // true: has heading, false: no heading
 	tagTitle           *string // specific tag title
 	hasTags            *bool   // true: has tags, false: no tags
-	startDate          any     // bool, "future", "past", or ISO date with optional operator
-	stopDate           any     // bool, "future", "past", or ISO date with optional operator
-	deadline           any     // bool, "future", "past", or ISO date with optional operator
 	deadlineSuppressed *bool
 	trashed            *bool
 	contextTrashed     *bool
-	last               *string
+	createdWithin      *Duration
 	searchQuery        *string
 	index              string
+
+	// Date filters (new type-safe approach)
+	startDateFilter *dateFilterValue
+	stopDateFilter  *dateFilterValue
+	deadlineFilter  *dateFilterValue
 
 	// Options
 	includeItems bool
@@ -50,22 +52,44 @@ func (q *TaskQuery) WithUUID(uuid string) *TaskQuery {
 	return q
 }
 
-// WithType filters tasks by type (to-do, project, or heading).
-func (q *TaskQuery) WithType(t TaskType) *TaskQuery {
-	q.taskType = &t
-	return q
+// =============================================================================
+// Type-Safe Sub-Builder Entry Points
+// =============================================================================
+
+// Type returns a TypeFilter for type-safe task type filtering.
+// Example: db.Tasks().Type().Todo().All(ctx)
+func (q *TaskQuery) Type() *TypeFilter {
+	return &TypeFilter{query: q}
 }
 
-// WithStatus filters tasks by status.
-func (q *TaskQuery) WithStatus(s Status) *TaskQuery {
-	q.status = &s
-	return q
+// Status returns a StatusFilter for type-safe status filtering.
+// Example: db.Tasks().Status().Incomplete().All(ctx)
+func (q *TaskQuery) Status() *StatusFilter {
+	return &StatusFilter{query: q}
 }
 
-// WithStart filters tasks by start bucket (Inbox, Anytime, Someday).
-func (q *TaskQuery) WithStart(s StartBucket) *TaskQuery {
-	q.start = &s
-	return q
+// Start returns a StartFilter for type-safe start bucket filtering.
+// Example: db.Tasks().Start().Inbox().All(ctx)
+func (q *TaskQuery) Start() *StartFilter {
+	return &StartFilter{query: q}
+}
+
+// StartDate returns a DateFilter for start date filtering.
+// Example: db.Tasks().StartDate().Future().All(ctx)
+func (q *TaskQuery) StartDate() *DateFilter {
+	return &DateFilter{query: q, field: dateFieldStartDate}
+}
+
+// StopDate returns a DateFilter for stop date filtering.
+// Example: db.Tasks().StopDate().Exists(true).All(ctx)
+func (q *TaskQuery) StopDate() *DateFilter {
+	return &DateFilter{query: q, field: dateFieldStopDate}
+}
+
+// Deadline returns a DateFilter for deadline filtering.
+// Example: db.Tasks().Deadline().OnOrBefore("2024-12-31").All(ctx)
+func (q *TaskQuery) Deadline() *DateFilter {
+	return &DateFilter{query: q, field: dateFieldDeadline}
 }
 
 // InArea filters tasks by a specific area UUID.
@@ -110,38 +134,17 @@ func (q *TaskQuery) HasHeading(has bool) *TaskQuery {
 	return q
 }
 
-// WithTag filters tasks by a specific tag title.
-func (q *TaskQuery) WithTag(title string) *TaskQuery {
+// InTag filters tasks by a specific tag title.
+func (q *TaskQuery) InTag(title string) *TaskQuery {
 	q.tagTitle = &title
 	return q
 }
 
-// HasTags filters tasks by whether they have any tags.
+// HasTag filters tasks by whether they have any tags.
 // Pass true to include only tasks with tags.
 // Pass false to include only tasks without tags.
-func (q *TaskQuery) HasTags(has bool) *TaskQuery {
+func (q *TaskQuery) HasTag(has bool) *TaskQuery {
 	q.hasTags = &has
-	return q
-}
-
-// WithStartDate filters tasks by start date.
-// Accepts: bool (has/doesn't have), "future", "past", or ISO date with optional operator.
-func (q *TaskQuery) WithStartDate(date any) *TaskQuery {
-	q.startDate = date
-	return q
-}
-
-// WithStopDate filters tasks by stop date (completion/cancellation date).
-// Accepts: bool (has/doesn't have), "future", "past", or ISO date with optional operator.
-func (q *TaskQuery) WithStopDate(date any) *TaskQuery {
-	q.stopDate = date
-	return q
-}
-
-// WithDeadline filters tasks by deadline.
-// Accepts: bool (has/doesn't have), "future", "past", or ISO date with optional operator.
-func (q *TaskQuery) WithDeadline(deadline any) *TaskQuery {
-	q.deadline = deadline
 	return q
 }
 
@@ -165,10 +168,10 @@ func (q *TaskQuery) ContextTrashed(trashed bool) *TaskQuery {
 	return q
 }
 
-// Last filters tasks created within the last X days/weeks/years.
-// Format: "3d" (3 days), "2w" (2 weeks), "1y" (1 year).
-func (q *TaskQuery) Last(offset string) *TaskQuery {
-	q.last = &offset
+// CreatedWithin filters tasks created within the specified duration.
+// Example: db.Tasks().CreatedWithin(Days(7)).All(ctx)
+func (q *TaskQuery) CreatedWithin(d Duration) *TaskQuery {
+	q.createdWithin = &d
 	return q
 }
 
@@ -192,8 +195,8 @@ func (q *TaskQuery) IncludeItems(include bool) *TaskQuery {
 }
 
 // buildWhere builds the WHERE clause for the query using filterBuilder.
-
-//nolint:gocyclo
+//
+//nolint:gocyclo,funlen // complex but necessary for comprehensive filter handling
 func (q *TaskQuery) buildWhere() string {
 	fb := newFilterBuilder()
 
@@ -291,14 +294,20 @@ func (q *TaskQuery) buildWhere() string {
 		fb.addEqual("TASK.deadlineSuppressionDate", *q.deadlineSuppressed)
 	}
 
-	// Date filters
-	fb.addParsedThingsDateValue(fmt.Sprintf("TASK.%s", colStartDate), q.startDate)
-	fb.addParsedUnixTimeValue(fmt.Sprintf("TASK.%s", colStopDate), q.stopDate)
-	fb.addParsedThingsDateValue(fmt.Sprintf("TASK.%s", colDeadline), q.deadline)
+	// Date filters using new type-safe structure
+	if q.startDateFilter != nil {
+		fb.addDateFilterValue(fmt.Sprintf("TASK.%s", colStartDate), q.startDateFilter, true)
+	}
+	if q.stopDateFilter != nil {
+		fb.addDateFilterValue(fmt.Sprintf("TASK.%s", colStopDate), q.stopDateFilter, false)
+	}
+	if q.deadlineFilter != nil {
+		fb.addDateFilterValue(fmt.Sprintf("TASK.%s", colDeadline), q.deadlineFilter, true)
+	}
 
-	// Last filter
-	if q.last != nil {
-		fb.addUnixTimeRangeValue(fmt.Sprintf("TASK.%s", colCreationDate), *q.last)
+	// CreatedWithin filter
+	if q.createdWithin != nil && !q.createdWithin.IsZero() {
+		fb.addDurationFilter(fmt.Sprintf("TASK.%s", colCreationDate), *q.createdWithin)
 	}
 
 	// Search filter
@@ -407,7 +416,7 @@ func (q *TaskQuery) loadTaskItems(ctx context.Context, task *Task) error {
 		task.Items = items
 	case TaskTypeHeading:
 		items, err := q.db.Tasks().
-			WithType(TaskTypeTodo).
+			Type().Todo().
 			InHeading(task.UUID).
 			ContextTrashed(false).
 			IncludeItems(true).

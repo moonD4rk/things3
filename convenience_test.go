@@ -42,10 +42,10 @@ func TestToday(t *testing.T) {
 
 	// Test Today projects only
 	projects, err := db.Tasks().
-		WithType(TaskTypeProject).
-		WithStartDate(true).
-		WithStart(StartAnytime).
-		WithStatus(StatusIncomplete).
+		Type().Project().
+		StartDate().Exists(true).
+		Start().Anytime().
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	assert.Len(t, projects, testTodayProjects)
@@ -126,26 +126,26 @@ func TestTodos(t *testing.T) {
 
 	// Test todos with start=Anytime
 	todos, err = db.Tasks().
-		WithType(TaskTypeTodo).
-		WithStart(StartAnytime).
-		WithStatus(StatusIncomplete).
+		Type().Todo().
+		Start().Anytime().
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	assert.Len(t, todos, testTodosAnytime)
 
 	// Test todos with start=Anytime, status=completed
 	todos, err = db.Tasks().
-		WithType(TaskTypeTodo).
-		WithStart(StartAnytime).
-		WithStatus(StatusCompleted).
+		Type().Todo().
+		Start().Anytime().
+		Status().Completed().
 		All(ctx)
 	require.NoError(t, err)
 	assert.Len(t, todos, testTodosAnytimeComplete)
 
 	// Test todos with status=completed
 	todos, err = db.Tasks().
-		WithType(TaskTypeTodo).
-		WithStatus(StatusCompleted).
+		Type().Todo().
+		Status().Completed().
 		All(ctx)
 	require.NoError(t, err)
 	assert.Len(t, todos, testTodosComplete)
@@ -172,8 +172,8 @@ func TestProjects(t *testing.T) {
 
 	// Test projects with include_items
 	projects, err = db.Tasks().
-		WithType(TaskTypeProject).
-		WithStatus(StatusIncomplete).
+		Type().Project().
+		Status().Incomplete().
 		IncludeItems(true).
 		All(ctx)
 	require.NoError(t, err)
@@ -227,12 +227,12 @@ func TestTags(t *testing.T) {
 	assert.Equal(t, "Errand", tag.Title)
 
 	// Test tasks filtered by tag
-	tasks, err := db.Tasks().WithTag("Errand").All(ctx)
+	tasks, err := db.Tasks().InTag("Errand").All(ctx)
 	require.NoError(t, err)
 	assert.Len(t, tasks, 1)
 
 	// Test tasks with tag "Home"
-	tasks, err = db.Tasks().WithTag("Home").All(ctx)
+	tasks, err = db.Tasks().InTag("Home").All(ctx)
 	require.NoError(t, err)
 	assert.Len(t, tasks, 1)
 }
@@ -248,16 +248,16 @@ func TestDeadlines(t *testing.T) {
 
 	// Test past deadlines
 	tasks, err = db.Tasks().
-		WithDeadline("past").
-		WithStatus(StatusIncomplete).
+		Deadline().Past().
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	assert.Len(t, tasks, testDeadlinePast)
 
 	// Test future deadlines
 	tasks, err = db.Tasks().
-		WithDeadline("future").
-		WithStatus(StatusIncomplete).
+		Deadline().Future().
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	assert.Len(t, tasks, testDeadlineFuture)
@@ -274,18 +274,18 @@ func TestTrash(t *testing.T) {
 
 	// Test trashed todos
 	todos, err := db.Tasks().
-		WithType(TaskTypeTodo).
+		Type().Todo().
 		Trashed(true).
-		WithStatus(StatusIncomplete).
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	assert.Len(t, todos, testTrashedTodos)
 
 	// Test trashed projects
 	projects, err := db.Tasks().
-		WithType(TaskTypeProject).
+		Type().Project().
 		Trashed(true).
-		WithStatus(StatusIncomplete).
+		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	assert.Len(t, projects, testTrashedProjects)
@@ -346,23 +346,26 @@ func TestGetByUUID(t *testing.T) {
 	assert.Equal(t, testUUIDTag, tag.UUID)
 }
 
-func TestLast(t *testing.T) {
+func TestCreatedWithin(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	// Test last 0 days
-	tasks, err := db.Last(ctx, "0d")
-	require.NoError(t, err)
-	assert.Empty(t, tasks)
+	// Test 0 days - should return empty (IsZero returns true)
+	_, err := db.CreatedWithin(ctx, Days(0))
+	require.ErrorIs(t, err, ErrInvalidParameter)
 
-	// Test last 10000 weeks
-	tasks, err = db.Last(ctx, "10000w")
+	// Test many weeks - should return results
+	tasks, err := db.CreatedWithin(ctx, Weeks(10000))
 	require.NoError(t, err)
 	assert.Len(t, tasks, testTasksIncomplete)
 
-	// Test invalid parameter
-	_, err = db.Last(ctx, "")
-	require.ErrorIs(t, err, ErrInvalidParameter)
+	// Test months
+	_, err = db.CreatedWithin(ctx, Months(1))
+	require.NoError(t, err)
+
+	// Test years
+	_, err = db.CreatedWithin(ctx, Years(1))
+	require.NoError(t, err)
 }
 
 func TestTasks(t *testing.T) {
@@ -371,8 +374,8 @@ func TestTasks(t *testing.T) {
 
 	// Test tasks count with filters
 	count, err := db.Tasks().
-		WithStatus(StatusCompleted).
-		Last("100y").
+		Status().Completed().
+		CreatedWithin(Years(100)).
 		Count(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, testCompleted, count)
@@ -394,7 +397,7 @@ func TestTasks(t *testing.T) {
 
 	// Test tasks with tag and project
 	tasks, err = db.Tasks().
-		WithTag("Home").
+		InTag("Home").
 		InProject(testUUIDProject).
 		All(ctx)
 	require.NoError(t, err)

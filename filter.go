@@ -2,27 +2,15 @@ package things3
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
+	"time"
 )
 
 // Date filter value constants.
 const (
-	dateFuture          = "future"
-	datePast            = "past"
-	defaultDateOperator = "=="
+	dateFuture = "future"
+	datePast   = "past"
 )
-
-// matchDateWithOperator matches an ISO 8601 date string with optional comparison operator.
-// Returns [fullMatch, operator, date] or nil if no match.
-func matchDateWithOperator(value string) []string {
-	re := regexp.MustCompile(`^(=|==|<|<=|>|>=)?(\d{4}-\d{2}-\d{2})$`)
-	matches := re.FindStringSubmatch(value)
-	if len(matches) != 3 {
-		return nil
-	}
-	return matches
-}
 
 // filter represents a SQL WHERE clause condition.
 // filter implementations return SQL fragments without "AND " prefix.
@@ -348,54 +336,29 @@ func unixTime(column string, op dateOp, value string) filter {
 	return unixTimeFilter{column: column, op: op, value: value}
 }
 
-// unixTimeRangeFilter handles "last X days/weeks/years" range filters.
-type unixTimeRangeFilter struct {
-	column string
-	offset string // e.g., "7d", "2w", "1y"
+// durationFilter handles Duration-based time range filters.
+type durationFilter struct {
+	column   string
+	duration Duration
 }
 
-func (f unixTimeRangeFilter) SQL() string {
-	if f.offset == "" || len(f.offset) < 2 {
+func (f durationFilter) SQL() string {
+	modifier := f.duration.toSQLModifier()
+	if modifier == "" {
 		return ""
 	}
-
-	number := f.offset[:len(f.offset)-1]
-	suffix := f.offset[len(f.offset)-1]
-
-	var modifier string
-	switch suffix {
-	case 'd':
-		modifier = fmt.Sprintf("-%s days", number)
-	case 'w':
-		var weeks int
-		if _, err := fmt.Sscanf(number, "%d", &weeks); err != nil {
-			return ""
-		}
-		modifier = fmt.Sprintf("-%d days", weeks*7)
-	case 'y':
-		modifier = fmt.Sprintf("-%s years", number)
-	default:
-		return ""
-	}
-
 	columnDatetime := fmt.Sprintf("datetime(%s, 'unixepoch', 'localtime')", f.column)
 	offsetDatetime := fmt.Sprintf("datetime('now', '%s')", modifier)
-
 	return fmt.Sprintf("%s > %s", columnDatetime, offsetDatetime)
 }
 
-func (f unixTimeRangeFilter) IsEmpty() bool {
-	if f.offset == "" || len(f.offset) < 2 {
-		return true
-	}
-	suffix := f.offset[len(f.offset)-1]
-	return suffix != 'd' && suffix != 'w' && suffix != 'y'
+func (f durationFilter) IsEmpty() bool {
+	return f.duration.IsZero()
 }
 
-// unixTimeRange creates a filter for items within the last X days/weeks/years.
-// offset format: "7d" for 7 days, "2w" for 2 weeks, "1y" for 1 year.
-func unixTimeRange(column, offset string) filter {
-	return unixTimeRangeFilter{column: column, offset: offset}
+// duration creates a filter for items created within the specified duration.
+func duration(column string, d Duration) filter {
+	return durationFilter{column: column, duration: d}
 }
 
 // addThingsDateValue adds a Things date filter to the builder.
@@ -408,122 +371,60 @@ func (b *filterBuilder) addUnixTimeValue(column string, op dateOp, value string)
 	return b.add(unixTime(column, op, value))
 }
 
-// addUnixTimeRangeValue adds a Unix time range filter to the builder.
-func (b *filterBuilder) addUnixTimeRangeValue(column, offset string) *filterBuilder {
-	return b.add(unixTimeRange(column, offset))
+// addDurationFilter adds a Duration-based filter to the builder.
+func (b *filterBuilder) addDurationFilter(column string, d Duration) *filterBuilder {
+	return b.add(duration(column, d))
 }
 
-// parsedDateFilter creates a filter from any-typed date value (bool, string).
-// This bridges the old API (accepting any) with the new Filter abstraction.
-type parsedDateFilter struct {
-	column   string
-	value    any
-	isThings bool // true for Things date format, false for Unix timestamp
-}
-
-func (f parsedDateFilter) SQL() string {
-	if f.value == nil {
-		return ""
-	}
-
-	switch v := f.value.(type) {
-	case bool:
-		if v {
-			return fmt.Sprintf("%s IS NOT NULL", f.column)
-		}
-		return fmt.Sprintf("%s IS NULL", f.column)
-	case string:
-		if v == "" {
-			return ""
-		}
-		if f.isThings {
-			return f.parseThingsDateString(v)
-		}
-		return f.parseUnixTimeString(v)
-	default:
-		return ""
-	}
-}
-
-func (f parsedDateFilter) parseThingsDateString(value string) string {
-	switch value {
-	case dateFuture:
-		return fmt.Sprintf("%s > %s", f.column, todayThingsDateSQL())
-	case datePast:
-		return fmt.Sprintf("%s <= %s", f.column, todayThingsDateSQL())
-	}
-
-	match := matchDateWithOperator(value)
-	if match == nil {
-		return ""
-	}
-
-	operator, isoDate := match[1], match[2]
-	if operator == "" {
-		operator = defaultDateOperator
-	}
-
-	thingsDate, err := stringToThingsDate(isoDate)
-	if err != nil {
-		return ""
-	}
-
-	return fmt.Sprintf("%s %s %d", f.column, operator, thingsDate)
-}
-
-func (f parsedDateFilter) parseUnixTimeString(value string) string {
-	dateExpr := fmt.Sprintf("date(%s, 'unixepoch', 'localtime')", f.column)
-
-	switch value {
-	case dateFuture:
-		return fmt.Sprintf("%s > date('now', 'localtime')", dateExpr)
-	case datePast:
-		return fmt.Sprintf("%s <= date('now', 'localtime')", dateExpr)
-	}
-
-	match := matchDateWithOperator(value)
-	if match == nil {
-		return ""
-	}
-
-	operator, isoDate := match[1], match[2]
-	if operator == "" {
-		operator = defaultDateOperator
-	}
-
-	return fmt.Sprintf("%s %s date('%s')", dateExpr, operator, isoDate)
-}
-
-func (f parsedDateFilter) IsEmpty() bool {
-	if f.value == nil {
-		return true
-	}
-	if s, ok := f.value.(string); ok && s == "" {
-		return true
-	}
-	return false
-}
-
-// parsedThingsDate creates a filter from an any-typed Things date value.
-// Accepts: bool (IS NULL/IS NOT NULL), "future", "past", or ISO date with optional operator.
-func parsedThingsDate(column string, value any) filter {
-	return parsedDateFilter{column: column, value: value, isThings: true}
-}
-
-// parsedUnixTime creates a filter from an any-typed Unix timestamp value.
-// Accepts: bool (IS NULL/IS NOT NULL), "future", "past", or ISO date with optional operator.
-func parsedUnixTime(column string, value any) filter {
-	return parsedDateFilter{column: column, value: value, isThings: false}
-}
-
-// addParsedThingsDateValue adds a parsed Things date filter to the builder.
+// addDateFilterValue adds a date filter using the new type-safe dateFilterValue.
+// isThingsDate indicates whether the column uses Things binary date format (true)
+// or Unix timestamp format (false).
 //
-//nolint:unparam
-func (b *filterBuilder) addParsedThingsDateValue(column string, value any) *filterBuilder {
-	return b.add(parsedThingsDate(column, value))
-}
+//nolint:unparam // return value unused but kept for fluent builder pattern consistency
+func (b *filterBuilder) addDateFilterValue(column string, v *dateFilterValue, isThingsDate bool) *filterBuilder {
+	if v == nil {
+		return b
+	}
 
-// addParsedUnixTimeValue adds a parsed Unix time filter to the builder.
-func (b *filterBuilder) addParsedUnixTimeValue(column string, value any) *filterBuilder {
-	return b.add(parsedUnixTime(column, value))
+	// Handle existence check
+	if v.hasDate != nil {
+		if *v.hasDate {
+			return b.add(static(fmt.Sprintf("%s IS NOT NULL", column)))
+		}
+		return b.add(static(fmt.Sprintf("%s IS NULL", column)))
+	}
+
+	// Handle relative date (future/past)
+	if v.relative != "" {
+		if isThingsDate {
+			if v.relative == dateFuture {
+				return b.add(static(fmt.Sprintf("%s > %s", column, todayThingsDateSQL())))
+			}
+			return b.add(static(fmt.Sprintf("%s <= %s", column, todayThingsDateSQL())))
+		}
+		// Unix timestamp format
+		dateExpr := fmt.Sprintf("date(%s, 'unixepoch', 'localtime')", column)
+		if v.relative == dateFuture {
+			return b.add(static(fmt.Sprintf("%s > date('now', 'localtime')", dateExpr)))
+		}
+		return b.add(static(fmt.Sprintf("%s <= date('now', 'localtime')", dateExpr)))
+	}
+
+	// Handle specific date comparison
+	if v.date != nil {
+		// Convert time.Time to ISO date string (YYYY-MM-DD)
+		dateStr := v.date.Format(time.DateOnly)
+		if isThingsDate {
+			thingsDate, err := stringToThingsDate(dateStr)
+			if err != nil || thingsDate == 0 {
+				return b
+			}
+			return b.add(static(fmt.Sprintf("%s %s %d", column, v.operator, thingsDate)))
+		}
+		// Unix timestamp format
+		dateExpr := fmt.Sprintf("date(%s, 'unixepoch', 'localtime')", column)
+		return b.add(static(fmt.Sprintf("%s %s date('%s')", dateExpr, v.operator, dateStr)))
+	}
+
+	return b
 }

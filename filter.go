@@ -234,6 +234,11 @@ func (b *filterBuilder) addSearch(query string, columns ...string) *filterBuilde
 	return b.add(search(query, columns...))
 }
 
+// build returns the collected filters.
+func (b *filterBuilder) build() filters {
+	return b.fltrs
+}
+
 // sql returns the combined SQL for all filters.
 func (b *filterBuilder) sql() string {
 	return b.fltrs.SQL()
@@ -354,6 +359,16 @@ func (f durationFilter) IsEmpty() bool {
 // duration creates a filter for items created within the specified duration.
 func duration(column string, d Duration) filter {
 	return durationFilter{column: column, duration: d}
+}
+
+// addThingsDateValue adds a Things date filter to the builder.
+func (b *filterBuilder) addThingsDateValue(column string, op dateOp, value string) *filterBuilder {
+	return b.add(thingsDate(column, op, value))
+}
+
+// addUnixTimeValue adds a Unix time filter to the builder.
+func (b *filterBuilder) addUnixTimeValue(column string, op dateOp, value string) *filterBuilder {
+	return b.add(unixTime(column, op, value))
 }
 
 // addDurationFilter adds a Duration-based filter to the builder.

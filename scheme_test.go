@@ -260,7 +260,7 @@ func TestTodoBuilder_CreationDate(t *testing.T) {
 	cmd, params := parseThingsURL(t, thingsURL)
 	assert.Equal(t, "add", cmd)
 	require.Equal(t, "Historical task", params.Get("title"))
-	assertDateParam(t, params, "creation-date", 2024, time.January, 15)
+	require.Equal(t, pastDate.Format(time.RFC3339), params.Get("creation-date"))
 }
 
 func TestTodoBuilder_CompletionDate(t *testing.T) {
@@ -277,7 +277,7 @@ func TestTodoBuilder_CompletionDate(t *testing.T) {
 	assert.Equal(t, "add", cmd)
 	require.Equal(t, "Imported completed task", params.Get("title"))
 	require.Equal(t, "true", params.Get("completed"))
-	assertDateParam(t, params, "completion-date", 2024, time.December, 1)
+	require.Equal(t, completedAt.Format(time.RFC3339), params.Get("completion-date"))
 }
 
 func TestTodoBuilder_Chained(t *testing.T) {
@@ -475,7 +475,7 @@ func TestProjectBuilder_CreationDate(t *testing.T) {
 	cmd, params := parseThingsURL(t, thingsURL)
 	assert.Equal(t, "add-project", cmd)
 	require.Equal(t, "Historical Project", params.Get("title"))
-	assertDateParam(t, params, "creation-date", 2024, time.June, 1)
+	require.Equal(t, created.Format(time.RFC3339), params.Get("creation-date"))
 }
 
 func TestProjectBuilder_CompletionDate(t *testing.T) {
@@ -492,7 +492,7 @@ func TestProjectBuilder_CompletionDate(t *testing.T) {
 	assert.Equal(t, "add-project", cmd)
 	require.Equal(t, "Imported Completed Project", params.Get("title"))
 	require.Equal(t, "true", params.Get("completed"))
-	assertDateParam(t, params, "completion-date", 2024, time.November, 15)
+	require.Equal(t, completed.Format(time.RFC3339), params.Get("completion-date"))
 }
 
 func TestProjectBuilder_FullProject(t *testing.T) {
@@ -878,7 +878,7 @@ func TestUpdateTodoBuilder_CreationDate(t *testing.T) {
 
 	cmd, params := parseThingsURL(t, thingsURL)
 	assert.Equal(t, "update", cmd)
-	assertDateParam(t, params, "creation-date", 2024, time.January, 1)
+	require.Equal(t, created.Format(time.RFC3339), params.Get("creation-date"))
 }
 
 func TestUpdateTodoBuilder_CompletionDate(t *testing.T) {
@@ -891,7 +891,7 @@ func TestUpdateTodoBuilder_CompletionDate(t *testing.T) {
 	cmd, params := parseThingsURL(t, thingsURL)
 	assert.Equal(t, "update", cmd)
 	require.Equal(t, "true", params.Get("completed"))
-	assertDateParam(t, params, "completion-date", 2024, time.December, 31)
+	require.Equal(t, completed.Format(time.RFC3339), params.Get("completion-date"))
 }
 
 func TestUpdateTodoBuilder_ValidationError(t *testing.T) {
@@ -1498,9 +1498,8 @@ func TestJSONTodoBuilder_CreationDate(t *testing.T) {
 
 // TestJSONTodoBuilder_CompletionDate tests setting completion timestamp
 func TestJSONTodoBuilder_CompletionDate(t *testing.T) {
-	scheme := NewScheme()
 	completedDate := time.Date(2024, time.December, 15, 14, 30, 0, 0, time.UTC)
-	thingsURL, err := scheme.JSON().
+	thingsURL, err := NewScheme().JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test").Completed(true).CompletionDate(completedDate)
 		}).
@@ -1519,8 +1518,7 @@ func TestJSONTodoBuilder_CompletionDate(t *testing.T) {
 
 // TestJSONTodoBuilder_UpdatePrependNotes tests prepending notes in update
 func TestJSONTodoBuilder_UpdatePrependNotes(t *testing.T) {
-	scheme := NewScheme()
-	auth := scheme.WithToken("test-token")
+	auth := NewScheme().WithToken("test-token")
 	thingsURL, err := auth.JSON().
 		UpdateTodo("uuid", func(todo *JSONTodoBuilder) {
 			todo.PrependNotes("Important: ")

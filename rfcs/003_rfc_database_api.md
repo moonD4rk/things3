@@ -1,6 +1,6 @@
 # RFC 003: Database API
 
-Status: Draft
+Status: Implemented
 Author: @moond4rk
 
 ## Summary
@@ -39,29 +39,56 @@ func (db *DB) Filepath() string
 
 ### Convenience Query Methods
 
-Direct access methods for common queries. All methods accept `context.Context` as the first parameter.
+Direct access methods for common queries. All methods accept `context.Context` as the first parameter and return value slices (not pointer slices).
 
 ```go
 // Inbox returns all tasks in the Inbox.
-func (db *DB) Inbox(ctx context.Context) ([]*Task, error)
+func (db *DB) Inbox(ctx context.Context) ([]Task, error)
 
 // Today returns all tasks scheduled for today.
-func (db *DB) Today(ctx context.Context) ([]*Task, error)
+func (db *DB) Today(ctx context.Context) ([]Task, error)
 
 // Upcoming returns all tasks with future start dates.
-func (db *DB) Upcoming(ctx context.Context) ([]*Task, error)
+func (db *DB) Upcoming(ctx context.Context) ([]Task, error)
 
 // Anytime returns all tasks in the Anytime list.
-func (db *DB) Anytime(ctx context.Context) ([]*Task, error)
+func (db *DB) Anytime(ctx context.Context) ([]Task, error)
 
 // Someday returns all tasks in the Someday list.
-func (db *DB) Someday(ctx context.Context) ([]*Task, error)
+func (db *DB) Someday(ctx context.Context) ([]Task, error)
 
 // Logbook returns all completed tasks.
-func (db *DB) Logbook(ctx context.Context) ([]*Task, error)
+func (db *DB) Logbook(ctx context.Context) ([]Task, error)
 
 // Trash returns all trashed tasks.
-func (db *DB) Trash(ctx context.Context) ([]*Task, error)
+func (db *DB) Trash(ctx context.Context) ([]Task, error)
+
+// Todos returns all incomplete to-do items.
+func (db *DB) Todos(ctx context.Context) ([]Task, error)
+
+// Projects returns all projects.
+func (db *DB) Projects(ctx context.Context) ([]Task, error)
+
+// Completed returns all completed tasks.
+func (db *DB) Completed(ctx context.Context) ([]Task, error)
+
+// Canceled returns all canceled tasks.
+func (db *DB) Canceled(ctx context.Context) ([]Task, error)
+
+// Deadlines returns all tasks with deadlines.
+func (db *DB) Deadlines(ctx context.Context) ([]Task, error)
+
+// CreatedWithin returns tasks created within the specified duration.
+func (db *DB) CreatedWithin(ctx context.Context, d Duration) ([]Task, error)
+
+// Search returns tasks matching the search query.
+func (db *DB) Search(ctx context.Context, query string) ([]Task, error)
+
+// Get returns a task, area, or tag by UUID.
+func (db *DB) Get(ctx context.Context, uuid string) (any, error)
+
+// ChecklistItems returns checklist items for a task.
+func (db *DB) ChecklistItems(ctx context.Context, taskUUID string) ([]ChecklistItem, error)
 ```
 
 ### Query Builders
@@ -70,8 +97,7 @@ Builder pattern for complex queries with chainable filter methods and terminal e
 
 ```go
 // Query builder entry points
-func (db *DB) Todos() *TaskQuery
-func (db *DB) Projects() *TaskQuery
+func (db *DB) Tasks() *TaskQuery
 func (db *DB) Areas() *AreaQuery
 func (db *DB) Tags() *TagQuery
 ```
@@ -85,19 +111,69 @@ type TaskQuery struct {
 
 // Filter methods (chainable)
 func (q *TaskQuery) WithUUID(uuid string) *TaskQuery
-func (q *TaskQuery) WithTag(tag string) *TaskQuery
-func (q *TaskQuery) WithStatus(status Status) *TaskQuery
+func (q *TaskQuery) InTag(title string) *TaskQuery
 func (q *TaskQuery) InProject(projectUUID string) *TaskQuery
 func (q *TaskQuery) InArea(areaUUID string) *TaskQuery
 func (q *TaskQuery) InHeading(headingUUID string) *TaskQuery
-func (q *TaskQuery) StartDate(date string) *TaskQuery
-func (q *TaskQuery) Deadline(date string) *TaskQuery
 func (q *TaskQuery) Trashed(trashed bool) *TaskQuery
+func (q *TaskQuery) HasArea(has bool) *TaskQuery
+func (q *TaskQuery) HasProject(has bool) *TaskQuery
+func (q *TaskQuery) HasHeading(has bool) *TaskQuery
+func (q *TaskQuery) HasTag(has bool) *TaskQuery
+func (q *TaskQuery) WithDeadlineSuppressed(suppressed bool) *TaskQuery
+func (q *TaskQuery) ContextTrashed(trashed bool) *TaskQuery
+func (q *TaskQuery) IncludeItems(include bool) *TaskQuery
+func (q *TaskQuery) OrderByTodayIndex() *TaskQuery
+func (q *TaskQuery) CreatedWithin(d Duration) *TaskQuery
+func (q *TaskQuery) Search(query string) *TaskQuery
+
+// Type-safe sub-builders (chainable, return *TaskQuery)
+func (q *TaskQuery) Type() *TypeFilter
+func (q *TaskQuery) Status() *StatusFilter
+func (q *TaskQuery) Start() *StartFilter
+func (q *TaskQuery) StartDate() *DateFilter
+func (q *TaskQuery) StopDate() *DateFilter
+func (q *TaskQuery) Deadline() *DateFilter
 
 // Terminal methods (execute query)
-func (q *TaskQuery) All(ctx context.Context) ([]*Task, error)
+func (q *TaskQuery) All(ctx context.Context) ([]Task, error)
 func (q *TaskQuery) First(ctx context.Context) (*Task, error)
 func (q *TaskQuery) Count(ctx context.Context) (int, error)
+```
+
+#### Type-Safe Sub-Builders
+
+These sub-builders provide compile-time type safety for filter values:
+
+```go
+// TypeFilter for task type filtering
+type TypeFilter struct { /* internal */ }
+func (f *TypeFilter) Todo() *TaskQuery
+func (f *TypeFilter) Project() *TaskQuery
+func (f *TypeFilter) Heading() *TaskQuery
+
+// StatusFilter for task status filtering
+type StatusFilter struct { /* internal */ }
+func (f *StatusFilter) Incomplete() *TaskQuery
+func (f *StatusFilter) Completed() *TaskQuery
+func (f *StatusFilter) Canceled() *TaskQuery
+
+// StartFilter for start bucket filtering
+type StartFilter struct { /* internal */ }
+func (f *StartFilter) Inbox() *TaskQuery
+func (f *StartFilter) Anytime() *TaskQuery
+func (f *StartFilter) Someday() *TaskQuery
+
+// DateFilter for date-based filtering
+type DateFilter struct { /* internal */ }
+func (f *DateFilter) Exists(exists bool) *TaskQuery
+func (f *DateFilter) Future() *TaskQuery
+func (f *DateFilter) Past() *TaskQuery
+func (f *DateFilter) On(date time.Time) *TaskQuery
+func (f *DateFilter) Before(date time.Time) *TaskQuery
+func (f *DateFilter) OnOrBefore(date time.Time) *TaskQuery
+func (f *DateFilter) After(date time.Time) *TaskQuery
+func (f *DateFilter) OnOrAfter(date time.Time) *TaskQuery
 ```
 
 #### AreaQuery
@@ -109,11 +185,11 @@ type AreaQuery struct {
 
 // Filter methods (chainable)
 func (q *AreaQuery) WithUUID(uuid string) *AreaQuery
-func (q *AreaQuery) WithTag(tag string) *AreaQuery
+func (q *AreaQuery) WithTitle(title string) *AreaQuery
 func (q *AreaQuery) Visible(visible bool) *AreaQuery
 
 // Terminal methods (execute query)
-func (q *AreaQuery) All(ctx context.Context) ([]*Area, error)
+func (q *AreaQuery) All(ctx context.Context) ([]Area, error)
 func (q *AreaQuery) First(ctx context.Context) (*Area, error)
 func (q *AreaQuery) Count(ctx context.Context) (int, error)
 ```
@@ -131,7 +207,7 @@ func (q *TagQuery) WithTitle(title string) *TagQuery
 func (q *TagQuery) WithParent(parentUUID string) *TagQuery
 
 // Terminal methods (execute query)
-func (q *TagQuery) All(ctx context.Context) ([]*Tag, error)
+func (q *TagQuery) All(ctx context.Context) ([]Tag, error)
 func (q *TagQuery) First(ctx context.Context) (*Tag, error)
 func (q *TagQuery) Count(ctx context.Context) (int, error)
 ```
@@ -161,31 +237,59 @@ defer db.Close()
 tasks, _ := db.Inbox(ctx)
 tasks, _ := db.Today(ctx)
 tasks, _ := db.Upcoming(ctx)
+tasks, _ := db.Todos(ctx)
+tasks, _ := db.Projects(ctx)
 ```
 
-### Query Builder Usage
+### Query Builder with Type-Safe Sub-Builders
 
 ```go
 // Find all incomplete todos with a specific tag
-tasks, _ := db.Todos().
-    WithTag("work").
-    WithStatus(things3.StatusIncomplete).
+tasks, _ := db.Tasks().
+    Type().Todo().
+    Status().Incomplete().
+    InTag("work").
     All(ctx)
 
 // Find a specific task by UUID
-task, _ := db.Todos().
+task, _ := db.Tasks().
     WithUUID("task-uuid").
     First(ctx)
 
 // Find all tasks in a project
-tasks, _ := db.Todos().
+tasks, _ := db.Tasks().
     InProject("project-uuid").
     All(ctx)
 
+// Find tasks with deadlines in the past
+tasks, _ := db.Tasks().
+    Deadline().Past().
+    All(ctx)
+
+// Find tasks starting in the future
+tasks, _ := db.Tasks().
+    StartDate().Future().
+    All(ctx)
+
+// Find tasks with deadlines before a specific date
+tasks, _ := db.Tasks().
+    Deadline().Before(time.Now().AddDate(0, 0, 7)).
+    All(ctx)
+
 // Count tasks with a deadline
-count, _ := db.Todos().
-    Deadline("2024-12-31").
+count, _ := db.Tasks().
+    Deadline().Exists(true).
     Count(ctx)
+
+// Find tasks created within last 7 days
+tasks, _ := db.Tasks().
+    CreatedWithin(things3.Days(7)).
+    All(ctx)
+
+// Search for tasks
+tasks, _ := db.Tasks().
+    Search("meeting").
+    All(ctx)
 ```
 
 ### With URL Scheme Integration
@@ -208,11 +312,14 @@ var (
     // ErrDatabaseNotFound is returned when the Things database cannot be found.
     ErrDatabaseNotFound = errors.New("things3: database not found")
 
-    // ErrDatabaseReadOnly is returned when attempting write operations.
-    ErrDatabaseReadOnly = errors.New("things3: database is read-only")
+    // ErrDatabaseVersionTooOld is returned when the database version is not supported.
+    ErrDatabaseVersionTooOld = errors.New("things3: database version too old")
 
-    // ErrTokenNotFound is returned when the auth token is not configured.
-    ErrTokenNotFound = errors.New("things3: auth token not found in settings")
+    // ErrAuthTokenNotFound is returned when the auth token is not configured.
+    ErrAuthTokenNotFound = errors.New("things3: auth token not found")
+
+    // ErrInvalidParameter is returned when a parameter is invalid.
+    ErrInvalidParameter = errors.New("things3: invalid parameter")
 )
 ```
 
@@ -220,26 +327,36 @@ var (
 
 ```text
 things3/
-├── db.go               # DB type, NewDB(), Close(), Filepath()
-├── db_options.go       # DBOption, WithDBPath(), WithPrintSQL()
-├── db_convenience.go   # Inbox(), Today(), Upcoming(), etc.
-├── db_query.go         # TaskQuery builder
-├── db_query_area.go    # AreaQuery builder
-├── db_query_tag.go     # TagQuery builder
-├── db_token.go         # Token() method
-└── db_test.go          # Integration tests
+    client.go           # DB type, NewDB(), Close(), Filepath()
+    client_options.go   # DBOption, WithDBPath(), WithPrintSQL()
+    convenience.go      # Inbox(), Today(), Todos(), Projects(), etc.
+    query.go            # TaskQuery builder
+    query_filter.go     # Type-safe sub-builders (StatusFilter, TypeFilter, etc.)
+    query_area.go       # AreaQuery builder
+    query_tag.go        # TagQuery builder
+    filter.go           # Internal SQL filter building
+    sql.go              # SQL query construction
+    models.go           # Task, Area, Tag, ChecklistItem structs
+    types.go            # TaskType, Status, StartBucket enums
+    date.go             # Things date format conversion
+    duration.go         # Duration type for time-based queries
+    database.go         # Database connection and path discovery
+    url.go              # Things URL scheme support
+    errors.go           # Error definitions
+    constants.go        # Table names, column mappings
 ```
 
 | File | Responsibility |
 |------|----------------|
-| `db.go` | DB type definition, NewDB constructor, connection management |
-| `db_options.go` | Functional options pattern for configuration |
-| `db_convenience.go` | Pre-built queries for common operations |
-| `db_query.go` | TaskQuery builder with filter and terminal methods |
-| `db_query_area.go` | AreaQuery builder |
-| `db_query_tag.go` | TagQuery builder |
-| `db_token.go` | Auth token retrieval from TMSettings |
-| `db_test.go` | Integration tests using testdata database |
+| `client.go` | DB type definition, NewDB constructor, connection management |
+| `client_options.go` | Functional options pattern for configuration |
+| `convenience.go` | Pre-built queries for common operations |
+| `query.go` | TaskQuery builder with filter and terminal methods |
+| `query_filter.go` | Type-safe sub-builders (StatusFilter, TypeFilter, DateFilter, etc.) |
+| `query_area.go` | AreaQuery builder |
+| `query_tag.go` | TagQuery builder |
+| `filter.go` | Internal filter interface and implementations |
+| `sql.go` | SQL query construction and execution |
 
 ## Testing Strategy
 
@@ -270,7 +387,7 @@ func TestDB_Token(t *testing.T) {
 ### Query Builder Tests
 
 ```go
-func TestTaskQuery_Filters(t *testing.T) {
+func TestTaskQuery_TypeSafeFilters(t *testing.T) {
     db, _ := things3.NewDB(things3.WithDBPath("testdata/test.sqlite"))
     defer db.Close()
 
@@ -281,12 +398,17 @@ func TestTaskQuery_Filters(t *testing.T) {
     }{
         {
             name:    "all todos",
-            query:   func() *things3.TaskQuery { return db.Todos() },
+            query:   func() *things3.TaskQuery { return db.Tasks().Type().Todo() },
             wantMin: 1,
         },
         {
-            name:    "with tag",
-            query:   func() *things3.TaskQuery { return db.Todos().WithTag("work") },
+            name:    "incomplete tasks",
+            query:   func() *things3.TaskQuery { return db.Tasks().Status().Incomplete() },
+            wantMin: 0,
+        },
+        {
+            name:    "tasks with deadlines",
+            query:   func() *things3.TaskQuery { return db.Tasks().Deadline().Exists(true) },
             wantMin: 0,
         },
     }
@@ -307,9 +429,11 @@ func TestTaskQuery_Filters(t *testing.T) {
 |-----------|----------------|
 | Context-First | All query methods accept `context.Context` as first parameter |
 | Builder Pattern | Chainable filter methods with terminal execution methods |
+| Type-Safe Sub-Builders | StatusFilter, TypeFilter, DateFilter provide compile-time safety |
 | Read-Only | No write operations to the database |
 | Type Safety | Strongly typed query results, no raw SQL exposure |
 | Functional Options | Configuration via `DBOption` functions |
+| Value Semantics | Return value slices (`[]Task`) not pointer slices (`[]*Task`) |
 
 ## References
 

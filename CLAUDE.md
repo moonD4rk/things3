@@ -20,7 +20,8 @@ go test ./...                              # Run all tests
 go test -cover ./...                       # Run tests with coverage
 go test -run TestTaskQuery ./...           # Run single test
 golangci-lint run                          # Run linter
-gofmt -w . && goimports -w -local github.com/moond4rk/things3 .  # Format
+gofumpt -l -w .                            # Format (stricter than gofmt)
+goimports -w -local github.com/moond4rk/things3 . # Format Import
 go build ./...                             # Build
 ```
 

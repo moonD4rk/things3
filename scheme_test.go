@@ -1,6 +1,7 @@
 package things3
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -410,7 +411,7 @@ func TestUpdateProjectBuilder_Canceled(t *testing.T) {
 func TestJSONBuilder_AddTodo(t *testing.T) {
 	scheme := NewScheme()
 	url, err := scheme.JSON().
-		AddTodo(func(todo *JSONTodoItem) {
+		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test Todo")
 		}).
 		Build()
@@ -424,7 +425,7 @@ func TestJSONBuilder_AddTodo(t *testing.T) {
 func TestJSONBuilder_AddProject(t *testing.T) {
 	scheme := NewScheme()
 	url, err := scheme.JSON().
-		AddProject(func(project *JSONProjectItem) {
+		AddProject(func(project *JSONProjectBuilder) {
 			project.Title("Test Project")
 		}).
 		Build()
@@ -436,7 +437,7 @@ func TestJSONBuilder_AddProject(t *testing.T) {
 func TestJSONBuilder_Reveal(t *testing.T) {
 	scheme := NewScheme()
 	url, err := scheme.JSON().
-		AddTodo(func(todo *JSONTodoItem) {
+		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test")
 		}).
 		Reveal(true).
@@ -454,10 +455,10 @@ func TestJSONBuilder_NoItems(t *testing.T) {
 func TestJSONBuilder_Multiple(t *testing.T) {
 	scheme := NewScheme()
 	url, err := scheme.JSON().
-		AddTodo(func(todo *JSONTodoItem) {
+		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Todo 1")
 		}).
-		AddTodo(func(todo *JSONTodoItem) {
+		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Todo 2")
 		}).
 		Build()
@@ -474,7 +475,7 @@ func TestAuthJSONBuilder_UpdateTodo(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
 	url, err := auth.JSON().
-		UpdateTodo("uuid-123", func(todo *JSONTodoItem) {
+		UpdateTodo("uuid-123", func(todo *JSONTodoBuilder) {
 			todo.Completed(true)
 		}).
 		Build()
@@ -489,7 +490,7 @@ func TestAuthJSONBuilder_UpdateProject(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
 	url, err := auth.JSON().
-		UpdateProject("uuid-123", func(project *JSONProjectItem) {
+		UpdateProject("uuid-123", func(project *JSONProjectBuilder) {
 			project.Completed(true)
 		}).
 		Build()
@@ -502,10 +503,10 @@ func TestAuthJSONBuilder_Mixed(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
 	url, err := auth.JSON().
-		AddTodo(func(todo *JSONTodoItem) {
+		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("New Todo")
 		}).
-		UpdateTodo("uuid-123", func(todo *JSONTodoItem) {
+		UpdateTodo("uuid-123", func(todo *JSONTodoBuilder) {
 			todo.Completed(true)
 		}).
 		Build()
@@ -518,7 +519,7 @@ func TestAuthJSONBuilder_EmptyToken(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("")
 	_, err := auth.JSON().
-		AddTodo(func(todo *JSONTodoItem) {
+		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test")
 		}).
 		Build()
@@ -533,13 +534,13 @@ func TestAuthJSONBuilder_NoItems(t *testing.T) {
 }
 
 // =============================================================================
-// JSONTodoItem Tests
+// JSONTodoBuilder Tests
 // =============================================================================
 
-func TestJSONTodoItem_When(t *testing.T) {
+func TestJSONTodoBuilder_When(t *testing.T) {
 	scheme := NewScheme()
 	url, err := scheme.JSON().
-		AddTodo(func(todo *JSONTodoItem) {
+		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test").When(WhenToday)
 		}).
 		Build()
@@ -547,23 +548,24 @@ func TestJSONTodoItem_When(t *testing.T) {
 	assert.Contains(t, url, "today")
 }
 
-func TestJSONTodoItem_Tags(t *testing.T) {
+func TestJSONTodoBuilder_Tags(t *testing.T) {
 	scheme := NewScheme()
 	url, err := scheme.JSON().
-		AddTodo(func(todo *JSONTodoItem) {
-			todo.Title("Test").Tags("work", "urgent")
+		AddTodo(func(todo *JSONTodoBuilder) {
+			todo.Title("Test").Tags("Risk", "Golang")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "work")
-	assert.Contains(t, url, "urgent")
+	assert.Contains(t, url, "Risk")
+	assert.Contains(t, url, "Golang")
+	fmt.Println(url)
 }
 
-func TestJSONTodoItem_TitleTooLong(t *testing.T) {
+func TestJSONTodoBuilder_TitleTooLong(t *testing.T) {
 	scheme := NewScheme()
 	longTitle := strings.Repeat("a", 4001)
 	_, err := scheme.JSON().
-		AddTodo(func(todo *JSONTodoItem) {
+		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title(longTitle)
 		}).
 		Build()
@@ -571,13 +573,13 @@ func TestJSONTodoItem_TitleTooLong(t *testing.T) {
 }
 
 // =============================================================================
-// JSONProjectItem Tests
+// JSONProjectBuilder Tests
 // =============================================================================
 
-func TestJSONProjectItem_Area(t *testing.T) {
+func TestJSONProjectBuilder_Area(t *testing.T) {
 	scheme := NewScheme()
 	url, err := scheme.JSON().
-		AddProject(func(project *JSONProjectItem) {
+		AddProject(func(project *JSONProjectBuilder) {
 			project.Title("Test").Area("Work")
 		}).
 		Build()
@@ -585,10 +587,10 @@ func TestJSONProjectItem_Area(t *testing.T) {
 	assert.Contains(t, url, "Work")
 }
 
-func TestJSONProjectItem_Todos(t *testing.T) {
+func TestJSONProjectBuilder_Todos(t *testing.T) {
 	scheme := NewScheme()
 	url, err := scheme.JSON().
-		AddProject(func(project *JSONProjectItem) {
+		AddProject(func(project *JSONProjectBuilder) {
 			project.Title("Test Project").Todos(
 				NewTodo().Title("Task 1"),
 				NewTodo().Title("Task 2"),

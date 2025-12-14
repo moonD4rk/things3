@@ -28,14 +28,14 @@ func NewScheme() *Scheme {
 // Todo returns a TodoBuilder for creating a new to-do.
 func (s *Scheme) Todo() *TodoBuilder {
 	return &TodoBuilder{
-		params: make(map[string]string),
+		attrs: urlAttrs{params: make(map[string]string)},
 	}
 }
 
 // Project returns a ProjectBuilder for creating a new project.
 func (s *Scheme) Project() *ProjectBuilder {
 	return &ProjectBuilder{
-		params: make(map[string]string),
+		attrs: urlAttrs{params: make(map[string]string)},
 	}
 }
 
@@ -94,18 +94,18 @@ type AuthScheme struct {
 // UpdateTodo returns an UpdateTodoBuilder for modifying an existing to-do.
 func (a *AuthScheme) UpdateTodo(id string) *UpdateTodoBuilder {
 	return &UpdateTodoBuilder{
-		token:  a.token,
-		id:     id,
-		params: make(map[string]string),
+		token: a.token,
+		id:    id,
+		attrs: urlAttrs{params: make(map[string]string)},
 	}
 }
 
 // UpdateProject returns an UpdateProjectBuilder for modifying an existing project.
 func (a *AuthScheme) UpdateProject(id string) *UpdateProjectBuilder {
 	return &UpdateProjectBuilder{
-		token:  a.token,
-		id:     id,
-		params: make(map[string]string),
+		token: a.token,
+		id:    id,
+		attrs: urlAttrs{params: make(map[string]string)},
 	}
 }
 

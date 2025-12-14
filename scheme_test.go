@@ -20,10 +20,13 @@ func TestNewScheme(t *testing.T) {
 
 func TestTodoBuilder_Title(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Todo().Title("Buy groceries").Build()
+	urlStr, err := scheme.Todo().Title("Buy groceries").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "things:///add?")
-	assert.Contains(t, url, "title=Buy")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add", cmd)
+	assertURLParam(t, params, "title", "Buy groceries")
+	assertNoExtraParams(t, params, "title")
 }
 
 func TestTodoBuilder_TitleTooLong(t *testing.T) {
@@ -35,9 +38,14 @@ func TestTodoBuilder_TitleTooLong(t *testing.T) {
 
 func TestTodoBuilder_Notes(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Todo().Title("Test").Notes("Some notes").Build()
+	urlStr, err := scheme.Todo().Title("Test").Notes("Some notes").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "notes=Some")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add", cmd)
+	assertURLParam(t, params, "title", "Test")
+	assertURLParam(t, params, "notes", "Some notes")
+	assertNoExtraParams(t, params, "title", "notes")
 }
 
 func TestTodoBuilder_NotesTooLong(t *testing.T) {
@@ -52,51 +60,74 @@ func TestTodoBuilder_When(t *testing.T) {
 		when     When
 		expected string
 	}{
-		{WhenToday, "when=today"},
-		{WhenTomorrow, "when=tomorrow"},
-		{WhenEvening, "when=evening"},
-		{WhenAnytime, "when=anytime"},
-		{WhenSomeday, "when=someday"},
+		{WhenToday, "today"},
+		{WhenTomorrow, "tomorrow"},
+		{WhenEvening, "evening"},
+		{WhenAnytime, "anytime"},
+		{WhenSomeday, "someday"},
 	}
 
 	for _, tt := range tests {
 		t.Run(string(tt.when), func(t *testing.T) {
 			scheme := NewScheme()
-			url, err := scheme.Todo().Title("Test").When(tt.when).Build()
+			urlStr, err := scheme.Todo().Title("Test").When(tt.when).Build()
 			require.NoError(t, err)
-			assert.Contains(t, url, tt.expected)
+
+			cmd, params := parseThingsURL(t, urlStr)
+			assert.Equal(t, "add", cmd)
+			assertURLParam(t, params, "title", "Test")
+			assertURLParam(t, params, "when", tt.expected)
+			assertNoExtraParams(t, params, "title", "when")
 		})
 	}
 }
 
 func TestTodoBuilder_WhenDate(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Todo().Title("Test").WhenDate(2025, time.December, 25).Build()
+	urlStr, err := scheme.Todo().Title("Test").WhenDate(2025, time.December, 25).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "when=2025-12-25")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add", cmd)
+	assertURLParam(t, params, "title", "Test")
+	assertURLParam(t, params, "when", "2025-12-25")
+	assertNoExtraParams(t, params, "title", "when")
 }
 
 func TestTodoBuilder_Deadline(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Todo().Title("Test").Deadline("2025-12-31").Build()
+	urlStr, err := scheme.Todo().Title("Test").Deadline("2025-12-31").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "deadline=2025-12-31")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add", cmd)
+	assertURLParam(t, params, "title", "Test")
+	assertURLParam(t, params, "deadline", "2025-12-31")
+	assertNoExtraParams(t, params, "title", "deadline")
 }
 
 func TestTodoBuilder_Tags(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Todo().Title("Test").Tags("work", "urgent").Build()
+	urlStr, err := scheme.Todo().Title("Test").Tags("work", "urgent").Build()
 	require.NoError(t, err)
-	// Tags are comma-separated
-	containsTags := strings.Contains(url, "tags=work%2Curgent") || strings.Contains(url, "tags=work,urgent")
-	assert.True(t, containsTags, "URL should contain comma-separated tags")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add", cmd)
+	assertURLParam(t, params, "title", "Test")
+	assertURLParam(t, params, "tags", "work,urgent")
+	assertNoExtraParams(t, params, "title", "tags")
 }
 
 func TestTodoBuilder_ChecklistItems(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Todo().Title("Test").ChecklistItems("Item 1", "Item 2").Build()
+	urlStr, err := scheme.Todo().Title("Test").ChecklistItems("Item 1", "Item 2").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "checklist-items=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add", cmd)
+	assertURLParam(t, params, "title", "Test")
+	assertURLParam(t, params, "checklist-items", "Item 1\nItem 2")
+	assertNoExtraParams(t, params, "title", "checklist-items")
 }
 
 func TestTodoBuilder_TooManyChecklistItems(t *testing.T) {
@@ -111,55 +142,87 @@ func TestTodoBuilder_TooManyChecklistItems(t *testing.T) {
 
 func TestTodoBuilder_List(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Todo().Title("Test").List("My Project").Build()
+	urlStr, err := scheme.Todo().Title("Test").List("My Project").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "list=My")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add", cmd)
+	assertURLParam(t, params, "title", "Test")
+	assertURLParam(t, params, "list", "My Project")
+	assertNoExtraParams(t, params, "title", "list")
 }
 
 func TestTodoBuilder_ListID(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Todo().Title("Test").ListID("uuid-123").Build()
+	urlStr, err := scheme.Todo().Title("Test").ListID("uuid-123").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "list-id=uuid-123")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add", cmd)
+	assertURLParam(t, params, "title", "Test")
+	assertURLParam(t, params, "list-id", "uuid-123")
+	assertNoExtraParams(t, params, "title", "list-id")
 }
 
 func TestTodoBuilder_Completed(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Todo().Title("Test").Completed(true).Build()
+	urlStr, err := scheme.Todo().Title("Test").Completed(true).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "completed=true")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add", cmd)
+	assertURLParam(t, params, "title", "Test")
+	assertURLParam(t, params, "completed", "true")
+	assertNoExtraParams(t, params, "title", "completed")
 }
 
 func TestTodoBuilder_Canceled(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Todo().Title("Test").Canceled(true).Build()
+	urlStr, err := scheme.Todo().Title("Test").Canceled(true).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "canceled=true")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add", cmd)
+	assertURLParam(t, params, "title", "Test")
+	assertURLParam(t, params, "canceled", "true")
+	assertNoExtraParams(t, params, "title", "canceled")
 }
 
 func TestTodoBuilder_ShowQuickEntry(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Todo().Title("Test").ShowQuickEntry(true).Build()
+	urlStr, err := scheme.Todo().Title("Test").ShowQuickEntry(true).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "show-quick-entry=true")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add", cmd)
+	assertURLParam(t, params, "title", "Test")
+	assertURLParam(t, params, "show-quick-entry", "true")
+	assertNoExtraParams(t, params, "title", "show-quick-entry")
 }
 
 func TestTodoBuilder_Reveal(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Todo().Title("Test").Reveal(true).Build()
+	urlStr, err := scheme.Todo().Title("Test").Reveal(true).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "reveal=true")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add", cmd)
+	assertURLParam(t, params, "title", "Test")
+	assertURLParam(t, params, "reveal", "true")
+	assertNoExtraParams(t, params, "title", "reveal")
 }
 
-// TestTodoBuilder_Titles tests creating multiple to-dos at once
 func TestTodoBuilder_Titles(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Todo().Titles("Task 1", "Task 2", "Task 3").Build()
+	urlStr, err := scheme.Todo().Titles("Task 1", "Task 2", "Task 3").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "titles=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add", cmd)
+	assertURLParam(t, params, "titles", "Task 1\nTask 2\nTask 3")
+	assertNoExtraParams(t, params, "titles")
 }
 
-// TestTodoBuilder_TitlesTooLong tests validation for combined titles length
 func TestTodoBuilder_TitlesTooLong(t *testing.T) {
 	scheme := NewScheme()
 	longTitle := strings.Repeat("a", 2000)
@@ -167,59 +230,83 @@ func TestTodoBuilder_TitlesTooLong(t *testing.T) {
 	assert.ErrorIs(t, err, ErrTitleTooLong)
 }
 
-// TestTodoBuilder_Heading tests placing a to-do under a project heading
 func TestTodoBuilder_Heading(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Todo().
+	urlStr, err := scheme.Todo().
 		Title("Subtask").
 		List("My Project").
 		Heading("Phase 1").
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "heading=Phase")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add", cmd)
+	assertURLParam(t, params, "title", "Subtask")
+	assertURLParam(t, params, "list", "My Project")
+	assertURLParam(t, params, "heading", "Phase 1")
+	assertNoExtraParams(t, params, "title", "list", "heading")
 }
 
-// TestTodoBuilder_HeadingID tests placing a to-do under a heading by UUID
 func TestTodoBuilder_HeadingID(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Todo().
+	urlStr, err := scheme.Todo().
 		Title("Subtask").
 		ListID("project-uuid").
 		HeadingID("heading-uuid").
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "heading-id=heading-uuid")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add", cmd)
+	assertURLParam(t, params, "title", "Subtask")
+	assertURLParam(t, params, "list-id", "project-uuid")
+	assertURLParam(t, params, "heading-id", "heading-uuid")
+	assertNoExtraParams(t, params, "title", "list-id", "heading-id")
 }
 
-// TestTodoBuilder_CreationDate tests backdating a to-do's creation
 func TestTodoBuilder_CreationDate(t *testing.T) {
 	scheme := NewScheme()
 	pastDate := time.Date(2024, time.January, 15, 10, 30, 0, 0, time.UTC)
-	url, err := scheme.Todo().
+	urlStr, err := scheme.Todo().
 		Title("Historical task").
 		CreationDate(pastDate).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "creation-date=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add", cmd)
+	assertURLParam(t, params, "title", "Historical task")
+	assertURLParamExists(t, params, "creation-date")
+	// Verify the date is in ISO 8601 format
+	creationDate := params.Get("creation-date")
+	assert.Contains(t, creationDate, "2024-01-15")
+	assertNoExtraParams(t, params, "title", "creation-date")
 }
 
-// TestTodoBuilder_CompletionDate tests setting completion timestamp for imported tasks
 func TestTodoBuilder_CompletionDate(t *testing.T) {
 	scheme := NewScheme()
 	completedAt := time.Date(2024, time.December, 1, 14, 0, 0, 0, time.UTC)
-	url, err := scheme.Todo().
+	urlStr, err := scheme.Todo().
 		Title("Imported completed task").
 		Completed(true).
 		CompletionDate(completedAt).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "completion-date=")
-	assert.Contains(t, url, "completed=true")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add", cmd)
+	assertURLParam(t, params, "title", "Imported completed task")
+	assertURLParam(t, params, "completed", "true")
+	assertURLParamExists(t, params, "completion-date")
+	// Verify the date is in ISO 8601 format
+	completionDate := params.Get("completion-date")
+	assert.Contains(t, completionDate, "2024-12-01")
+	assertNoExtraParams(t, params, "title", "completed", "completion-date")
 }
 
 func TestTodoBuilder_Chained(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Todo().
+	urlStr, err := scheme.Todo().
 		Title("Buy groceries").
 		Notes("Don't forget milk").
 		When(WhenToday).
@@ -227,12 +314,15 @@ func TestTodoBuilder_Chained(t *testing.T) {
 		Reveal(true).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "things:///add?")
-	assert.Contains(t, url, "title=Buy")
-	assert.Contains(t, url, "notes=Don")
-	assert.Contains(t, url, "when=today")
-	assert.Contains(t, url, "tags=shopping")
-	assert.Contains(t, url, "reveal=true")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add", cmd)
+	assertURLParam(t, params, "title", "Buy groceries")
+	assertURLParam(t, params, "notes", "Don't forget milk")
+	assertURLParam(t, params, "when", "today")
+	assertURLParam(t, params, "tags", "shopping")
+	assertURLParam(t, params, "reveal", "true")
+	assertNoExtraParams(t, params, "title", "notes", "when", "tags", "reveal")
 }
 
 // =============================================================================
@@ -241,10 +331,13 @@ func TestTodoBuilder_Chained(t *testing.T) {
 
 func TestProjectBuilder_Title(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Project().Title("New Project").Build()
+	urlStr, err := scheme.Project().Title("New Project").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "things:///add-project?")
-	assert.Contains(t, url, "title=New")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add-project", cmd)
+	assertURLParam(t, params, "title", "New Project")
+	assertNoExtraParams(t, params, "title")
 }
 
 func TestProjectBuilder_TitleTooLong(t *testing.T) {
@@ -256,141 +349,198 @@ func TestProjectBuilder_TitleTooLong(t *testing.T) {
 
 func TestProjectBuilder_Area(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Project().Title("Test").Area("Work").Build()
+	urlStr, err := scheme.Project().Title("Test").Area("Work").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "area=Work")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add-project", cmd)
+	assertURLParam(t, params, "title", "Test")
+	assertURLParam(t, params, "area", "Work")
+	assertNoExtraParams(t, params, "title", "area")
 }
 
 func TestProjectBuilder_AreaID(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Project().Title("Test").AreaID("uuid-123").Build()
+	urlStr, err := scheme.Project().Title("Test").AreaID("uuid-123").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "area-id=uuid-123")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add-project", cmd)
+	assertURLParam(t, params, "title", "Test")
+	assertURLParam(t, params, "area-id", "uuid-123")
+	assertNoExtraParams(t, params, "title", "area-id")
 }
 
 func TestProjectBuilder_Todos(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Project().Title("Test").Todos("Task 1", "Task 2").Build()
+	urlStr, err := scheme.Project().Title("Test").Todos("Task 1", "Task 2").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "to-dos=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add-project", cmd)
+	assertURLParam(t, params, "title", "Test")
+	assertURLParam(t, params, "to-dos", "Task 1\nTask 2")
+	assertNoExtraParams(t, params, "title", "to-dos")
 }
 
-// TestProjectBuilder_Notes tests adding project description
 func TestProjectBuilder_Notes(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Project().
+	urlStr, err := scheme.Project().
 		Title("Q1 Goals").
 		Notes("Quarterly objectives and key results").
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "notes=Quarterly")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add-project", cmd)
+	assertURLParam(t, params, "title", "Q1 Goals")
+	assertURLParam(t, params, "notes", "Quarterly objectives and key results")
+	assertNoExtraParams(t, params, "title", "notes")
 }
 
-// TestProjectBuilder_When tests scheduling a project
 func TestProjectBuilder_When(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Project().Title("Future Project").When(WhenSomeday).Build()
+	urlStr, err := scheme.Project().Title("Future Project").When(WhenSomeday).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "when=someday")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add-project", cmd)
+	assertURLParam(t, params, "title", "Future Project")
+	assertURLParam(t, params, "when", "someday")
+	assertNoExtraParams(t, params, "title", "when")
 }
 
-// TestProjectBuilder_WhenDate tests scheduling a project for a specific date
 func TestProjectBuilder_WhenDate(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Project().
+	urlStr, err := scheme.Project().
 		Title("Launch").
 		WhenDate(2025, time.March, 1).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "when=2025-03-01")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add-project", cmd)
+	assertURLParam(t, params, "title", "Launch")
+	assertURLParam(t, params, "when", "2025-03-01")
+	assertNoExtraParams(t, params, "title", "when")
 }
 
-// TestProjectBuilder_Deadline tests setting project deadline
 func TestProjectBuilder_Deadline(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Project().
+	urlStr, err := scheme.Project().
 		Title("Release v2.0").
 		Deadline("2025-06-30").
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "deadline=2025-06-30")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add-project", cmd)
+	assertURLParam(t, params, "title", "Release v2.0")
+	assertURLParam(t, params, "deadline", "2025-06-30")
+	assertNoExtraParams(t, params, "title", "deadline")
 }
 
-// TestProjectBuilder_Tags tests tagging a project
 func TestProjectBuilder_Tags(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Project().
+	urlStr, err := scheme.Project().
 		Title("Website Redesign").
 		Tags("work", "high-priority").
 		Build()
 	require.NoError(t, err)
-	containsTags := strings.Contains(url, "tags=work%2Chigh-priority") ||
-		strings.Contains(url, "tags=work,high-priority")
-	assert.True(t, containsTags, "URL should contain comma-separated tags")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add-project", cmd)
+	assertURLParam(t, params, "title", "Website Redesign")
+	assertURLParam(t, params, "tags", "work,high-priority")
+	assertNoExtraParams(t, params, "title", "tags")
 }
 
-// TestProjectBuilder_Completed tests creating an already completed project (for imports)
 func TestProjectBuilder_Completed(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Project().
+	urlStr, err := scheme.Project().
 		Title("Archived Project").
 		Completed(true).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "completed=true")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add-project", cmd)
+	assertURLParam(t, params, "title", "Archived Project")
+	assertURLParam(t, params, "completed", "true")
+	assertNoExtraParams(t, params, "title", "completed")
 }
 
-// TestProjectBuilder_Canceled tests creating a canceled project
 func TestProjectBuilder_Canceled(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Project().
+	urlStr, err := scheme.Project().
 		Title("Discontinued Project").
 		Canceled(true).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "canceled=true")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add-project", cmd)
+	assertURLParam(t, params, "title", "Discontinued Project")
+	assertURLParam(t, params, "canceled", "true")
+	assertNoExtraParams(t, params, "title", "canceled")
 }
 
-// TestProjectBuilder_Reveal tests navigating to the created project
 func TestProjectBuilder_Reveal(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Project().
+	urlStr, err := scheme.Project().
 		Title("New Project").
 		Reveal(true).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "reveal=true")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add-project", cmd)
+	assertURLParam(t, params, "title", "New Project")
+	assertURLParam(t, params, "reveal", "true")
+	assertNoExtraParams(t, params, "title", "reveal")
 }
 
-// TestProjectBuilder_CreationDate tests backdating project creation
 func TestProjectBuilder_CreationDate(t *testing.T) {
 	scheme := NewScheme()
 	created := time.Date(2024, time.June, 1, 9, 0, 0, 0, time.UTC)
-	url, err := scheme.Project().
+	urlStr, err := scheme.Project().
 		Title("Historical Project").
 		CreationDate(created).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "creation-date=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add-project", cmd)
+	assertURLParam(t, params, "title", "Historical Project")
+	assertURLParamExists(t, params, "creation-date")
+	creationDate := params.Get("creation-date")
+	assert.Contains(t, creationDate, "2024-06-01")
+	assertNoExtraParams(t, params, "title", "creation-date")
 }
 
-// TestProjectBuilder_CompletionDate tests setting completion time for imported projects
 func TestProjectBuilder_CompletionDate(t *testing.T) {
 	scheme := NewScheme()
 	completed := time.Date(2024, time.November, 15, 17, 0, 0, 0, time.UTC)
-	url, err := scheme.Project().
+	urlStr, err := scheme.Project().
 		Title("Imported Completed Project").
 		Completed(true).
 		CompletionDate(completed).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "completion-date=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add-project", cmd)
+	assertURLParam(t, params, "title", "Imported Completed Project")
+	assertURLParam(t, params, "completed", "true")
+	assertURLParamExists(t, params, "completion-date")
+	completionDate := params.Get("completion-date")
+	assert.Contains(t, completionDate, "2024-11-15")
+	assertNoExtraParams(t, params, "title", "completed", "completion-date")
 }
 
-// TestProjectBuilder_FullProject tests creating a complete project with all attributes
 func TestProjectBuilder_FullProject(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.Project().
+	urlStr, err := scheme.Project().
 		Title("Product Launch").
 		Notes("Launch plan for v2.0").
 		Area("Work").
@@ -400,10 +550,17 @@ func TestProjectBuilder_FullProject(t *testing.T) {
 		Reveal(true).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "things:///add-project?")
-	assert.Contains(t, url, "title=Product")
-	assert.Contains(t, url, "area=Work")
-	assert.Contains(t, url, "to-dos=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "add-project", cmd)
+	assertURLParam(t, params, "title", "Product Launch")
+	assertURLParam(t, params, "notes", "Launch plan for v2.0")
+	assertURLParam(t, params, "area", "Work")
+	assertURLParam(t, params, "tags", "priority")
+	assertURLParam(t, params, "deadline", "2025-03-31")
+	assertURLParam(t, params, "to-dos", "Design\nDevelopment\nTesting\nRelease")
+	assertURLParam(t, params, "reveal", "true")
+	assertNoExtraParams(t, params, "title", "notes", "area", "tags", "deadline", "to-dos", "reveal")
 }
 
 // =============================================================================
@@ -412,8 +569,12 @@ func TestProjectBuilder_FullProject(t *testing.T) {
 
 func TestShowBuilder_ID(t *testing.T) {
 	scheme := NewScheme()
-	url := scheme.Show().ID("uuid-123").Build()
-	assert.Equal(t, "things:///show?id=uuid-123", url)
+	urlStr := scheme.Show().ID("uuid-123").Build()
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "show", cmd)
+	assertURLParam(t, params, "id", "uuid-123")
+	assertNoExtraParams(t, params, "id")
 }
 
 func TestShowBuilder_List(t *testing.T) {
@@ -421,47 +582,57 @@ func TestShowBuilder_List(t *testing.T) {
 		list     ListID
 		expected string
 	}{
-		{ListInbox, "id=inbox"},
-		{ListToday, "id=today"},
-		{ListAnytime, "id=anytime"},
-		{ListUpcoming, "id=upcoming"},
-		{ListSomeday, "id=someday"},
-		{ListLogbook, "id=logbook"},
-		{ListTomorrow, "id=tomorrow"},
-		{ListDeadlines, "id=deadlines"},
-		{ListRepeating, "id=repeating"},
-		{ListAllProjects, "id=all-projects"},
-		{ListLoggedProjects, "id=logged-projects"},
+		{ListInbox, "inbox"},
+		{ListToday, "today"},
+		{ListAnytime, "anytime"},
+		{ListUpcoming, "upcoming"},
+		{ListSomeday, "someday"},
+		{ListLogbook, "logbook"},
+		{ListTomorrow, "tomorrow"},
+		{ListDeadlines, "deadlines"},
+		{ListRepeating, "repeating"},
+		{ListAllProjects, "all-projects"},
+		{ListLoggedProjects, "logged-projects"},
 	}
 
 	for _, tt := range tests {
 		t.Run(string(tt.list), func(t *testing.T) {
 			scheme := NewScheme()
-			url := scheme.Show().List(tt.list).Build()
-			assert.Contains(t, url, tt.expected)
+			urlStr := scheme.Show().List(tt.list).Build()
+
+			cmd, params := parseThingsURL(t, urlStr)
+			assert.Equal(t, "show", cmd)
+			assertURLParam(t, params, "id", tt.expected)
+			assertNoExtraParams(t, params, "id")
 		})
 	}
 }
 
 func TestShowBuilder_Query(t *testing.T) {
 	scheme := NewScheme()
-	url := scheme.Show().Query("My Project").Build()
-	assert.Contains(t, url, "query=My")
+	urlStr := scheme.Show().Query("My Project").Build()
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "show", cmd)
+	assertURLParam(t, params, "query", "My Project")
+	assertNoExtraParams(t, params, "query")
 }
 
 func TestShowBuilder_Filter(t *testing.T) {
 	scheme := NewScheme()
-	url := scheme.Show().List(ListToday).Filter("work", "urgent").Build()
-	assert.Contains(t, url, "id=today")
-	// Tags are comma-separated
-	containsFilter := strings.Contains(url, "filter=work%2Curgent") || strings.Contains(url, "filter=work,urgent")
-	assert.True(t, containsFilter, "URL should contain comma-separated filter tags")
+	urlStr := scheme.Show().List(ListToday).Filter("work", "urgent").Build()
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "show", cmd)
+	assertURLParam(t, params, "id", "today")
+	assertURLParam(t, params, "filter", "work,urgent")
+	assertNoExtraParams(t, params, "id", "filter")
 }
 
 func TestShowBuilder_NoParams(t *testing.T) {
 	scheme := NewScheme()
-	url := scheme.Show().Build()
-	assert.Equal(t, "things:///show", url)
+	urlStr := scheme.Show().Build()
+	assert.Equal(t, "things:///show", urlStr)
 }
 
 // =============================================================================
@@ -470,16 +641,18 @@ func TestShowBuilder_NoParams(t *testing.T) {
 
 func TestScheme_Search(t *testing.T) {
 	scheme := NewScheme()
-	url := scheme.Search("my query")
-	assert.Contains(t, url, "things:///search?")
-	containsQuery := strings.Contains(url, "query=my+query") || strings.Contains(url, "query=my%20query")
-	assert.True(t, containsQuery, "URL should contain encoded query")
+	urlStr := scheme.Search("my query")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "search", cmd)
+	assertURLParam(t, params, "query", "my query")
+	assertNoExtraParams(t, params, "query")
 }
 
 func TestScheme_Version(t *testing.T) {
 	scheme := NewScheme()
-	url := scheme.Version()
-	assert.Equal(t, "things:///version", url)
+	urlStr := scheme.Version()
+	assert.Equal(t, "things:///version", urlStr)
 }
 
 // =============================================================================
@@ -506,12 +679,15 @@ func TestAuthScheme_EmptyToken(t *testing.T) {
 func TestUpdateTodoBuilder_Completed(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid-123").Completed(true).Build()
+	urlStr, err := auth.UpdateTodo("uuid-123").Completed(true).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "things:///update?")
-	assert.Contains(t, url, "id=uuid-123")
-	assert.Contains(t, url, "auth-token=test-token")
-	assert.Contains(t, url, "completed=true")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "id", "uuid-123")
+	assertURLParam(t, params, "auth-token", "test-token")
+	assertURLParam(t, params, "completed", "true")
+	assertNoExtraParams(t, params, "id", "auth-token", "completed")
 }
 
 func TestUpdateTodoBuilder_NoID(t *testing.T) {
@@ -524,198 +700,276 @@ func TestUpdateTodoBuilder_NoID(t *testing.T) {
 func TestUpdateTodoBuilder_Title(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").Title("New Title").Build()
+	urlStr, err := auth.UpdateTodo("uuid").Title("New Title").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "title=New")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "id", "uuid")
+	assertURLParam(t, params, "auth-token", "test-token")
+	assertURLParam(t, params, "title", "New Title")
+	assertNoExtraParams(t, params, "id", "auth-token", "title")
 }
 
 func TestUpdateTodoBuilder_PrependNotes(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").PrependNotes("Prefix: ").Build()
+	urlStr, err := auth.UpdateTodo("uuid").PrependNotes("Prefix: ").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "prepend-notes=Prefix")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "prepend-notes", "Prefix: ")
+	assertNoExtraParams(t, params, "id", "auth-token", "prepend-notes")
 }
 
 func TestUpdateTodoBuilder_AppendNotes(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").AppendNotes(" - Suffix").Build()
+	urlStr, err := auth.UpdateTodo("uuid").AppendNotes(" - Suffix").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "append-notes=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "append-notes", " - Suffix")
+	assertNoExtraParams(t, params, "id", "auth-token", "append-notes")
 }
 
 func TestUpdateTodoBuilder_AddTags(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").AddTags("new-tag").Build()
+	urlStr, err := auth.UpdateTodo("uuid").AddTags("new-tag").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "add-tags=new-tag")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "add-tags", "new-tag")
+	assertNoExtraParams(t, params, "id", "auth-token", "add-tags")
 }
 
 func TestUpdateTodoBuilder_ClearDeadline(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").ClearDeadline().Build()
+	urlStr, err := auth.UpdateTodo("uuid").ClearDeadline().Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "deadline=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "deadline", "")
+	assertNoExtraParams(t, params, "id", "auth-token", "deadline")
 }
 
 func TestUpdateTodoBuilder_Duplicate(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").Duplicate(true).Build()
+	urlStr, err := auth.UpdateTodo("uuid").Duplicate(true).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "duplicate=true")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "duplicate", "true")
+	assertNoExtraParams(t, params, "id", "auth-token", "duplicate")
 }
 
-// TestUpdateTodoBuilder_Notes tests replacing to-do notes
 func TestUpdateTodoBuilder_Notes(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").Notes("New description").Build()
+	urlStr, err := auth.UpdateTodo("uuid").Notes("New description").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "notes=New")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "notes", "New description")
+	assertNoExtraParams(t, params, "id", "auth-token", "notes")
 }
 
-// TestUpdateTodoBuilder_When tests rescheduling a to-do
 func TestUpdateTodoBuilder_When(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").When(WhenTomorrow).Build()
+	urlStr, err := auth.UpdateTodo("uuid").When(WhenTomorrow).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "when=tomorrow")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "when", "tomorrow")
+	assertNoExtraParams(t, params, "id", "auth-token", "when")
 }
 
-// TestUpdateTodoBuilder_WhenDate tests scheduling to a specific date
 func TestUpdateTodoBuilder_WhenDate(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").WhenDate(2025, time.February, 14).Build()
+	urlStr, err := auth.UpdateTodo("uuid").WhenDate(2025, time.February, 14).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "when=2025-02-14")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "when", "2025-02-14")
+	assertNoExtraParams(t, params, "id", "auth-token", "when")
 }
 
-// TestUpdateTodoBuilder_Deadline tests setting a deadline
 func TestUpdateTodoBuilder_Deadline(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").Deadline("2025-01-31").Build()
+	urlStr, err := auth.UpdateTodo("uuid").Deadline("2025-01-31").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "deadline=2025-01-31")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "deadline", "2025-01-31")
+	assertNoExtraParams(t, params, "id", "auth-token", "deadline")
 }
 
-// TestUpdateTodoBuilder_Tags tests replacing all tags
 func TestUpdateTodoBuilder_Tags(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").Tags("new-tag-1", "new-tag-2").Build()
+	urlStr, err := auth.UpdateTodo("uuid").Tags("new-tag-1", "new-tag-2").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "tags=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "tags", "new-tag-1,new-tag-2")
+	assertNoExtraParams(t, params, "id", "auth-token", "tags")
 }
 
-// TestUpdateTodoBuilder_ChecklistItems tests replacing checklist
 func TestUpdateTodoBuilder_ChecklistItems(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").ChecklistItems("Step A", "Step B").Build()
+	urlStr, err := auth.UpdateTodo("uuid").ChecklistItems("Step A", "Step B").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "checklist-items=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "checklist-items", "Step A\nStep B")
+	assertNoExtraParams(t, params, "id", "auth-token", "checklist-items")
 }
 
-// TestUpdateTodoBuilder_PrependChecklistItems tests adding items at the beginning
 func TestUpdateTodoBuilder_PrependChecklistItems(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").PrependChecklistItems("First step").Build()
+	urlStr, err := auth.UpdateTodo("uuid").PrependChecklistItems("First step").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "prepend-checklist-items=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "prepend-checklist-items", "First step")
+	assertNoExtraParams(t, params, "id", "auth-token", "prepend-checklist-items")
 }
 
-// TestUpdateTodoBuilder_AppendChecklistItems tests adding items at the end
 func TestUpdateTodoBuilder_AppendChecklistItems(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").AppendChecklistItems("Final step").Build()
+	urlStr, err := auth.UpdateTodo("uuid").AppendChecklistItems("Final step").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "append-checklist-items=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "append-checklist-items", "Final step")
+	assertNoExtraParams(t, params, "id", "auth-token", "append-checklist-items")
 }
 
-// TestUpdateTodoBuilder_List tests moving to-do to another project
 func TestUpdateTodoBuilder_List(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").List("New Project").Build()
+	urlStr, err := auth.UpdateTodo("uuid").List("New Project").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "list=New")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "list", "New Project")
+	assertNoExtraParams(t, params, "id", "auth-token", "list")
 }
 
-// TestUpdateTodoBuilder_ListID tests moving to-do by project UUID
 func TestUpdateTodoBuilder_ListID(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").ListID("project-uuid").Build()
+	urlStr, err := auth.UpdateTodo("uuid").ListID("project-uuid").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "list-id=project-uuid")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "list-id", "project-uuid")
+	assertNoExtraParams(t, params, "id", "auth-token", "list-id")
 }
 
-// TestUpdateTodoBuilder_Heading tests moving to-do under a heading
 func TestUpdateTodoBuilder_Heading(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").Heading("Phase 2").Build()
+	urlStr, err := auth.UpdateTodo("uuid").Heading("Phase 2").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "heading=Phase")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "heading", "Phase 2")
+	assertNoExtraParams(t, params, "id", "auth-token", "heading")
 }
 
-// TestUpdateTodoBuilder_HeadingID tests moving to-do under heading by UUID
 func TestUpdateTodoBuilder_HeadingID(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").HeadingID("heading-uuid").Build()
+	urlStr, err := auth.UpdateTodo("uuid").HeadingID("heading-uuid").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "heading-id=heading-uuid")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "heading-id", "heading-uuid")
+	assertNoExtraParams(t, params, "id", "auth-token", "heading-id")
 }
 
-// TestUpdateTodoBuilder_Canceled tests canceling a to-do
 func TestUpdateTodoBuilder_Canceled(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").Canceled(true).Build()
+	urlStr, err := auth.UpdateTodo("uuid").Canceled(true).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "canceled=true")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "canceled", "true")
+	assertNoExtraParams(t, params, "id", "auth-token", "canceled")
 }
 
-// TestUpdateTodoBuilder_Reveal tests navigating to the to-do after update
 func TestUpdateTodoBuilder_Reveal(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateTodo("uuid").Reveal(true).Build()
+	urlStr, err := auth.UpdateTodo("uuid").Reveal(true).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "reveal=true")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "reveal", "true")
+	assertNoExtraParams(t, params, "id", "auth-token", "reveal")
 }
 
-// TestUpdateTodoBuilder_CreationDate tests modifying creation timestamp
 func TestUpdateTodoBuilder_CreationDate(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
 	created := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
-	url, err := auth.UpdateTodo("uuid").CreationDate(created).Build()
+	urlStr, err := auth.UpdateTodo("uuid").CreationDate(created).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "creation-date=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParamExists(t, params, "creation-date")
+	creationDate := params.Get("creation-date")
+	assert.Contains(t, creationDate, "2024-01-01")
+	assertNoExtraParams(t, params, "id", "auth-token", "creation-date")
 }
 
-// TestUpdateTodoBuilder_CompletionDate tests setting completion timestamp
 func TestUpdateTodoBuilder_CompletionDate(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
 	completed := time.Date(2024, time.December, 31, 23, 59, 0, 0, time.UTC)
-	url, err := auth.UpdateTodo("uuid").Completed(true).CompletionDate(completed).Build()
+	urlStr, err := auth.UpdateTodo("uuid").Completed(true).CompletionDate(completed).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "completion-date=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update", cmd)
+	assertURLParam(t, params, "completed", "true")
+	assertURLParamExists(t, params, "completion-date")
+	completionDate := params.Get("completion-date")
+	assert.Contains(t, completionDate, "2024-12-31")
+	assertNoExtraParams(t, params, "id", "auth-token", "completed", "completion-date")
 }
 
-// TestUpdateTodoBuilder_ValidationError tests error propagation
 func TestUpdateTodoBuilder_ValidationError(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
@@ -731,139 +985,185 @@ func TestUpdateTodoBuilder_ValidationError(t *testing.T) {
 func TestUpdateProjectBuilder_Title(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateProject("uuid").Title("New Project Title").Build()
+	urlStr, err := auth.UpdateProject("uuid").Title("New Project Title").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "things:///update-project?")
-	assert.Contains(t, url, "id=uuid")
-	assert.Contains(t, url, "auth-token=test-token")
-	assert.Contains(t, url, "title=New")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update-project", cmd)
+	assertURLParam(t, params, "id", "uuid")
+	assertURLParam(t, params, "auth-token", "test-token")
+	assertURLParam(t, params, "title", "New Project Title")
+	assertNoExtraParams(t, params, "id", "auth-token", "title")
 }
 
 func TestUpdateProjectBuilder_Completed(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateProject("uuid").Completed(true).Build()
+	urlStr, err := auth.UpdateProject("uuid").Completed(true).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "completed=true")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update-project", cmd)
+	assertURLParam(t, params, "completed", "true")
+	assertNoExtraParams(t, params, "id", "auth-token", "completed")
 }
 
 func TestUpdateProjectBuilder_Canceled(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateProject("uuid").Canceled(true).Build()
+	urlStr, err := auth.UpdateProject("uuid").Canceled(true).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "canceled=true")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update-project", cmd)
+	assertURLParam(t, params, "canceled", "true")
+	assertNoExtraParams(t, params, "id", "auth-token", "canceled")
 }
 
-// TestUpdateProjectBuilder_Notes tests replacing project notes
 func TestUpdateProjectBuilder_Notes(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateProject("uuid").Notes("Updated project description").Build()
+	urlStr, err := auth.UpdateProject("uuid").Notes("Updated project description").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "notes=Updated")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update-project", cmd)
+	assertURLParam(t, params, "notes", "Updated project description")
+	assertNoExtraParams(t, params, "id", "auth-token", "notes")
 }
 
-// TestUpdateProjectBuilder_PrependNotes tests prepending to project notes
 func TestUpdateProjectBuilder_PrependNotes(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateProject("uuid").PrependNotes("[UPDATE] ").Build()
+	urlStr, err := auth.UpdateProject("uuid").PrependNotes("[UPDATE] ").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "prepend-notes=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update-project", cmd)
+	assertURLParam(t, params, "prepend-notes", "[UPDATE] ")
+	assertNoExtraParams(t, params, "id", "auth-token", "prepend-notes")
 }
 
-// TestUpdateProjectBuilder_AppendNotes tests appending to project notes
 func TestUpdateProjectBuilder_AppendNotes(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateProject("uuid").AppendNotes("\n- Added new requirement").Build()
+	urlStr, err := auth.UpdateProject("uuid").AppendNotes("\n- Added new requirement").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "append-notes=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update-project", cmd)
+	assertURLParam(t, params, "append-notes", "\n- Added new requirement")
+	assertNoExtraParams(t, params, "id", "auth-token", "append-notes")
 }
 
-// TestUpdateProjectBuilder_When tests rescheduling a project
 func TestUpdateProjectBuilder_When(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateProject("uuid").When(WhenAnytime).Build()
+	urlStr, err := auth.UpdateProject("uuid").When(WhenAnytime).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "when=anytime")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update-project", cmd)
+	assertURLParam(t, params, "when", "anytime")
+	assertNoExtraParams(t, params, "id", "auth-token", "when")
 }
 
-// TestUpdateProjectBuilder_WhenDate tests scheduling project to specific date
 func TestUpdateProjectBuilder_WhenDate(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateProject("uuid").WhenDate(2025, time.April, 1).Build()
+	urlStr, err := auth.UpdateProject("uuid").WhenDate(2025, time.April, 1).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "when=2025-04-01")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update-project", cmd)
+	assertURLParam(t, params, "when", "2025-04-01")
+	assertNoExtraParams(t, params, "id", "auth-token", "when")
 }
 
-// TestUpdateProjectBuilder_Deadline tests setting project deadline
 func TestUpdateProjectBuilder_Deadline(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateProject("uuid").Deadline("2025-12-31").Build()
+	urlStr, err := auth.UpdateProject("uuid").Deadline("2025-12-31").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "deadline=2025-12-31")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update-project", cmd)
+	assertURLParam(t, params, "deadline", "2025-12-31")
+	assertNoExtraParams(t, params, "id", "auth-token", "deadline")
 }
 
-// TestUpdateProjectBuilder_ClearDeadline tests removing project deadline
 func TestUpdateProjectBuilder_ClearDeadline(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateProject("uuid").ClearDeadline().Build()
+	urlStr, err := auth.UpdateProject("uuid").ClearDeadline().Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "deadline=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update-project", cmd)
+	assertURLParam(t, params, "deadline", "")
+	assertNoExtraParams(t, params, "id", "auth-token", "deadline")
 }
 
-// TestUpdateProjectBuilder_Tags tests replacing all project tags
 func TestUpdateProjectBuilder_Tags(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateProject("uuid").Tags("priority", "q1").Build()
+	urlStr, err := auth.UpdateProject("uuid").Tags("priority", "q1").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "tags=")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update-project", cmd)
+	assertURLParam(t, params, "tags", "priority,q1")
+	assertNoExtraParams(t, params, "id", "auth-token", "tags")
 }
 
-// TestUpdateProjectBuilder_AddTags tests adding tags to project
 func TestUpdateProjectBuilder_AddTags(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateProject("uuid").AddTags("reviewed").Build()
+	urlStr, err := auth.UpdateProject("uuid").AddTags("reviewed").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "add-tags=reviewed")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update-project", cmd)
+	assertURLParam(t, params, "add-tags", "reviewed")
+	assertNoExtraParams(t, params, "id", "auth-token", "add-tags")
 }
 
-// TestUpdateProjectBuilder_Area tests moving project to an area
 func TestUpdateProjectBuilder_Area(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateProject("uuid").Area("Personal").Build()
+	urlStr, err := auth.UpdateProject("uuid").Area("Personal").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "area=Personal")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update-project", cmd)
+	assertURLParam(t, params, "area", "Personal")
+	assertNoExtraParams(t, params, "id", "auth-token", "area")
 }
 
-// TestUpdateProjectBuilder_AreaID tests moving project to an area by UUID
 func TestUpdateProjectBuilder_AreaID(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateProject("uuid").AreaID("area-uuid").Build()
+	urlStr, err := auth.UpdateProject("uuid").AreaID("area-uuid").Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "area-id=area-uuid")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update-project", cmd)
+	assertURLParam(t, params, "area-id", "area-uuid")
+	assertNoExtraParams(t, params, "id", "auth-token", "area-id")
 }
 
-// TestUpdateProjectBuilder_Reveal tests navigating to project after update
 func TestUpdateProjectBuilder_Reveal(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.UpdateProject("uuid").Reveal(true).Build()
+	urlStr, err := auth.UpdateProject("uuid").Reveal(true).Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "reveal=true")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "update-project", cmd)
+	assertURLParam(t, params, "reveal", "true")
+	assertNoExtraParams(t, params, "id", "auth-token", "reveal")
 }
 
-// TestUpdateProjectBuilder_NoID tests error when ID is missing
 func TestUpdateProjectBuilder_NoID(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
@@ -871,7 +1171,6 @@ func TestUpdateProjectBuilder_NoID(t *testing.T) {
 	assert.ErrorIs(t, err, ErrIDRequired)
 }
 
-// TestUpdateProjectBuilder_ValidationError tests error propagation
 func TestUpdateProjectBuilder_ValidationError(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
@@ -886,40 +1185,59 @@ func TestUpdateProjectBuilder_ValidationError(t *testing.T) {
 
 func TestJSONBuilder_AddTodo(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test Todo")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "things:///json?")
-	assert.Contains(t, url, "data=")
-	assert.Contains(t, url, "to-do")
-	assert.Contains(t, url, "Test+Todo")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "json", cmd)
+	assertURLParamExists(t, params, "data")
+	assertURLParamNotExists(t, params, "reveal")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	assertJSONItemType(t, items[0], "to-do")
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test Todo")
 }
 
 func TestJSONBuilder_AddProject(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddProject(func(project *JSONProjectBuilder) {
 			project.Title("Test Project")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "things:///json?")
-	assert.Contains(t, url, "project")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "json", cmd)
+	assertURLParamExists(t, params, "data")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	assertJSONItemType(t, items[0], "project")
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test Project")
 }
 
 func TestJSONBuilder_Reveal(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test")
 		}).
 		Reveal(true).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "reveal=true")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "json", cmd)
+	assertURLParam(t, params, "reveal", "true")
+	assertURLParamExists(t, params, "data")
 }
 
 func TestJSONBuilder_NoItems(t *testing.T) {
@@ -930,7 +1248,7 @@ func TestJSONBuilder_NoItems(t *testing.T) {
 
 func TestJSONBuilder_Multiple(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Todo 1")
 		}).
@@ -939,8 +1257,20 @@ func TestJSONBuilder_Multiple(t *testing.T) {
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "Todo+1")
-	assert.Contains(t, url, "Todo+2")
+
+	cmd, _ := parseThingsURL(t, urlStr)
+	assert.Equal(t, "json", cmd)
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 2)
+
+	assertJSONItemType(t, items[0], "to-do")
+	attrs0 := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs0, "title", "Todo 1")
+
+	assertJSONItemType(t, items[1], "to-do")
+	attrs1 := getJSONAttrs(t, items[1])
+	assertJSONAttr(t, attrs1, "title", "Todo 2")
 }
 
 // =============================================================================
@@ -950,35 +1280,55 @@ func TestJSONBuilder_Multiple(t *testing.T) {
 func TestAuthJSONBuilder_UpdateTodo(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.JSON().
+	urlStr, err := auth.JSON().
 		UpdateTodo("uuid-123", func(todo *JSONTodoBuilder) {
 			todo.Completed(true)
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "things:///json?")
-	assert.Contains(t, url, "auth-token=test-token")
-	assert.Contains(t, url, "update")
-	assert.Contains(t, url, "uuid-123")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "json", cmd)
+	assertURLParam(t, params, "auth-token", "test-token")
+	assertURLParamExists(t, params, "data")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	assertJSONItemType(t, items[0], "to-do")
+	assert.Equal(t, "update", items[0]["operation"])
+	assert.Equal(t, "uuid-123", items[0]["id"])
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "completed", true)
 }
 
 func TestAuthJSONBuilder_UpdateProject(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.JSON().
+	urlStr, err := auth.JSON().
 		UpdateProject("uuid-123", func(project *JSONProjectBuilder) {
 			project.Completed(true)
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "auth-token=test-token")
-	assert.Contains(t, url, "update")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "json", cmd)
+	assertURLParam(t, params, "auth-token", "test-token")
+	assertURLParamExists(t, params, "data")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	assertJSONItemType(t, items[0], "project")
+	assert.Equal(t, "update", items[0]["operation"])
+	assert.Equal(t, "uuid-123", items[0]["id"])
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "completed", true)
 }
 
 func TestAuthJSONBuilder_Mixed(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.JSON().
+	urlStr, err := auth.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("New Todo")
 		}).
@@ -987,8 +1337,25 @@ func TestAuthJSONBuilder_Mixed(t *testing.T) {
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "auth-token=test-token")
-	assert.Contains(t, url, "New+Todo")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "json", cmd)
+	assertURLParam(t, params, "auth-token", "test-token")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 2)
+
+	// First item: create todo
+	assertJSONItemType(t, items[0], "to-do")
+	attrs0 := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs0, "title", "New Todo")
+
+	// Second item: update todo
+	assertJSONItemType(t, items[1], "to-do")
+	assert.Equal(t, "update", items[1]["operation"])
+	assert.Equal(t, "uuid-123", items[1]["id"])
+	attrs1 := getJSONAttrs(t, items[1])
+	assertJSONAttr(t, attrs1, "completed", true)
 }
 
 func TestAuthJSONBuilder_EmptyToken(t *testing.T) {
@@ -1015,25 +1382,35 @@ func TestAuthJSONBuilder_NoItems(t *testing.T) {
 
 func TestJSONTodoBuilder_When(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test").When(WhenToday)
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "today")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "when", "today")
 }
 
 func TestJSONTodoBuilder_Tags(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test").Tags("Risk", "Golang")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "Risk")
-	assert.Contains(t, url, "Golang")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	tags := attrs["tags"].([]any)
+	assert.Equal(t, []any{"Risk", "Golang"}, tags)
 }
 
 func TestJSONTodoBuilder_TitleTooLong(t *testing.T) {
@@ -1050,50 +1427,84 @@ func TestJSONTodoBuilder_TitleTooLong(t *testing.T) {
 // TestJSONTodoBuilder_Notes tests adding notes to a JSON todo
 func TestJSONTodoBuilder_Notes(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test").Notes("Detailed description")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "Detailed")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "notes", "Detailed description")
 }
 
 // TestJSONTodoBuilder_WhenDate tests scheduling to a specific date
 func TestJSONTodoBuilder_WhenDate(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test").WhenDate(2025, time.March, 15)
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "2025-03-15")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "when", "2025-03-15")
 }
 
 // TestJSONTodoBuilder_Deadline tests setting a deadline
 func TestJSONTodoBuilder_Deadline(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test").Deadline("2025-06-30")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "2025-06-30")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "deadline", "2025-06-30")
 }
 
 // TestJSONTodoBuilder_ChecklistItems tests adding a checklist
 func TestJSONTodoBuilder_ChecklistItems(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test").ChecklistItems("Step 1", "Step 2", "Step 3")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "checklist-item")
-	assert.Contains(t, url, "Step+1")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+
+	checklistItems := attrs["checklist-items"].([]any)
+	require.Len(t, checklistItems, 3)
+
+	item0 := checklistItems[0].(map[string]any)
+	assert.Equal(t, "checklist-item", item0["type"])
+	item0Attrs := item0["attributes"].(map[string]any)
+	assert.Equal(t, "Step 1", item0Attrs["title"])
+
+	item1 := checklistItems[1].(map[string]any)
+	item1Attrs := item1["attributes"].(map[string]any)
+	assert.Equal(t, "Step 2", item1Attrs["title"])
+
+	item2 := checklistItems[2].(map[string]any)
+	item2Attrs := item2["attributes"].(map[string]any)
+	assert.Equal(t, "Step 3", item2Attrs["title"])
 }
 
 // TestJSONTodoBuilder_ChecklistItemsTooMany tests the checklist limit
@@ -1114,133 +1525,183 @@ func TestJSONTodoBuilder_ChecklistItemsTooMany(t *testing.T) {
 // TestJSONTodoBuilder_List tests placing todo in a project by name
 func TestJSONTodoBuilder_List(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test").List("My Project")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "My+Project")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "list", "My Project")
 }
 
 // TestJSONTodoBuilder_ListID tests placing todo in a project by UUID
 func TestJSONTodoBuilder_ListID(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test").ListID("project-uuid-123")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "project-uuid-123")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "list-id", "project-uuid-123")
 }
 
 // TestJSONTodoBuilder_Heading tests placing todo under a heading
 func TestJSONTodoBuilder_Heading(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test").List("Project").Heading("Phase 1")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "Phase+1")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "list", "Project")
+	assertJSONAttr(t, attrs, "heading", "Phase 1")
 }
 
 // TestJSONTodoBuilder_Completed tests marking as completed
 func TestJSONTodoBuilder_Completed(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test").Completed(true)
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "completed")
-	assert.Contains(t, url, "true")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "completed", true)
 }
 
 // TestJSONTodoBuilder_Canceled tests marking as canceled
 func TestJSONTodoBuilder_Canceled(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test").Canceled(true)
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "canceled")
-	assert.Contains(t, url, "true")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "canceled", true)
 }
 
 // TestJSONTodoBuilder_CreationDate tests backdating creation
 func TestJSONTodoBuilder_CreationDate(t *testing.T) {
 	scheme := NewScheme()
 	pastDate := time.Date(2024, time.June, 1, 10, 0, 0, 0, time.UTC)
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test").CreationDate(pastDate)
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "creation-date")
-	assert.Contains(t, url, "2024-06-01")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttrExists(t, attrs, "creation-date")
+	assert.Contains(t, attrs["creation-date"], "2024-06-01")
 }
 
 // TestJSONTodoBuilder_CompletionDate tests setting completion timestamp
 func TestJSONTodoBuilder_CompletionDate(t *testing.T) {
 	scheme := NewScheme()
 	completedDate := time.Date(2024, time.December, 15, 14, 30, 0, 0, time.UTC)
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test").Completed(true).CompletionDate(completedDate)
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "completion-date")
-	assert.Contains(t, url, "2024-12-15")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "completed", true)
+	assertJSONAttrExists(t, attrs, "completion-date")
+	assert.Contains(t, attrs["completion-date"], "2024-12-15")
 }
 
 // TestJSONTodoBuilder_UpdatePrependNotes tests prepending notes in update
 func TestJSONTodoBuilder_UpdatePrependNotes(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.JSON().
+	urlStr, err := auth.JSON().
 		UpdateTodo("uuid", func(todo *JSONTodoBuilder) {
 			todo.PrependNotes("Important: ")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "prepend-notes")
-	assert.Contains(t, url, "Important")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	assert.Equal(t, "update", items[0]["operation"])
+	assert.Equal(t, "uuid", items[0]["id"])
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "prepend-notes", "Important: ")
 }
 
 // TestJSONTodoBuilder_UpdateAppendNotes tests appending notes in update
 func TestJSONTodoBuilder_UpdateAppendNotes(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.JSON().
+	urlStr, err := auth.JSON().
 		UpdateTodo("uuid", func(todo *JSONTodoBuilder) {
 			todo.AppendNotes(" - Updated")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "append-notes")
-	assert.Contains(t, url, "Updated")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	assert.Equal(t, "update", items[0]["operation"])
+	assert.Equal(t, "uuid", items[0]["id"])
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "append-notes", " - Updated")
 }
 
 // TestJSONTodoBuilder_UpdateAddTags tests adding tags without replacing
 func TestJSONTodoBuilder_UpdateAddTags(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.JSON().
+	urlStr, err := auth.JSON().
 		UpdateTodo("uuid", func(todo *JSONTodoBuilder) {
 			todo.AddTags("new-tag", "another-tag")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "add-tags")
-	assert.Contains(t, url, "new-tag")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	assert.Equal(t, "update", items[0]["operation"])
+	attrs := getJSONAttrs(t, items[0])
+	addTags := attrs["add-tags"].([]any)
+	assert.Equal(t, []any{"new-tag", "another-tag"}, addTags)
 }
 
 // =============================================================================
@@ -1249,18 +1710,24 @@ func TestJSONTodoBuilder_UpdateAddTags(t *testing.T) {
 
 func TestJSONProjectBuilder_Area(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddProject(func(project *JSONProjectBuilder) {
 			project.Title("Test").Area("Work")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "Work")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	assertJSONItemType(t, items[0], "project")
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "area", "Work")
 }
 
 func TestJSONProjectBuilder_Todos(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddProject(func(project *JSONProjectBuilder) {
 			project.Title("Test Project").Todos(
 				NewTodo().Title("Task 1"),
@@ -1269,177 +1736,257 @@ func TestJSONProjectBuilder_Todos(t *testing.T) {
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "Task+1")
-	assert.Contains(t, url, "Task+2")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	assertJSONItemType(t, items[0], "project")
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test Project")
+
+	todos := attrs["items"].([]any)
+	require.Len(t, todos, 2)
+
+	todo0 := todos[0].(map[string]any)
+	assert.Equal(t, "to-do", todo0["type"])
+	todo0Attrs := todo0["attributes"].(map[string]any)
+	assert.Equal(t, "Task 1", todo0Attrs["title"])
+
+	todo1 := todos[1].(map[string]any)
+	todo1Attrs := todo1["attributes"].(map[string]any)
+	assert.Equal(t, "Task 2", todo1Attrs["title"])
 }
 
 // TestJSONProjectBuilder_Notes tests adding project notes
 func TestJSONProjectBuilder_Notes(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddProject(func(project *JSONProjectBuilder) {
 			project.Title("Test").Notes("Project description")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "Project+description")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "notes", "Project description")
 }
 
 // TestJSONProjectBuilder_When tests scheduling project
 func TestJSONProjectBuilder_When(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddProject(func(project *JSONProjectBuilder) {
 			project.Title("Test").When(WhenSomeday)
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "someday")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "when", "someday")
 }
 
 // TestJSONProjectBuilder_WhenDate tests scheduling to specific date
 func TestJSONProjectBuilder_WhenDate(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddProject(func(project *JSONProjectBuilder) {
 			project.Title("Test").WhenDate(2025, time.July, 1)
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "2025-07-01")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "when", "2025-07-01")
 }
 
 // TestJSONProjectBuilder_Deadline tests setting project deadline
 func TestJSONProjectBuilder_Deadline(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddProject(func(project *JSONProjectBuilder) {
 			project.Title("Test").Deadline("2025-12-31")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "2025-12-31")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "deadline", "2025-12-31")
 }
 
 // TestJSONProjectBuilder_Tags tests setting project tags
 func TestJSONProjectBuilder_Tags(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddProject(func(project *JSONProjectBuilder) {
 			project.Title("Test").Tags("priority", "q1")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "priority")
-	assert.Contains(t, url, "q1")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	tags := attrs["tags"].([]any)
+	assert.Equal(t, []any{"priority", "q1"}, tags)
 }
 
 // TestJSONProjectBuilder_AreaID tests placing project in area by UUID
 func TestJSONProjectBuilder_AreaID(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddProject(func(project *JSONProjectBuilder) {
 			project.Title("Test").AreaID("area-uuid-456")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "area-uuid-456")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "area-id", "area-uuid-456")
 }
 
 // TestJSONProjectBuilder_Completed tests marking project completed
 func TestJSONProjectBuilder_Completed(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddProject(func(project *JSONProjectBuilder) {
 			project.Title("Test").Completed(true)
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "completed")
-	assert.Contains(t, url, "true")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "completed", true)
 }
 
 // TestJSONProjectBuilder_Canceled tests marking project canceled
 func TestJSONProjectBuilder_Canceled(t *testing.T) {
 	scheme := NewScheme()
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddProject(func(project *JSONProjectBuilder) {
 			project.Title("Test").Canceled(true)
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "canceled")
-	assert.Contains(t, url, "true")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "canceled", true)
 }
 
 // TestJSONProjectBuilder_CreationDate tests backdating project creation
 func TestJSONProjectBuilder_CreationDate(t *testing.T) {
 	scheme := NewScheme()
 	pastDate := time.Date(2024, time.January, 1, 9, 0, 0, 0, time.UTC)
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddProject(func(project *JSONProjectBuilder) {
 			project.Title("Test").CreationDate(pastDate)
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "creation-date")
-	assert.Contains(t, url, "2024-01-01")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttrExists(t, attrs, "creation-date")
+	assert.Contains(t, attrs["creation-date"], "2024-01-01")
 }
 
 // TestJSONProjectBuilder_CompletionDate tests setting completion timestamp
 func TestJSONProjectBuilder_CompletionDate(t *testing.T) {
 	scheme := NewScheme()
 	completedDate := time.Date(2024, time.November, 30, 17, 0, 0, 0, time.UTC)
-	url, err := scheme.JSON().
+	urlStr, err := scheme.JSON().
 		AddProject(func(project *JSONProjectBuilder) {
 			project.Title("Test").Completed(true).CompletionDate(completedDate)
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "completion-date")
-	assert.Contains(t, url, "2024-11-30")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "Test")
+	assertJSONAttr(t, attrs, "completed", true)
+	assertJSONAttrExists(t, attrs, "completion-date")
+	assert.Contains(t, attrs["completion-date"], "2024-11-30")
 }
 
 // TestJSONProjectBuilder_UpdatePrependNotes tests prepending notes in update
 func TestJSONProjectBuilder_UpdatePrependNotes(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.JSON().
+	urlStr, err := auth.JSON().
 		UpdateProject("uuid", func(project *JSONProjectBuilder) {
 			project.PrependNotes("Update: ")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "prepend-notes")
-	assert.Contains(t, url, "Update")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	assert.Equal(t, "update", items[0]["operation"])
+	assert.Equal(t, "uuid", items[0]["id"])
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "prepend-notes", "Update: ")
 }
 
 // TestJSONProjectBuilder_UpdateAppendNotes tests appending notes in update
 func TestJSONProjectBuilder_UpdateAppendNotes(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.JSON().
+	urlStr, err := auth.JSON().
 		UpdateProject("uuid", func(project *JSONProjectBuilder) {
 			project.AppendNotes(" - Reviewed")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "append-notes")
-	assert.Contains(t, url, "Reviewed")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	assert.Equal(t, "update", items[0]["operation"])
+	assert.Equal(t, "uuid", items[0]["id"])
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "append-notes", " - Reviewed")
 }
 
 // TestJSONProjectBuilder_UpdateAddTags tests adding tags without replacing
 func TestJSONProjectBuilder_UpdateAddTags(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.JSON().
+	urlStr, err := auth.JSON().
 		UpdateProject("uuid", func(project *JSONProjectBuilder) {
 			project.AddTags("reviewed", "approved")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "add-tags")
-	assert.Contains(t, url, "reviewed")
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	assert.Equal(t, "update", items[0]["operation"])
+	attrs := getJSONAttrs(t, items[0])
+	addTags := attrs["add-tags"].([]any)
+	assert.Equal(t, []any{"reviewed", "approved"}, addTags)
 }
 
 // TestJSONProjectBuilder_TodosWithError tests error propagation from child todos
@@ -1460,43 +2007,56 @@ func TestJSONProjectBuilder_TodosWithError(t *testing.T) {
 func TestAuthJSONBuilder_AddProject(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.JSON().
+	urlStr, err := auth.JSON().
 		AddProject(func(project *JSONProjectBuilder) {
 			project.Title("New Project").Area("Work")
 		}).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "things:///json?")
-	assert.Contains(t, url, "New+Project")
-	assert.Contains(t, url, "Work")
+
+	cmd, _ := parseThingsURL(t, urlStr)
+	assert.Equal(t, "json", cmd)
+
+	items := parseJSONData(t, urlStr)
+	require.Len(t, items, 1)
+	assertJSONItemType(t, items[0], "project")
+	attrs := getJSONAttrs(t, items[0])
+	assertJSONAttr(t, attrs, "title", "New Project")
+	assertJSONAttr(t, attrs, "area", "Work")
 }
 
 // TestAuthJSONBuilder_Reveal tests reveal option
 func TestAuthJSONBuilder_Reveal(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.JSON().
+	urlStr, err := auth.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test")
 		}).
 		Reveal(true).
 		Build()
 	require.NoError(t, err)
-	assert.Contains(t, url, "reveal=true")
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "json", cmd)
+	assertURLParam(t, params, "reveal", "true")
 }
 
 // TestAuthJSONBuilder_CreateOnly tests create-only operations don't need auth token
 func TestAuthJSONBuilder_CreateOnly(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	url, err := auth.JSON().
+	urlStr, err := auth.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
 			todo.Title("Test")
 		}).
 		Build()
 	require.NoError(t, err)
+
+	cmd, params := parseThingsURL(t, urlStr)
+	assert.Equal(t, "json", cmd)
 	// Create-only operations don't include auth-token in URL
-	assert.NotContains(t, url, "auth-token")
+	assertURLParamNotExists(t, params, "auth-token")
 }
 
 // =============================================================================

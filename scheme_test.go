@@ -276,10 +276,7 @@ func TestTodoBuilder_CreationDate(t *testing.T) {
 	cmd, params := parseThingsURL(t, urlStr)
 	assert.Equal(t, "add", cmd)
 	assertURLParam(t, params, "title", "Historical task")
-	assertURLParamExists(t, params, "creation-date")
-	// Verify the date is in ISO 8601 format
-	creationDate := params.Get("creation-date")
-	assert.Contains(t, creationDate, "2024-01-15")
+	assertDateParam(t, params, "creation-date", 2024, time.January, 15)
 	assertNoExtraParams(t, params, "title", "creation-date")
 }
 
@@ -297,10 +294,7 @@ func TestTodoBuilder_CompletionDate(t *testing.T) {
 	assert.Equal(t, "add", cmd)
 	assertURLParam(t, params, "title", "Imported completed task")
 	assertURLParam(t, params, "completed", "true")
-	assertURLParamExists(t, params, "completion-date")
-	// Verify the date is in ISO 8601 format
-	completionDate := params.Get("completion-date")
-	assert.Contains(t, completionDate, "2024-12-01")
+	assertDateParam(t, params, "completion-date", 2024, time.December, 1)
 	assertNoExtraParams(t, params, "title", "completed", "completion-date")
 }
 
@@ -512,9 +506,7 @@ func TestProjectBuilder_CreationDate(t *testing.T) {
 	cmd, params := parseThingsURL(t, urlStr)
 	assert.Equal(t, "add-project", cmd)
 	assertURLParam(t, params, "title", "Historical Project")
-	assertURLParamExists(t, params, "creation-date")
-	creationDate := params.Get("creation-date")
-	assert.Contains(t, creationDate, "2024-06-01")
+	assertDateParam(t, params, "creation-date", 2024, time.June, 1)
 	assertNoExtraParams(t, params, "title", "creation-date")
 }
 
@@ -532,9 +524,7 @@ func TestProjectBuilder_CompletionDate(t *testing.T) {
 	assert.Equal(t, "add-project", cmd)
 	assertURLParam(t, params, "title", "Imported Completed Project")
 	assertURLParam(t, params, "completed", "true")
-	assertURLParamExists(t, params, "completion-date")
-	completionDate := params.Get("completion-date")
-	assert.Contains(t, completionDate, "2024-11-15")
+	assertDateParam(t, params, "completion-date", 2024, time.November, 15)
 	assertNoExtraParams(t, params, "title", "completed", "completion-date")
 }
 
@@ -948,9 +938,7 @@ func TestUpdateTodoBuilder_CreationDate(t *testing.T) {
 
 	cmd, params := parseThingsURL(t, urlStr)
 	assert.Equal(t, "update", cmd)
-	assertURLParamExists(t, params, "creation-date")
-	creationDate := params.Get("creation-date")
-	assert.Contains(t, creationDate, "2024-01-01")
+	assertDateParam(t, params, "creation-date", 2024, time.January, 1)
 	assertNoExtraParams(t, params, "id", "auth-token", "creation-date")
 }
 
@@ -964,9 +952,7 @@ func TestUpdateTodoBuilder_CompletionDate(t *testing.T) {
 	cmd, params := parseThingsURL(t, urlStr)
 	assert.Equal(t, "update", cmd)
 	assertURLParam(t, params, "completed", "true")
-	assertURLParamExists(t, params, "completion-date")
-	completionDate := params.Get("completion-date")
-	assert.Contains(t, completionDate, "2024-12-31")
+	assertDateParam(t, params, "completion-date", 2024, time.December, 31)
 	assertNoExtraParams(t, params, "id", "auth-token", "completed", "completion-date")
 }
 
@@ -1197,11 +1183,10 @@ func TestJSONBuilder_AddTodo(t *testing.T) {
 	assertURLParamExists(t, params, "data")
 	assertURLParamNotExists(t, params, "reveal")
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	assertJSONItemType(t, items[0], "to-do")
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test Todo")
+	assert.Equal(t, JSONItemTypeTodo, items[0].Type)
+	assert.Equal(t, "Test Todo", items[0].Attributes["title"])
 }
 
 func TestJSONBuilder_AddProject(t *testing.T) {
@@ -1217,11 +1202,10 @@ func TestJSONBuilder_AddProject(t *testing.T) {
 	assert.Equal(t, "json", cmd)
 	assertURLParamExists(t, params, "data")
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	assertJSONItemType(t, items[0], "project")
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test Project")
+	assert.Equal(t, JSONItemTypeProject, items[0].Type)
+	assert.Equal(t, "Test Project", items[0].Attributes["title"])
 }
 
 func TestJSONBuilder_Reveal(t *testing.T) {
@@ -1261,16 +1245,14 @@ func TestJSONBuilder_Multiple(t *testing.T) {
 	cmd, _ := parseThingsURL(t, urlStr)
 	assert.Equal(t, "json", cmd)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 2)
 
-	assertJSONItemType(t, items[0], "to-do")
-	attrs0 := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs0, "title", "Todo 1")
+	assert.Equal(t, JSONItemTypeTodo, items[0].Type)
+	assert.Equal(t, "Todo 1", items[0].Attributes["title"])
 
-	assertJSONItemType(t, items[1], "to-do")
-	attrs1 := getJSONAttrs(t, items[1])
-	assertJSONAttr(t, attrs1, "title", "Todo 2")
+	assert.Equal(t, JSONItemTypeTodo, items[1].Type)
+	assert.Equal(t, "Todo 2", items[1].Attributes["title"])
 }
 
 // =============================================================================
@@ -1292,13 +1274,12 @@ func TestAuthJSONBuilder_UpdateTodo(t *testing.T) {
 	assertURLParam(t, params, "auth-token", "test-token")
 	assertURLParamExists(t, params, "data")
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	assertJSONItemType(t, items[0], "to-do")
-	assert.Equal(t, "update", items[0]["operation"])
-	assert.Equal(t, "uuid-123", items[0]["id"])
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "completed", true)
+	assert.Equal(t, JSONItemTypeTodo, items[0].Type)
+	assert.Equal(t, JSONOperationUpdate, items[0].Operation)
+	assert.Equal(t, "uuid-123", items[0].ID)
+	assert.Equal(t, true, items[0].Attributes["completed"])
 }
 
 func TestAuthJSONBuilder_UpdateProject(t *testing.T) {
@@ -1316,13 +1297,12 @@ func TestAuthJSONBuilder_UpdateProject(t *testing.T) {
 	assertURLParam(t, params, "auth-token", "test-token")
 	assertURLParamExists(t, params, "data")
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	assertJSONItemType(t, items[0], "project")
-	assert.Equal(t, "update", items[0]["operation"])
-	assert.Equal(t, "uuid-123", items[0]["id"])
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "completed", true)
+	assert.Equal(t, JSONItemTypeProject, items[0].Type)
+	assert.Equal(t, JSONOperationUpdate, items[0].Operation)
+	assert.Equal(t, "uuid-123", items[0].ID)
+	assert.Equal(t, true, items[0].Attributes["completed"])
 }
 
 func TestAuthJSONBuilder_Mixed(t *testing.T) {
@@ -1342,20 +1322,18 @@ func TestAuthJSONBuilder_Mixed(t *testing.T) {
 	assert.Equal(t, "json", cmd)
 	assertURLParam(t, params, "auth-token", "test-token")
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 2)
 
 	// First item: create todo
-	assertJSONItemType(t, items[0], "to-do")
-	attrs0 := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs0, "title", "New Todo")
+	assert.Equal(t, JSONItemTypeTodo, items[0].Type)
+	assert.Equal(t, "New Todo", items[0].Attributes["title"])
 
 	// Second item: update todo
-	assertJSONItemType(t, items[1], "to-do")
-	assert.Equal(t, "update", items[1]["operation"])
-	assert.Equal(t, "uuid-123", items[1]["id"])
-	attrs1 := getJSONAttrs(t, items[1])
-	assertJSONAttr(t, attrs1, "completed", true)
+	assert.Equal(t, JSONItemTypeTodo, items[1].Type)
+	assert.Equal(t, JSONOperationUpdate, items[1].Operation)
+	assert.Equal(t, "uuid-123", items[1].ID)
+	assert.Equal(t, true, items[1].Attributes["completed"])
 }
 
 func TestAuthJSONBuilder_EmptyToken(t *testing.T) {
@@ -1389,11 +1367,10 @@ func TestJSONTodoBuilder_When(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "when", "today")
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, "today", items[0].Attributes["when"])
 }
 
 func TestJSONTodoBuilder_Tags(t *testing.T) {
@@ -1405,12 +1382,10 @@ func TestJSONTodoBuilder_Tags(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	tags := attrs["tags"].([]any)
-	assert.Equal(t, []any{"Risk", "Golang"}, tags)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, []any{"Risk", "Golang"}, items[0].Attributes["tags"])
 }
 
 func TestJSONTodoBuilder_TitleTooLong(t *testing.T) {
@@ -1434,11 +1409,10 @@ func TestJSONTodoBuilder_Notes(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "notes", "Detailed description")
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, "Detailed description", items[0].Attributes["notes"])
 }
 
 // TestJSONTodoBuilder_WhenDate tests scheduling to a specific date
@@ -1451,11 +1425,10 @@ func TestJSONTodoBuilder_WhenDate(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "when", "2025-03-15")
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, "2025-03-15", items[0].Attributes["when"])
 }
 
 // TestJSONTodoBuilder_Deadline tests setting a deadline
@@ -1468,11 +1441,10 @@ func TestJSONTodoBuilder_Deadline(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "deadline", "2025-06-30")
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, "2025-06-30", items[0].Attributes["deadline"])
 }
 
 // TestJSONTodoBuilder_ChecklistItems tests adding a checklist
@@ -1485,12 +1457,12 @@ func TestJSONTodoBuilder_ChecklistItems(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
+	assert.Equal(t, JSONItemTypeTodo, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
 
-	checklistItems := attrs["checklist-items"].([]any)
+	checklistItems := items[0].Attributes["checklist-items"].([]any)
 	require.Len(t, checklistItems, 3)
 
 	item0 := checklistItems[0].(map[string]any)
@@ -1532,11 +1504,11 @@ func TestJSONTodoBuilder_List(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "list", "My Project")
+	assert.Equal(t, JSONItemTypeTodo, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, "My Project", items[0].Attributes["list"])
 }
 
 // TestJSONTodoBuilder_ListID tests placing todo in a project by UUID
@@ -1549,11 +1521,11 @@ func TestJSONTodoBuilder_ListID(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "list-id", "project-uuid-123")
+	assert.Equal(t, JSONItemTypeTodo, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, "project-uuid-123", items[0].Attributes["list-id"])
 }
 
 // TestJSONTodoBuilder_Heading tests placing todo under a heading
@@ -1566,12 +1538,12 @@ func TestJSONTodoBuilder_Heading(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "list", "Project")
-	assertJSONAttr(t, attrs, "heading", "Phase 1")
+	assert.Equal(t, JSONItemTypeTodo, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, "Project", items[0].Attributes["list"])
+	assert.Equal(t, "Phase 1", items[0].Attributes["heading"])
 }
 
 // TestJSONTodoBuilder_Completed tests marking as completed
@@ -1584,11 +1556,11 @@ func TestJSONTodoBuilder_Completed(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "completed", true)
+	assert.Equal(t, JSONItemTypeTodo, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, true, items[0].Attributes["completed"])
 }
 
 // TestJSONTodoBuilder_Canceled tests marking as canceled
@@ -1601,11 +1573,11 @@ func TestJSONTodoBuilder_Canceled(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "canceled", true)
+	assert.Equal(t, JSONItemTypeTodo, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, true, items[0].Attributes["canceled"])
 }
 
 // TestJSONTodoBuilder_CreationDate tests backdating creation
@@ -1619,12 +1591,11 @@ func TestJSONTodoBuilder_CreationDate(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttrExists(t, attrs, "creation-date")
-	assert.Contains(t, attrs["creation-date"], "2024-06-01")
+	assert.Equal(t, JSONItemTypeTodo, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assertJSONDateAttr(t, items[0].Attributes, "creation-date", 2024, time.June, 1)
 }
 
 // TestJSONTodoBuilder_CompletionDate tests setting completion timestamp
@@ -1638,13 +1609,12 @@ func TestJSONTodoBuilder_CompletionDate(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "completed", true)
-	assertJSONAttrExists(t, attrs, "completion-date")
-	assert.Contains(t, attrs["completion-date"], "2024-12-15")
+	assert.Equal(t, JSONItemTypeTodo, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, true, items[0].Attributes["completed"])
+	assertJSONDateAttr(t, items[0].Attributes, "completion-date", 2024, time.December, 15)
 }
 
 // TestJSONTodoBuilder_UpdatePrependNotes tests prepending notes in update
@@ -1658,12 +1628,12 @@ func TestJSONTodoBuilder_UpdatePrependNotes(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	assert.Equal(t, "update", items[0]["operation"])
-	assert.Equal(t, "uuid", items[0]["id"])
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "prepend-notes", "Important: ")
+	assert.Equal(t, JSONItemTypeTodo, items[0].Type)
+	assert.Equal(t, JSONOperationUpdate, items[0].Operation)
+	assert.Equal(t, "uuid", items[0].ID)
+	assert.Equal(t, "Important: ", items[0].Attributes["prepend-notes"])
 }
 
 // TestJSONTodoBuilder_UpdateAppendNotes tests appending notes in update
@@ -1677,12 +1647,12 @@ func TestJSONTodoBuilder_UpdateAppendNotes(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	assert.Equal(t, "update", items[0]["operation"])
-	assert.Equal(t, "uuid", items[0]["id"])
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "append-notes", " - Updated")
+	assert.Equal(t, JSONItemTypeTodo, items[0].Type)
+	assert.Equal(t, JSONOperationUpdate, items[0].Operation)
+	assert.Equal(t, "uuid", items[0].ID)
+	assert.Equal(t, " - Updated", items[0].Attributes["append-notes"])
 }
 
 // TestJSONTodoBuilder_UpdateAddTags tests adding tags without replacing
@@ -1696,11 +1666,11 @@ func TestJSONTodoBuilder_UpdateAddTags(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	assert.Equal(t, "update", items[0]["operation"])
-	attrs := getJSONAttrs(t, items[0])
-	addTags := attrs["add-tags"].([]any)
+	assert.Equal(t, JSONItemTypeTodo, items[0].Type)
+	assert.Equal(t, JSONOperationUpdate, items[0].Operation)
+	addTags := items[0].Attributes["add-tags"].([]any)
 	assert.Equal(t, []any{"new-tag", "another-tag"}, addTags)
 }
 
@@ -1717,12 +1687,11 @@ func TestJSONProjectBuilder_Area(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	assertJSONItemType(t, items[0], "project")
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "area", "Work")
+	assert.Equal(t, JSONItemTypeProject, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, "Work", items[0].Attributes["area"])
 }
 
 func TestJSONProjectBuilder_Todos(t *testing.T) {
@@ -1737,13 +1706,12 @@ func TestJSONProjectBuilder_Todos(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	assertJSONItemType(t, items[0], "project")
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test Project")
+	assert.Equal(t, JSONItemTypeProject, items[0].Type)
+	assert.Equal(t, "Test Project", items[0].Attributes["title"])
 
-	todos := attrs["items"].([]any)
+	todos := items[0].Attributes["items"].([]any)
 	require.Len(t, todos, 2)
 
 	todo0 := todos[0].(map[string]any)
@@ -1766,11 +1734,11 @@ func TestJSONProjectBuilder_Notes(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "notes", "Project description")
+	assert.Equal(t, JSONItemTypeProject, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, "Project description", items[0].Attributes["notes"])
 }
 
 // TestJSONProjectBuilder_When tests scheduling project
@@ -1783,11 +1751,11 @@ func TestJSONProjectBuilder_When(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "when", "someday")
+	assert.Equal(t, JSONItemTypeProject, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, "someday", items[0].Attributes["when"])
 }
 
 // TestJSONProjectBuilder_WhenDate tests scheduling to specific date
@@ -1800,11 +1768,11 @@ func TestJSONProjectBuilder_WhenDate(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "when", "2025-07-01")
+	assert.Equal(t, JSONItemTypeProject, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, "2025-07-01", items[0].Attributes["when"])
 }
 
 // TestJSONProjectBuilder_Deadline tests setting project deadline
@@ -1817,11 +1785,11 @@ func TestJSONProjectBuilder_Deadline(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "deadline", "2025-12-31")
+	assert.Equal(t, JSONItemTypeProject, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, "2025-12-31", items[0].Attributes["deadline"])
 }
 
 // TestJSONProjectBuilder_Tags tests setting project tags
@@ -1834,11 +1802,11 @@ func TestJSONProjectBuilder_Tags(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	tags := attrs["tags"].([]any)
+	assert.Equal(t, JSONItemTypeProject, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	tags := items[0].Attributes["tags"].([]any)
 	assert.Equal(t, []any{"priority", "q1"}, tags)
 }
 
@@ -1852,11 +1820,11 @@ func TestJSONProjectBuilder_AreaID(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "area-id", "area-uuid-456")
+	assert.Equal(t, JSONItemTypeProject, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, "area-uuid-456", items[0].Attributes["area-id"])
 }
 
 // TestJSONProjectBuilder_Completed tests marking project completed
@@ -1869,11 +1837,11 @@ func TestJSONProjectBuilder_Completed(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "completed", true)
+	assert.Equal(t, JSONItemTypeProject, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, true, items[0].Attributes["completed"])
 }
 
 // TestJSONProjectBuilder_Canceled tests marking project canceled
@@ -1886,11 +1854,11 @@ func TestJSONProjectBuilder_Canceled(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "canceled", true)
+	assert.Equal(t, JSONItemTypeProject, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, true, items[0].Attributes["canceled"])
 }
 
 // TestJSONProjectBuilder_CreationDate tests backdating project creation
@@ -1904,12 +1872,11 @@ func TestJSONProjectBuilder_CreationDate(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttrExists(t, attrs, "creation-date")
-	assert.Contains(t, attrs["creation-date"], "2024-01-01")
+	assert.Equal(t, JSONItemTypeProject, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assertJSONDateAttr(t, items[0].Attributes, "creation-date", 2024, time.January, 1)
 }
 
 // TestJSONProjectBuilder_CompletionDate tests setting completion timestamp
@@ -1923,13 +1890,12 @@ func TestJSONProjectBuilder_CompletionDate(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "Test")
-	assertJSONAttr(t, attrs, "completed", true)
-	assertJSONAttrExists(t, attrs, "completion-date")
-	assert.Contains(t, attrs["completion-date"], "2024-11-30")
+	assert.Equal(t, JSONItemTypeProject, items[0].Type)
+	assert.Equal(t, "Test", items[0].Attributes["title"])
+	assert.Equal(t, true, items[0].Attributes["completed"])
+	assertJSONDateAttr(t, items[0].Attributes, "completion-date", 2024, time.November, 30)
 }
 
 // TestJSONProjectBuilder_UpdatePrependNotes tests prepending notes in update
@@ -1943,12 +1909,12 @@ func TestJSONProjectBuilder_UpdatePrependNotes(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	assert.Equal(t, "update", items[0]["operation"])
-	assert.Equal(t, "uuid", items[0]["id"])
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "prepend-notes", "Update: ")
+	assert.Equal(t, JSONItemTypeProject, items[0].Type)
+	assert.Equal(t, JSONOperationUpdate, items[0].Operation)
+	assert.Equal(t, "uuid", items[0].ID)
+	assert.Equal(t, "Update: ", items[0].Attributes["prepend-notes"])
 }
 
 // TestJSONProjectBuilder_UpdateAppendNotes tests appending notes in update
@@ -1962,12 +1928,12 @@ func TestJSONProjectBuilder_UpdateAppendNotes(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	assert.Equal(t, "update", items[0]["operation"])
-	assert.Equal(t, "uuid", items[0]["id"])
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "append-notes", " - Reviewed")
+	assert.Equal(t, JSONItemTypeProject, items[0].Type)
+	assert.Equal(t, JSONOperationUpdate, items[0].Operation)
+	assert.Equal(t, "uuid", items[0].ID)
+	assert.Equal(t, " - Reviewed", items[0].Attributes["append-notes"])
 }
 
 // TestJSONProjectBuilder_UpdateAddTags tests adding tags without replacing
@@ -1981,11 +1947,11 @@ func TestJSONProjectBuilder_UpdateAddTags(t *testing.T) {
 		Build()
 	require.NoError(t, err)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	assert.Equal(t, "update", items[0]["operation"])
-	attrs := getJSONAttrs(t, items[0])
-	addTags := attrs["add-tags"].([]any)
+	assert.Equal(t, JSONItemTypeProject, items[0].Type)
+	assert.Equal(t, JSONOperationUpdate, items[0].Operation)
+	addTags := items[0].Attributes["add-tags"].([]any)
 	assert.Equal(t, []any{"reviewed", "approved"}, addTags)
 }
 
@@ -2017,12 +1983,11 @@ func TestAuthJSONBuilder_AddProject(t *testing.T) {
 	cmd, _ := parseThingsURL(t, urlStr)
 	assert.Equal(t, "json", cmd)
 
-	items := parseJSONData(t, urlStr)
+	items := parseJSONItems(t, urlStr)
 	require.Len(t, items, 1)
-	assertJSONItemType(t, items[0], "project")
-	attrs := getJSONAttrs(t, items[0])
-	assertJSONAttr(t, attrs, "title", "New Project")
-	assertJSONAttr(t, attrs, "area", "Work")
+	assert.Equal(t, JSONItemTypeProject, items[0].Type)
+	assert.Equal(t, "New Project", items[0].Attributes["title"])
+	assert.Equal(t, "Work", items[0].Attributes["area"])
 }
 
 // TestAuthJSONBuilder_Reveal tests reveal option

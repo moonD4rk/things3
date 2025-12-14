@@ -262,15 +262,6 @@ func TestFilterBuilder(t *testing.T) {
 		// Should only have "type = 0"
 		assert.Equal(t, "type = 0", fb.sql())
 	})
-
-	t.Run("Build returns filters", func(t *testing.T) {
-		fb := newFilterBuilder().
-			addStatic("x = 1").
-			addStatic("y = 2")
-
-		filters := fb.build()
-		assert.Len(t, filters, 2)
-	})
 }
 
 func TestFilterBuilderChaining(t *testing.T) {
@@ -288,7 +279,14 @@ func TestFilterBuilderChaining(t *testing.T) {
 
 	assert.NotNil(t, result)
 	assert.Equal(t, fb, result) // Same instance
-	assert.Len(t, fb.build(), 6)
+	// Verify all filters were added by checking the SQL output
+	sql := fb.sql()
+	assert.Contains(t, sql, "a")
+	assert.Contains(t, sql, "b")
+	assert.Contains(t, sql, "c = 'd'")
+	assert.Contains(t, sql, "e")
+	assert.Contains(t, sql, "(f OR g)")
+	assert.Contains(t, sql, "LIKE '%h%'")
 }
 
 func TestDateOpSQLOperator(t *testing.T) {
@@ -495,8 +493,8 @@ func TestFilterBuilderWithDateFilters(t *testing.T) {
 	t.Run("mixed date filters", func(t *testing.T) {
 		fb := newFilterBuilder().
 			addStatic(filterIsTodo).
-			addThingsDateValue("TASK.startDate", dateOpAfter, "2024-01-01").
-			addUnixTimeValue("TASK.stopDate", dateOpPast, "").
+			add(thingsDate("TASK.startDate", dateOpAfter, "2024-01-01")).
+			add(unixTime("TASK.stopDate", dateOpPast, "")).
 			addDurationFilter("TASK.creationDate", Days(30))
 
 		sql := fb.sql()
@@ -510,11 +508,412 @@ func TestFilterBuilderWithDateFilters(t *testing.T) {
 		fb := newFilterBuilder().
 			addStatic(filterIsTodo).
 			addStatic(filterIsIncomplete).
-			addThingsDateValue("TASK.deadline", dateOpBeforeEq, "2024-12-31")
+			add(thingsDate("TASK.deadline", dateOpBeforeEq, "2024-12-31"))
 
 		sql := fb.sql()
 		assert.Contains(t, sql, "type = 0")
 		assert.Contains(t, sql, "status = 0")
 		assert.Contains(t, sql, "TASK.deadline <=")
 	})
+}
+
+// =============================================================================
+// SQL Injection Prevention Tests
+// =============================================================================
+
+func TestSQLInjection_EqualFilter(t *testing.T) {
+	tests := []struct {
+		name     string
+		column   string
+		value    string
+		expected string // Expected output to verify escaping
+	}{
+		{
+			name:     "basic injection attempt",
+			column:   "title",
+			value:    "'; DROP TABLE TMTask; --",
+			expected: "title = '''; DROP TABLE TMTask; --'", // ' escaped to ''
+		},
+		{
+			name:     "union injection",
+			column:   "title",
+			value:    "' UNION SELECT * FROM TMTag --",
+			expected: "title = ''' UNION SELECT * FROM TMTag --'", // ' escaped to ''
+		},
+		{
+			name:     "comment injection",
+			column:   "title",
+			value:    "test' -- comment",
+			expected: "title = 'test'' -- comment'", // ' escaped to ''
+		},
+		{
+			name:     "nested quotes",
+			column:   "title",
+			value:    "test'''; DROP TABLE --",
+			expected: "title = 'test''''''; DROP TABLE --'", // ''' becomes ''''''
+		},
+		{
+			name:     "null byte injection",
+			column:   "title",
+			value:    "test\x00' DROP TABLE",
+			expected: "title = 'test\x00'' DROP TABLE'", // Null preserved, ' escaped
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := equal(tt.column, tt.value)
+			sql := f.SQL()
+
+			// Verify exact expected output
+			assert.Equal(t, tt.expected, sql,
+				"SQL injection should be properly escaped")
+		})
+	}
+}
+
+func TestSQLInjection_SearchFilter(t *testing.T) {
+	tests := []struct {
+		name   string
+		query  string
+		verify func(t *testing.T, sql string)
+	}{
+		{
+			name:  "basic injection in search",
+			query: "'; DROP TABLE TMTask; --",
+			verify: func(t *testing.T, sql string) {
+				// All quotes should be escaped to ''
+				assert.Contains(t, sql, "''")
+				// The value should be safely wrapped in the LIKE clause
+				assert.Contains(t, sql, "LIKE '%''")
+			},
+		},
+		{
+			name:  "LIKE wildcard injection",
+			query: "%' OR 1=1 --",
+			verify: func(t *testing.T, sql string) {
+				// The % is legitimate for LIKE, but ' should be escaped
+				assert.Contains(t, sql, "''")
+				// Should still be within LIKE quotes
+				assert.Contains(t, sql, "LIKE '%%''")
+			},
+		},
+		{
+			name:  "unicode injection attempt",
+			query: "test\u0027 OR 1=1",
+			verify: func(t *testing.T, sql string) {
+				// Unicode single quote (U+0027) should be escaped
+				assert.Contains(t, sql, "''")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := search(tt.query)
+			sql := f.SQL()
+			tt.verify(t, sql)
+		})
+	}
+}
+
+// =============================================================================
+// String Escaping Edge Case Tests
+// =============================================================================
+
+func TestStringEscaping_SpecialCharacters(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string // Expected escaped result in the SQL
+	}{
+		{
+			name:     "single quote",
+			input:    "it's",
+			expected: "title = 'it''s'",
+		},
+		{
+			name:     "multiple single quotes",
+			input:    "it's John's",
+			expected: "title = 'it''s John''s'",
+		},
+		{
+			name:     "backslash",
+			input:    "path\\to\\file",
+			expected: "title = 'path\\to\\file'", // SQLite doesn't treat \ specially
+		},
+		{
+			name:     "double quote",
+			input:    `say "hello"`,
+			expected: `title = 'say "hello"'`, // Double quotes don't need escaping in SQLite strings
+		},
+		{
+			name:     "newline",
+			input:    "line1\nline2",
+			expected: "title = 'line1\nline2'", // Newlines are valid in SQLite strings
+		},
+		{
+			name:     "tab",
+			input:    "col1\tcol2",
+			expected: "title = 'col1\tcol2'",
+		},
+		{
+			name:     "carriage return",
+			input:    "line1\r\nline2",
+			expected: "title = 'line1\r\nline2'",
+		},
+		{
+			name:     "percent sign",
+			input:    "100% complete",
+			expected: "title = '100% complete'",
+		},
+		{
+			name:     "underscore",
+			input:    "task_name",
+			expected: "title = 'task_name'",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "title = ''",
+		},
+		{
+			name:     "only quotes",
+			input:    "'''",
+			expected: "title = ''''''''", // Three quotes ' become '' each = 6 quotes, plus wrapping = 8
+		},
+		{
+			name:     "unicode characters",
+			input:    "Hello",
+			expected: "title = 'Hello'",
+		},
+		{
+			name:     "emoji",
+			input:    "Task done",
+			expected: "title = 'Task done'",
+		},
+		{
+			name:     "chinese characters",
+			input:    "Test",
+			expected: "title = 'Test'",
+		},
+		{
+			name:     "mixed special chars",
+			input:    "John's \"task\" @ 100%",
+			expected: `title = 'John''s "task" @ 100%'`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := equal("title", tt.input)
+			assert.Equal(t, tt.expected, f.SQL())
+		})
+	}
+}
+
+func TestSearchEscaping_LIKEWildcards(t *testing.T) {
+	// LIKE wildcards (% and _) in SQLite have special meaning
+	// They should be passed through as-is since they're valid search terms
+	// but quotes must be escaped
+	tests := []struct {
+		name   string
+		query  string
+		verify func(t *testing.T, sql string)
+	}{
+		{
+			name:  "percent wildcard",
+			query: "test%",
+			verify: func(t *testing.T, sql string) {
+				// % should be present (it's valid)
+				assert.Contains(t, sql, "%test%%")
+			},
+		},
+		{
+			name:  "underscore wildcard",
+			query: "test_name",
+			verify: func(t *testing.T, sql string) {
+				// _ should be present (it's valid in LIKE)
+				assert.Contains(t, sql, "%test_name%")
+			},
+		},
+		{
+			name:  "quote with wildcard",
+			query: "it's%",
+			verify: func(t *testing.T, sql string) {
+				// Quote should be escaped, % preserved
+				assert.Contains(t, sql, "%it''s%%")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := search(tt.query)
+			sql := f.SQL()
+			tt.verify(t, sql)
+		})
+	}
+}
+
+// =============================================================================
+// Filter Combination Tests
+// =============================================================================
+
+func TestFilterCombination_ANDCorrectness(t *testing.T) {
+	tests := []struct {
+		name     string
+		filters  []filter
+		contains []string
+	}{
+		{
+			name: "two conditions",
+			filters: []filter{
+				static("type = 0"),
+				static("status = 0"),
+			},
+			contains: []string{"type = 0", "AND", "status = 0"},
+		},
+		{
+			name: "three conditions",
+			filters: []filter{
+				static("type = 0"),
+				static("status = 0"),
+				static("trashed = 0"),
+			},
+			contains: []string{"type = 0", "AND", "status = 0", "AND", "trashed = 0"},
+		},
+		{
+			name: "mixed filter types",
+			filters: []filter{
+				static("type = 0"),
+				equal("uuid", "test-uuid"),
+				truthy("recurring", ptrBool(true)),
+			},
+			contains: []string{"type = 0", "uuid = 'test-uuid'", "recurring"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := filters(tt.filters)
+			sql := fs.SQL()
+
+			for _, c := range tt.contains {
+				assert.Contains(t, sql, c)
+			}
+		})
+	}
+}
+
+func TestFilterCombination_NestedORInAND(t *testing.T) {
+	// Test that OR filters work correctly within AND combinations
+	fb := newFilterBuilder().
+		addStatic("type = 0").
+		addOr(
+			static("area = 'area1'"),
+			static("area = 'area2'"),
+			static("area = 'area3'"),
+		).
+		addStatic("status = 0")
+
+	sql := fb.sql()
+
+	// Verify structure
+	assert.Contains(t, sql, "type = 0")
+	assert.Contains(t, sql, "AND (area = 'area1' OR area = 'area2' OR area = 'area3')")
+	assert.Contains(t, sql, "AND status = 0")
+}
+
+// =============================================================================
+// NULL Handling in Filters
+// =============================================================================
+
+func TestNullHandling_InFilters(t *testing.T) {
+	tests := []struct {
+		name     string
+		filter   filter
+		expected string
+		isEmpty  bool
+	}{
+		{
+			name:     "bool true means IS NOT NULL",
+			filter:   equal("deadline", true),
+			expected: "deadline IS NOT NULL",
+			isEmpty:  false,
+		},
+		{
+			name:     "bool false means IS NULL",
+			filter:   equal("deadline", false),
+			expected: "deadline IS NULL",
+			isEmpty:  false,
+		},
+		{
+			name:     "nil value is empty",
+			filter:   equal("deadline", nil),
+			expected: "",
+			isEmpty:  true,
+		},
+		{
+			name:     "truthy nil pointer is empty",
+			filter:   truthy("recurring", nil),
+			expected: "",
+			isEmpty:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.filter.SQL())
+			assert.Equal(t, tt.isEmpty, tt.filter.IsEmpty())
+		})
+	}
+}
+
+// =============================================================================
+// Date Filter Boundary Tests
+// =============================================================================
+
+func TestDateFilter_YearBoundary(t *testing.T) {
+	tests := []struct {
+		name  string
+		date  string
+		valid bool // Whether it should produce valid SQL
+	}{
+		{"year 2024", "2024-06-15", true},
+		{"year 2000", "2000-01-01", true},
+		{"year 1999", "1999-12-31", true},
+		{"year 2099", "2099-12-31", true},
+		{"invalid year", "99-06-15", false},
+		{"invalid month", "2024-13-01", false},
+		{"invalid day", "2024-06-32", false},
+		{"leap year", "2024-02-29", true},
+		{"non-leap year feb 29", "2023-02-29", false}, // Invalid date
+		{"year boundary jan 1", "2024-01-01", true},
+		{"year boundary dec 31", "2024-12-31", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := thingsDate("startDate", dateOpEqual, tt.date)
+			sql := f.SQL()
+
+			if tt.valid {
+				// Valid dates should produce non-empty SQL with the date value
+				assert.NotEmpty(t, sql, "valid date %s should produce SQL", tt.date)
+				assert.Contains(t, sql, "startDate =")
+			} else {
+				// Invalid dates should produce empty SQL
+				assert.Empty(t, sql, "invalid date %s should produce empty SQL", tt.date)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// Helper Functions for Tests
+// =============================================================================
+
+func ptrBool(b bool) *bool {
+	return &b
 }

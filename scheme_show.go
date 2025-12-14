@@ -13,26 +13,26 @@ type ShowBuilder struct {
 
 // ID sets the target item UUID or built-in list ID.
 func (b *ShowBuilder) ID(id string) *ShowBuilder {
-	b.params["id"] = id
+	b.params[keyID] = id
 	return b
 }
 
 // List sets the target to a built-in Things list.
 func (b *ShowBuilder) List(list ListID) *ShowBuilder {
-	b.params["id"] = string(list)
+	b.params[keyID] = string(list)
 	return b
 }
 
 // Query searches for an area, project, or tag by name.
 // Note: Tasks cannot be shown using query; use ID instead.
 func (b *ShowBuilder) Query(query string) *ShowBuilder {
-	b.params["query"] = query
+	b.params[keyQuery] = query
 	return b
 }
 
 // Filter filters the displayed items by tags.
 func (b *ShowBuilder) Filter(tags ...string) *ShowBuilder {
-	b.params["filter"] = strings.Join(tags, ",")
+	b.params[keyFilter] = strings.Join(tags, ",")
 	return b
 }
 

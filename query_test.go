@@ -634,3 +634,81 @@ func TestSubBuilderChaining(t *testing.T) {
 		All(ctx)
 	require.NoError(t, err)
 }
+
+// =============================================================================
+// Context Trashed Filter Tests
+// =============================================================================
+
+// testUUIDContextTrashedTask is a task where task.trashed=0 but project.trashed=1.
+const testUUIDContextTrashedTask = "NoQLFamrMMooAELuBznao8"
+
+func TestContextTrashedFilter(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	// Test 1: Without ContextTrashed filter - should include context-trashed tasks
+	tasksWithoutFilter, err := db.Tasks().
+		Type().Todo().
+		Start().Anytime().
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+
+	// Find the context-trashed task in results
+	foundWithoutFilter := false
+	for _, task := range tasksWithoutFilter {
+		if task.UUID == testUUIDContextTrashedTask {
+			foundWithoutFilter = true
+			break
+		}
+	}
+	assert.True(t, foundWithoutFilter,
+		"Without ContextTrashed filter, context-trashed task should be included")
+
+	// Test 2: With ContextTrashed(false) - should exclude context-trashed tasks
+	tasksWithFilter, err := db.Tasks().
+		Type().Todo().
+		Start().Anytime().
+		Status().Incomplete().
+		ContextTrashed(false).
+		All(ctx)
+	require.NoError(t, err)
+
+	// Verify context-trashed task is NOT in results
+	foundWithFilter := false
+	for _, task := range tasksWithFilter {
+		if task.UUID == testUUIDContextTrashedTask {
+			foundWithFilter = true
+			break
+		}
+	}
+	assert.False(t, foundWithFilter,
+		"With ContextTrashed(false), context-trashed task should be excluded")
+
+	// Test 3: Verify the count difference
+	// tasksWithFilter should have one less item (the context-trashed task)
+	expectedCount := len(tasksWithoutFilter) - 1
+	assert.Len(t, tasksWithFilter, expectedCount,
+		"ContextTrashed(false) should filter out exactly 1 context-trashed task")
+}
+
+func TestContextTrashedTaskDetails(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	// Verify the test task exists and has expected properties
+	task, err := db.Tasks().
+		WithUUID(testUUIDContextTrashedTask).
+		First(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, "Task in Deleted Project", task.Title,
+		"Test task should have expected title")
+	assert.NotNil(t, task.ProjectTitle,
+		"Test task should have a project")
+	assert.Equal(t, "Deleted Project", *task.ProjectTitle,
+		"Test task should be in 'Deleted Project'")
+
+	// The task itself is not trashed (task.trashed = 0)
+	assert.False(t, task.Trashed, "Task itself should not be trashed")
+}

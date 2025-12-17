@@ -11,6 +11,7 @@ func (d *DB) Todos(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
 		Type().Todo().
 		Status().Incomplete().
+		ContextTrashed(false).
 		All(ctx)
 }
 
@@ -19,6 +20,7 @@ func (d *DB) Projects(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
 		Type().Project().
 		Status().Incomplete().
+		ContextTrashed(false).
 		All(ctx)
 }
 
@@ -27,6 +29,7 @@ func (d *DB) Inbox(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
 		Start().Inbox().
 		Status().Incomplete().
+		ContextTrashed(false).
 		All(ctx)
 }
 
@@ -41,6 +44,7 @@ func (d *DB) Today(ctx context.Context) ([]Task, error) {
 		StartDate().Exists(true).
 		Start().Anytime().
 		Status().Incomplete().
+		ContextTrashed(false).
 		OrderByTodayIndex().
 		All(ctx)
 	if err != nil {
@@ -52,6 +56,7 @@ func (d *DB) Today(ctx context.Context) ([]Task, error) {
 		StartDate().Past().
 		Start().Someday().
 		Status().Incomplete().
+		ContextTrashed(false).
 		OrderByTodayIndex().
 		All(ctx)
 	if err != nil {
@@ -64,6 +69,7 @@ func (d *DB) Today(ctx context.Context) ([]Task, error) {
 		Deadline().Past().
 		WithDeadlineSuppressed(false).
 		Status().Incomplete().
+		ContextTrashed(false).
 		All(ctx)
 	if err != nil {
 		return nil, err
@@ -92,6 +98,7 @@ func (d *DB) Upcoming(ctx context.Context) ([]Task, error) {
 		StartDate().Future().
 		Start().Someday().
 		Status().Incomplete().
+		ContextTrashed(false).
 		All(ctx)
 }
 
@@ -100,6 +107,7 @@ func (d *DB) Anytime(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
 		Start().Anytime().
 		Status().Incomplete().
+		ContextTrashed(false).
 		All(ctx)
 }
 
@@ -109,6 +117,7 @@ func (d *DB) Someday(ctx context.Context) ([]Task, error) {
 		StartDate().Exists(false).
 		Start().Someday().
 		Status().Incomplete().
+		ContextTrashed(false).
 		All(ctx)
 }
 
@@ -138,16 +147,17 @@ func (d *DB) Logbook(ctx context.Context) ([]Task, error) {
 
 // Trash returns trashed tasks.
 func (d *DB) Trash(ctx context.Context) ([]Task, error) {
-	q := d.Tasks().Trashed(true)
-	// Remove default status filter for trash
-	q.status = nil
-	return q.All(ctx)
+	return d.Tasks().
+		Trashed(true).
+		Status().Any().
+		All(ctx)
 }
 
 // Completed returns completed tasks.
 func (d *DB) Completed(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
 		Status().Completed().
+		ContextTrashed(false).
 		All(ctx)
 }
 
@@ -155,6 +165,7 @@ func (d *DB) Completed(ctx context.Context) ([]Task, error) {
 func (d *DB) Canceled(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
 		Status().Canceled().
+		ContextTrashed(false).
 		All(ctx)
 }
 
@@ -163,6 +174,7 @@ func (d *DB) Deadlines(ctx context.Context) ([]Task, error) {
 	tasks, err := d.Tasks().
 		Deadline().Exists(true).
 		Status().Incomplete().
+		ContextTrashed(false).
 		All(ctx)
 	if err != nil {
 		return nil, err
@@ -186,6 +198,7 @@ func (d *DB) CreatedWithin(ctx context.Context, duration Duration) ([]Task, erro
 	tasks, err := d.Tasks().
 		CreatedWithin(duration).
 		Status().Incomplete().
+		ContextTrashed(false).
 		All(ctx)
 	if err != nil {
 		return nil, err
@@ -205,6 +218,7 @@ func (d *DB) Search(ctx context.Context, query string) ([]Task, error) {
 	return d.Tasks().
 		Search(query).
 		Status().Incomplete().
+		ContextTrashed(false).
 		All(ctx)
 }
 
@@ -254,6 +268,8 @@ type AreaQuery struct {
 	db *DB
 
 	uuid         *string
+	title        *string
+	visible      *bool
 	tagTitle     any // string, bool, or nil
 	includeItems bool
 }
@@ -268,6 +284,20 @@ func (d *DB) Areas() *AreaQuery {
 // WithUUID filters areas by UUID.
 func (q *AreaQuery) WithUUID(uuid string) *AreaQuery {
 	q.uuid = &uuid
+	return q
+}
+
+// WithTitle filters areas by title.
+func (q *AreaQuery) WithTitle(title string) *AreaQuery {
+	q.title = &title
+	return q
+}
+
+// Visible filters areas by visibility status.
+// Pass true to include only visible areas.
+// Pass false to include only hidden areas.
+func (q *AreaQuery) Visible(visible bool) *AreaQuery {
+	q.visible = &visible
 	return q
 }
 
@@ -289,6 +319,12 @@ func (q *AreaQuery) buildWhere() string {
 
 	if q.uuid != nil {
 		fb.addEqual("AREA.uuid", *q.uuid)
+	}
+	if q.title != nil {
+		fb.addEqual("AREA.title", *q.title)
+	}
+	if q.visible != nil {
+		fb.addTruthy("AREA.visible", q.visible)
 	}
 	fb.addEqual("TAG.title", q.tagTitle)
 
@@ -324,6 +360,7 @@ func (q *AreaQuery) All(ctx context.Context) ([]Area, error) {
 		if q.includeItems {
 			items, err := q.db.Tasks().
 				InArea(area.UUID).
+				ContextTrashed(false).
 				IncludeItems(true).
 				All(ctx)
 			if err != nil {
@@ -366,7 +403,9 @@ func (q *AreaQuery) Count(ctx context.Context) (int, error) {
 type TagQuery struct {
 	db *DB
 
+	uuid         *string
 	title        *string
+	parentUUID   *string
 	includeItems bool
 }
 
@@ -377,9 +416,22 @@ func (d *DB) Tags() *TagQuery {
 	}
 }
 
+// WithUUID filters tags by UUID.
+func (q *TagQuery) WithUUID(uuid string) *TagQuery {
+	q.uuid = &uuid
+	return q
+}
+
 // WithTitle filters tags by title.
 func (q *TagQuery) WithTitle(title string) *TagQuery {
 	q.title = &title
+	return q
+}
+
+// WithParent filters tags by parent tag UUID.
+// Use this to find child tags of a specific parent tag.
+func (q *TagQuery) WithParent(parentUUID string) *TagQuery {
+	q.parentUUID = &parentUUID
 	return q
 }
 
@@ -393,8 +445,14 @@ func (q *TagQuery) IncludeItems(include bool) *TagQuery {
 func (q *TagQuery) buildWhere() string {
 	fb := newFilterBuilder()
 
+	if q.uuid != nil {
+		fb.addEqual("uuid", *q.uuid)
+	}
 	if q.title != nil {
 		fb.addEqual("title", *q.title)
+	}
+	if q.parentUUID != nil {
+		fb.addEqual("parent", *q.parentUUID)
 	}
 
 	return fb.sql()
@@ -422,7 +480,7 @@ func (q *TagQuery) All(ctx context.Context) ([]Tag, error) {
 			if err != nil {
 				return nil, err
 			}
-			tasks, err := q.db.Tasks().InTag(tag.Title).All(ctx)
+			tasks, err := q.db.Tasks().InTag(tag.Title).ContextTrashed(false).All(ctx)
 			if err != nil {
 				return nil, err
 			}

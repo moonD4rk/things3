@@ -157,6 +157,7 @@ type StatusFilter struct { /* internal */ }
 func (f *StatusFilter) Incomplete() *TaskQuery
 func (f *StatusFilter) Completed() *TaskQuery
 func (f *StatusFilter) Canceled() *TaskQuery
+func (f *StatusFilter) Any() *TaskQuery
 
 // StartFilter for start bucket filtering
 type StartFilter struct { /* internal */ }
@@ -187,6 +188,8 @@ type AreaQuery struct {
 func (q *AreaQuery) WithUUID(uuid string) *AreaQuery
 func (q *AreaQuery) WithTitle(title string) *AreaQuery
 func (q *AreaQuery) Visible(visible bool) *AreaQuery
+func (q *AreaQuery) InTag(tag any) *AreaQuery
+func (q *AreaQuery) IncludeItems(include bool) *AreaQuery
 
 // Terminal methods (execute query)
 func (q *AreaQuery) All(ctx context.Context) ([]Area, error)
@@ -205,6 +208,7 @@ type TagQuery struct {
 func (q *TagQuery) WithUUID(uuid string) *TagQuery
 func (q *TagQuery) WithTitle(title string) *TagQuery
 func (q *TagQuery) WithParent(parentUUID string) *TagQuery
+func (q *TagQuery) IncludeItems(include bool) *TagQuery
 
 // Terminal methods (execute query)
 func (q *TagQuery) All(ctx context.Context) ([]Tag, error)

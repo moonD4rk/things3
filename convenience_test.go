@@ -357,7 +357,7 @@ func TestCreatedWithin(t *testing.T) {
 	// Test many weeks - should return results
 	tasks, err := db.CreatedWithin(ctx, Weeks(10000))
 	require.NoError(t, err)
-	assert.Len(t, tasks, testTasksIncomplete)
+	assert.Len(t, tasks, testTasksIncompleteFiltered)
 
 	// Test months
 	_, err = db.CreatedWithin(ctx, Months(1))

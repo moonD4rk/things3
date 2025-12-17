@@ -56,6 +56,13 @@ func (f *StatusFilter) Canceled() *TaskQuery {
 	return f.query
 }
 
+// Any clears the status filter to include tasks of any status.
+// This is useful when you want to query tasks regardless of their completion state.
+func (f *StatusFilter) Any() *TaskQuery {
+	f.query.status = nil
+	return f.query
+}
+
 // =============================================================================
 // StartFilter - Type-safe start bucket filtering
 // =============================================================================

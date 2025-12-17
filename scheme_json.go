@@ -395,7 +395,7 @@ func (b *JSONBuilder) Build() (string, error) {
 		query.Set(keyReveal, "true")
 	}
 
-	return fmt.Sprintf("things:///%s?%s", CommandJSON, query.Encode()), nil
+	return fmt.Sprintf("things:///%s?%s", CommandJSON, encodeQuery(query)), nil
 }
 
 // AuthJSONBuilder builds URLs for batch operations including updates via the json command.
@@ -513,7 +513,7 @@ func (b *AuthJSONBuilder) Build() (string, error) {
 		query.Set(keyReveal, "true")
 	}
 
-	return fmt.Sprintf("things:///%s?%s", CommandJSON, query.Encode()), nil
+	return fmt.Sprintf("things:///%s?%s", CommandJSON, encodeQuery(query)), nil
 }
 
 // NewTodo creates a new JSONTodoBuilder for use with JSONBuilder.AddTodo.

@@ -165,7 +165,7 @@ func (b *UpdateTodoBuilder) Build() (string, error) {
 		query.Set(k, v)
 	}
 
-	return fmt.Sprintf("things:///%s?%s", CommandUpdate, query.Encode()), nil
+	return fmt.Sprintf("things:///%s?%s", CommandUpdate, encodeQuery(query)), nil
 }
 
 // UpdateProjectBuilder builds URLs for updating existing projects via the update-project command.
@@ -288,5 +288,5 @@ func (b *UpdateProjectBuilder) Build() (string, error) {
 		query.Set(k, v)
 	}
 
-	return fmt.Sprintf("things:///%s?%s", CommandUpdateProject, query.Encode()), nil
+	return fmt.Sprintf("things:///%s?%s", CommandUpdateProject, encodeQuery(query)), nil
 }

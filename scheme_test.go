@@ -1,6 +1,7 @@
 package things3
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -1944,4 +1945,209 @@ func TestListID_String(t *testing.T) {
 	assert.Equal(t, "repeating", ListRepeating.String())
 	assert.Equal(t, "all-projects", ListAllProjects.String())
 	assert.Equal(t, "logged-projects", ListLoggedProjects.String())
+}
+
+// =============================================================================
+// URL Encoding Tests
+// =============================================================================
+
+// TestURLEncoding_SpacesAsPercent20 verifies that spaces are encoded as %20, not +.
+// Things 3 URL Scheme expects %20 for spaces (RFC 3986), not + (HTML form encoding).
+func TestURLEncoding_SpacesAsPercent20(t *testing.T) {
+	tests := []struct {
+		name     string
+		buildURL func() (string, error)
+	}{
+		{
+			name: "TodoBuilder with space in title",
+			buildURL: func() (string, error) {
+				return NewScheme().Todo().Title("Buy groceries").Build()
+			},
+		},
+		{
+			name: "ProjectBuilder with space in title",
+			buildURL: func() (string, error) {
+				return NewScheme().Project().Title("My Project").Build()
+			},
+		},
+		{
+			name: "ShowBuilder with space in query",
+			buildURL: func() (string, error) {
+				return NewScheme().Show().Query("My Project").Build(), nil
+			},
+		},
+		{
+			name: "UpdateTodoBuilder with space in title",
+			buildURL: func() (string, error) {
+				return NewScheme().WithToken("token").UpdateTodo("uuid").Title("New Title").Build()
+			},
+		},
+		{
+			name: "UpdateProjectBuilder with space in title",
+			buildURL: func() (string, error) {
+				return NewScheme().WithToken("token").UpdateProject("uuid").Title("New Project").Build()
+			},
+		},
+		{
+			name: "JSONBuilder with space in title",
+			buildURL: func() (string, error) {
+				return NewScheme().JSON().AddTodo(func(todo *JSONTodoBuilder) {
+					todo.Title("Buy milk")
+				}).Build()
+			},
+		},
+		{
+			name: "AuthJSONBuilder with space in title",
+			buildURL: func() (string, error) {
+				return NewScheme().WithToken("token").JSON().UpdateTodo("uuid", func(todo *JSONTodoBuilder) {
+					todo.Title("New Title")
+				}).Build()
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			thingsURL, err := tt.buildURL()
+			require.NoError(t, err)
+
+			// Verify spaces are encoded as %20, not +
+			assert.NotContains(t, thingsURL, "+", "URL should not contain + for spaces")
+			assert.Contains(t, thingsURL, "%20", "URL should contain %20 for spaces")
+		})
+	}
+}
+
+// TestURLEncoding_PlusCharacterPreserved verifies that original + characters
+// in content are preserved as %2B (not confused with space encoding).
+func TestURLEncoding_PlusCharacterPreserved(t *testing.T) {
+	tests := []struct {
+		name     string
+		buildURL func() (string, error)
+	}{
+		{
+			name: "TodoBuilder with plus in title",
+			buildURL: func() (string, error) {
+				return NewScheme().Todo().Title("Learn C++").Build()
+			},
+		},
+		{
+			name: "TodoBuilder with plus in notes",
+			buildURL: func() (string, error) {
+				return NewScheme().Todo().Title("Test").Notes("1+1=2").Build()
+			},
+		},
+		{
+			name: "ProjectBuilder with plus in title",
+			buildURL: func() (string, error) {
+				return NewScheme().Project().Title("C++ Project").Build()
+			},
+		},
+		{
+			name: "Search with plus sign",
+			buildURL: func() (string, error) {
+				return NewScheme().Search("C++"), nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			thingsURL, err := tt.buildURL()
+			require.NoError(t, err)
+
+			// Verify + is encoded as %2B
+			assert.Contains(t, thingsURL, "%2B", "URL should contain %2B for + character")
+
+			// Also verify the value decodes correctly
+			cmd, params := parseThingsURL(t, thingsURL)
+			assert.NotEmpty(t, cmd)
+
+			// Check that the decoded values contain the original +
+			foundPlus := false
+			for _, values := range params {
+				for _, v := range values {
+					if strings.Contains(v, "+") {
+						foundPlus = true
+						break
+					}
+				}
+			}
+			assert.True(t, foundPlus, "Decoded URL should contain original + character")
+		})
+	}
+}
+
+// TestURLEncoding_SpaceAndPlusCombined verifies correct encoding when both
+// spaces and + characters are present in the same string.
+func TestURLEncoding_SpaceAndPlusCombined(t *testing.T) {
+	scheme := NewScheme()
+	thingsURL, err := scheme.Todo().Title("Learn C++ basics").Build()
+	require.NoError(t, err)
+
+	// Spaces should be %20
+	assert.Contains(t, thingsURL, "%20", "URL should contain %20 for spaces")
+	// Plus should be %2B
+	assert.Contains(t, thingsURL, "%2B", "URL should contain %2B for + character")
+	// No raw + (which would mean incorrectly encoded space)
+	// Note: we check the query part only, not the scheme
+	queryPart := strings.SplitN(thingsURL, "?", 2)
+	require.Len(t, queryPart, 2)
+	assert.NotContains(t, queryPart[1], "+", "Query should not contain + for spaces")
+
+	// Verify decoding works correctly
+	_, params := parseThingsURL(t, thingsURL)
+	assert.Equal(t, "Learn C++ basics", params.Get("title"))
+}
+
+// TestEncodeQuery_DirectTest directly tests the encodeQuery helper function.
+func TestEncodeQuery_DirectTest(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]string
+		contains []string
+		excludes []string
+	}{
+		{
+			name:     "space encoding",
+			input:    map[string]string{"title": "Hello World"},
+			contains: []string{"Hello%20World"},
+			excludes: []string{"Hello+World"},
+		},
+		{
+			name:     "plus encoding",
+			input:    map[string]string{"title": "C++"},
+			contains: []string{"C%2B%2B"},
+			excludes: []string{},
+		},
+		{
+			name:     "mixed space and plus",
+			input:    map[string]string{"title": "C++ tutorial"},
+			contains: []string{"%2B%2B", "%20"},
+			excludes: []string{},
+		},
+		{
+			name:     "special characters",
+			input:    map[string]string{"title": "test@example.com"},
+			contains: []string{"%40"}, // @ is encoded as %40
+			excludes: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			query := url.Values{}
+			for k, v := range tt.input {
+				query.Set(k, v)
+			}
+			encoded := encodeQuery(query)
+
+			for _, c := range tt.contains {
+				assert.Contains(t, encoded, c, "encoded query should contain %s", c)
+			}
+			for _, e := range tt.excludes {
+				assert.NotContains(t, encoded, e, "encoded query should not contain %s", e)
+			}
+		})
+	}
 }

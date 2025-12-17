@@ -3,7 +3,15 @@ package things3
 import (
 	"fmt"
 	"net/url"
+	"strings"
 )
+
+// encodeQuery encodes url.Values for Things URL scheme.
+// Things expects %20 for spaces, not + (which is standard form encoding).
+// This is safe because original + characters are encoded as %2B by url.Values.Encode().
+func encodeQuery(query url.Values) string {
+	return strings.ReplaceAll(query.Encode(), "+", "%20")
+}
 
 // Scheme provides URL building for Things URL Scheme.
 // It is stateless and can be reused for multiple URL builds.
@@ -58,7 +66,7 @@ func (s *Scheme) JSON() *JSONBuilder {
 func (s *Scheme) Search(query string) string {
 	q := url.Values{}
 	q.Set("query", query)
-	return fmt.Sprintf("things:///%s?%s", CommandSearch, q.Encode())
+	return fmt.Sprintf("things:///%s?%s", CommandSearch, encodeQuery(q))
 }
 
 // Version returns a URL to get Things version information.

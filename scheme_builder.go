@@ -130,7 +130,7 @@ func (b *TodoBuilder) Build() (string, error) {
 		query.Set(k, v)
 	}
 
-	return fmt.Sprintf("things:///%s?%s", CommandAdd, query.Encode()), nil
+	return fmt.Sprintf("things:///%s?%s", CommandAdd, encodeQuery(query)), nil
 }
 
 // ProjectBuilder builds URLs for creating new projects via the add-project command.
@@ -227,5 +227,5 @@ func (b *ProjectBuilder) Build() (string, error) {
 		query.Set(k, v)
 	}
 
-	return fmt.Sprintf("things:///%s?%s", CommandAddProject, query.Encode()), nil
+	return fmt.Sprintf("things:///%s?%s", CommandAddProject, encodeQuery(query)), nil
 }

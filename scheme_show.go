@@ -46,5 +46,5 @@ func (b *ShowBuilder) Build() string {
 	if len(query) == 0 {
 		return fmt.Sprintf("things:///%s", CommandShow)
 	}
-	return fmt.Sprintf("things:///%s?%s", CommandShow, query.Encode())
+	return fmt.Sprintf("things:///%s?%s", CommandShow, encodeQuery(query))
 }

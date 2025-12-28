@@ -109,6 +109,19 @@ func (b *TodoBuilder) Reveal(reveal bool) *TodoBuilder {
 	return setBool(b, revealParam, reveal)
 }
 
+// Reminder sets a reminder time for the to-do.
+// The reminder is combined with the scheduling date (When/WhenDate).
+// If no scheduling date is set, defaults to "today".
+// Hour must be 0-23, minute must be 0-59.
+//
+// Example:
+//
+//	scheme.Todo().Title("Meeting").When(WhenTomorrow).Reminder(14, 30) // tomorrow@14:30
+//	scheme.Todo().Title("Call").Reminder(15, 0) // today@15:00 (defaults to today)
+func (b *TodoBuilder) Reminder(hour, minute int) *TodoBuilder {
+	return setReminder(b, hour, minute)
+}
+
 // CreationDate sets the creation timestamp.
 // Future dates are ignored by Things.
 func (b *TodoBuilder) CreationDate(date time.Time) *TodoBuilder {
@@ -126,6 +139,9 @@ func (b *TodoBuilder) Build() (string, error) {
 	if b.err != nil {
 		return "", b.err
 	}
+
+	// Finalize when parameter with reminder time if set
+	b.attrs.FinalizeWhen()
 
 	query := url.Values{}
 	for k, v := range b.attrs.params {
@@ -219,6 +235,14 @@ func (b *ProjectBuilder) Reveal(reveal bool) *ProjectBuilder {
 	return setBool(b, revealParam, reveal)
 }
 
+// Reminder sets a reminder time for the project.
+// The reminder is combined with the scheduling date (When/WhenDate).
+// If no scheduling date is set, defaults to "today".
+// Hour must be 0-23, minute must be 0-59.
+func (b *ProjectBuilder) Reminder(hour, minute int) *ProjectBuilder {
+	return setReminder(b, hour, minute)
+}
+
 // CreationDate sets the creation timestamp.
 func (b *ProjectBuilder) CreationDate(date time.Time) *ProjectBuilder {
 	return setTime(b, creationDateParam, date)
@@ -234,6 +258,9 @@ func (b *ProjectBuilder) Build() (string, error) {
 	if b.err != nil {
 		return "", b.err
 	}
+
+	// Finalize when parameter with reminder time if set
+	b.attrs.FinalizeWhen()
 
 	query := url.Values{}
 	for k, v := range b.attrs.params {

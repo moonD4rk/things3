@@ -53,6 +53,14 @@ func (b *UpdateTodoBuilder) WhenDate(year int, month time.Month, day int) *Updat
 	return setDate(b, whenParam, year, month, day)
 }
 
+// Reminder sets a reminder time for the to-do.
+// The reminder is combined with the scheduling date (When/WhenDate).
+// If no scheduling date is set, defaults to "today".
+// Hour must be 0-23, minute must be 0-59.
+func (b *UpdateTodoBuilder) Reminder(hour, minute int) *UpdateTodoBuilder {
+	return setReminder(b, hour, minute)
+}
+
 // Deadline sets the deadline date.
 // Pass empty string to clear the deadline.
 func (b *UpdateTodoBuilder) Deadline(date string) *UpdateTodoBuilder {
@@ -160,6 +168,9 @@ func (b *UpdateTodoBuilder) Build() (string, error) {
 		return "", err
 	}
 
+	// Finalize when parameter with reminder time if set
+	b.attrs.FinalizeWhen()
+
 	query := url.Values{}
 	query.Set(keyID, b.id)
 	query.Set(keyAuthToken, b.token)
@@ -224,6 +235,14 @@ func (b *UpdateProjectBuilder) When(when When) *UpdateProjectBuilder {
 // WhenDate sets a specific date for scheduling.
 func (b *UpdateProjectBuilder) WhenDate(year int, month time.Month, day int) *UpdateProjectBuilder {
 	return setDate(b, whenParam, year, month, day)
+}
+
+// Reminder sets a reminder time for the project.
+// The reminder is combined with the scheduling date (When/WhenDate).
+// If no scheduling date is set, defaults to "today".
+// Hour must be 0-23, minute must be 0-59.
+func (b *UpdateProjectBuilder) Reminder(hour, minute int) *UpdateProjectBuilder {
+	return setReminder(b, hour, minute)
 }
 
 // Deadline sets the deadline date.
@@ -293,6 +312,9 @@ func (b *UpdateProjectBuilder) Build() (string, error) {
 	if err := b.validate(); err != nil {
 		return "", err
 	}
+
+	// Finalize when parameter with reminder time if set
+	b.attrs.FinalizeWhen()
 
 	query := url.Values{}
 	query.Set(keyID, b.id)

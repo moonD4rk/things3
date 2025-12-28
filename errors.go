@@ -38,4 +38,6 @@ var (
 	ErrTooManyChecklistItems = errors.New("things3: checklist exceeds 100 item limit")
 	// ErrNoJSONItems is returned when building a JSON URL with no items.
 	ErrNoJSONItems = errors.New("things3: no items provided for JSON operation")
+	// ErrInvalidReminderTime is returned when reminder hour or minute is out of range.
+	ErrInvalidReminderTime = errors.New("things3: invalid reminder time (hour must be 0-23, minute must be 0-59)")
 )

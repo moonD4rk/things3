@@ -153,9 +153,32 @@ func setWhenStr[T attrBuilder](b T, when When) T {
 	return b
 }
 
+// reminderStore is implemented by builders that support reminder functionality.
+type reminderStore interface {
+	SetReminder(hour, minute int)
+}
+
+// setReminder sets the reminder time for builders that support it.
+func setReminder[T attrBuilder](b T, hour, minute int) T {
+	if hour < 0 || hour > 23 {
+		b.setErr(ErrInvalidReminderTime)
+		return b
+	}
+	if minute < 0 || minute > 59 {
+		b.setErr(ErrInvalidReminderTime)
+		return b
+	}
+	if store, ok := b.getStore().(reminderStore); ok {
+		store.SetReminder(hour, minute)
+	}
+	return b
+}
+
 // urlAttrs stores attributes as URL query parameters (all strings).
 type urlAttrs struct {
-	params map[string]string
+	params       map[string]string
+	reminderHour *int // nil means not set
+	reminderMin  *int // nil means not set
 }
 
 // SetString sets a string parameter.
@@ -181,6 +204,29 @@ func (u *urlAttrs) SetTime(key string, t time.Time) {
 // SetDate formats date as yyyy-mm-dd string.
 func (u *urlAttrs) SetDate(key string, year int, month time.Month, day int) {
 	u.params[key] = fmt.Sprintf("%04d-%02d-%02d", year, int(month), day)
+}
+
+// SetReminder sets the reminder time (hour and minute).
+func (u *urlAttrs) SetReminder(hour, minute int) {
+	u.reminderHour = &hour
+	u.reminderMin = &minute
+}
+
+// FinalizeWhen returns the final "when" parameter value with reminder time appended.
+// If reminder is set but no "when" value exists, defaults to "today".
+// Format: "when@HH:MM" (e.g., "today@15:30", "2024-03-15@14:00")
+func (u *urlAttrs) FinalizeWhen() {
+	if u.reminderHour == nil {
+		return
+	}
+
+	when, exists := u.params[keyWhen]
+	if !exists || when == "" {
+		when = string(WhenToday) // default to today if no when specified
+	}
+
+	// Append reminder time in HH:MM format
+	u.params[keyWhen] = fmt.Sprintf("%s@%02d:%02d", when, *u.reminderHour, *u.reminderMin)
 }
 
 // jsonAttrs stores attributes as JSON values (native types).

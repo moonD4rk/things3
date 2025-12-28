@@ -5,7 +5,7 @@ Author: @moond4rk
 
 ## Summary
 
-This RFC defines the URL Scheme API layer of the things3 Go library. The `NewScheme()` entry point provides type-safe URL building for Things 3 URL Scheme commands with compile-time enforcement of authentication requirements.
+This RFC defines the URL Scheme API layer of the things3 Go library. The `NewScheme()` entry point provides type-safe URL building and execution for Things 3 URL Scheme commands with compile-time enforcement of authentication requirements.
 
 ## Motivation
 
@@ -27,7 +27,6 @@ This RFC defines the URL Scheme API layer of the things3 Go library. The `NewSch
 
 ### Non-Goals
 
-- URL execution via AppleScript (belongs in consumers like go-things3-mcp)
 - x-callback-url response handling
 - Rate limiting enforcement (document only, not enforce)
 
@@ -36,21 +35,31 @@ This RFC defines the URL Scheme API layer of the things3 Go library. The `NewSch
 ### Architecture Overview
 
 ```
-NewScheme()  -> *Scheme  (URL building, stateless)
+NewScheme(opts...)  -> *Scheme  (URL building + execution)
     |
-    +-- [No Auth Required]
+    +-- Options: WithForeground()
+    |
+    +-- [Execution Methods]
+    |   +-- Show(ctx, uuid)      -> error  (execute directly)
+    |   +-- Search(ctx, query)   -> error  (execute directly)
+    |
+    +-- [URL Building - No Auth Required]
     |   +-- Todo()        -> *TodoBuilder       -> Build() string
     |   +-- Project()     -> *ProjectBuilder    -> Build() string
-    |   +-- Show()        -> *ShowBuilder       -> Build() string
+    |   +-- ShowBuilder() -> *ShowBuilder       -> Build() string
     |   +-- JSON()        -> *JSONBuilder       -> Build() string (add only)
-    |   +-- Search(query) -> string
+    |   +-- SearchURL(query) -> string
     |   +-- Version()     -> string
     |
     +-- WithToken(token)  -> *AuthScheme  (Authenticated operations)
-        +-- UpdateTodo(id)    -> *UpdateTodoBuilder    -> Build() string
-        +-- UpdateProject(id) -> *UpdateProjectBuilder -> Build() string
+        +-- UpdateTodo(id)    -> *UpdateTodoBuilder    -> Build() | Execute(ctx)
+        +-- UpdateProject(id) -> *UpdateProjectBuilder -> Build() | Execute(ctx)
         +-- JSON()            -> *AuthJSONBuilder      -> Build() string
 ```
+
+**Execution Behavior:**
+- By default, URL scheme operations run in background using `osascript` without stealing focus
+- Use `WithForeground()` option to bring Things to foreground using `open` command
 
 ### Token Requirement Pattern
 
@@ -69,24 +78,39 @@ This ensures:
 ### Entry Points
 
 ```go
-// Scheme provides URL building for Things URL Scheme.
-type Scheme struct{}
+// Scheme provides URL building and execution for Things URL Scheme.
+type Scheme struct {
+    foreground bool
+}
+
+// SchemeOption configures Scheme behavior.
+type SchemeOption func(*Scheme)
+
+// WithForeground configures the Scheme to bring Things to foreground
+// when executing URL scheme operations.
+// By default, operations run in background without stealing focus.
+func WithForeground() SchemeOption
 
 // NewScheme creates a new URL Scheme builder.
-func NewScheme() *Scheme
+// Options can be provided to configure execution behavior.
+func NewScheme(opts ...SchemeOption) *Scheme
 ```
 
-#### Scheme Methods (No Auth Required)
+#### Scheme Methods
 
 ```go
-// Create builders
+// Execution methods (run URL scheme operations)
+func (s *Scheme) Show(ctx context.Context, uuid string) error
+func (s *Scheme) Search(ctx context.Context, query string) error
+
+// URL building methods
 func (s *Scheme) Todo() *TodoBuilder
 func (s *Scheme) Project() *ProjectBuilder
-func (s *Scheme) Show() *ShowBuilder
-func (s *Scheme) JSON() *JSONBuilder  // Only AddTodo, AddProject available
+func (s *Scheme) ShowBuilder() *ShowBuilder  // For building show URLs
+func (s *Scheme) JSON() *JSONBuilder         // Only AddTodo, AddProject available
 
-// Simple URLs
-func (s *Scheme) Search(query string) string
+// Simple URL methods
+func (s *Scheme) SearchURL(query string) string  // Returns URL string
 func (s *Scheme) Version() string
 
 // Get authenticated scheme for update operations
@@ -98,8 +122,14 @@ func (s *Scheme) WithToken(token string) *AuthScheme
 ```go
 // AuthScheme provides URL building for authenticated operations.
 // Obtained via Scheme.WithToken(token).
+//
+// AuthScheme uses pointer reference to Scheme (not embedding) to:
+// - Share configuration (foreground setting)
+// - Enable execution via scheme.execute()
+// - Hide non-auth methods (only Update* methods visible)
 type AuthScheme struct {
-    token string
+    scheme *Scheme  // Pointer reference for delegation
+    token  string
 }
 
 // Update builders
@@ -107,6 +137,10 @@ func (a *AuthScheme) UpdateTodo(id string) *UpdateTodoBuilder
 func (a *AuthScheme) UpdateProject(id string) *UpdateProjectBuilder
 func (a *AuthScheme) JSON() *AuthJSONBuilder  // AddTodo, AddProject, UpdateTodo, UpdateProject available
 ```
+
+**Design Note:** AuthScheme uses pointer reference (not embedding) to Scheme. This is intentional:
+- Embedding (`*Scheme`) would expose all Scheme methods on AuthScheme (e.g., `auth.Todo()`)
+- Pointer reference only exposes Update methods, keeping the API clean and focused
 
 ## Type System
 
@@ -205,7 +239,8 @@ func (b *TodoBuilder) Build() (string, error)
 
 ```go
 type UpdateTodoBuilder struct {
-    token  string  // Set by AuthScheme
+    scheme *Scheme  // For execution
+    token  string   // Set by AuthScheme
     id     string
     params map[string]string
     errors []error
@@ -219,8 +254,9 @@ func (b *UpdateTodoBuilder) PrependChecklistItems(items ...string) *UpdateTodoBu
 func (b *UpdateTodoBuilder) AppendChecklistItems(items ...string) *UpdateTodoBuilder
 func (b *UpdateTodoBuilder) Duplicate(duplicate bool) *UpdateTodoBuilder
 
-// Terminal method (token already set via AuthScheme)
-func (b *UpdateTodoBuilder) Build() (string, error)
+// Terminal methods
+func (b *UpdateTodoBuilder) Build() (string, error)      // Returns URL string
+func (b *UpdateTodoBuilder) Execute(ctx context.Context) error  // Builds and executes
 ```
 
 ### ProjectBuilder (for add-project command)
@@ -250,7 +286,8 @@ func (b *ProjectBuilder) Build() (string, error)
 
 ```go
 type UpdateProjectBuilder struct {
-    token  string  // Set by AuthScheme
+    scheme *Scheme  // For execution
+    token  string   // Set by AuthScheme
     id     string
     params map[string]string
     errors []error
@@ -261,8 +298,9 @@ func (b *UpdateProjectBuilder) PrependNotes(notes string) *UpdateProjectBuilder
 func (b *UpdateProjectBuilder) AppendNotes(notes string) *UpdateProjectBuilder
 func (b *UpdateProjectBuilder) AddTags(tags ...string) *UpdateProjectBuilder
 
-// Terminal method (token already set via AuthScheme)
-func (b *UpdateProjectBuilder) Build() (string, error)
+// Terminal methods
+func (b *UpdateProjectBuilder) Build() (string, error)      // Returns URL string
+func (b *UpdateProjectBuilder) Execute(ctx context.Context) error  // Builds and executes
 ```
 
 ### ShowBuilder (for show command)
@@ -399,15 +437,39 @@ token, _ := db.Token(ctx)
 scheme := things3.NewScheme()
 auth := scheme.WithToken(token)
 
-// Now update operations are available
+// Build URL only
 url, err := auth.UpdateTodo("task-uuid").
     Completed(true).
     Build()
 
-url, err := auth.UpdateTodo("task-uuid").
+// Or build and execute directly (runs in background)
+err := auth.UpdateTodo("task-uuid").
     AppendNotes("\n\nUpdate: Discussed with team").
     AddTags("reviewed", "approved").
-    Build()
+    Execute(ctx)
+```
+
+### Executing URL Scheme Operations
+
+```go
+// Default: runs in background without stealing focus
+scheme := things3.NewScheme()
+
+// Show a task in Things (background)
+err := scheme.Show(ctx, "task-uuid")
+
+// Search in Things (background)
+err := scheme.Search(ctx, "meeting notes")
+
+// Bring Things to foreground for operations
+fgScheme := things3.NewScheme(things3.WithForeground())
+err := fgScheme.Show(ctx, "task-uuid")  // Opens Things in foreground
+
+// Update with foreground execution
+auth := fgScheme.WithToken(token)
+err := auth.UpdateTodo("task-uuid").
+    Completed(true).
+    Execute(ctx)  // Brings Things to foreground
 ```
 
 ### Creating Projects
@@ -506,9 +568,10 @@ return mack.Tell("Things3", fmt.Sprintf(`open location "%s"`, url))
 
 ```text
 things3/
-├── scheme.go           # Scheme, AuthScheme types, NewScheme(), WithToken()
+├── scheme.go           # Scheme, AuthScheme types, NewScheme(), WithToken(), execution
+├── scheme_options.go   # SchemeOption, WithForeground()
 ├── scheme_builder.go   # TodoBuilder, ProjectBuilder
-├── scheme_update.go    # UpdateTodoBuilder, UpdateProjectBuilder
+├── scheme_update.go    # UpdateTodoBuilder, UpdateProjectBuilder with Execute()
 ├── scheme_show.go      # ShowBuilder
 ├── scheme_json.go      # JSONBuilder, AuthJSONBuilder, JSONItem, JSONOption
 ├── scheme_constants.go # Internal parameter keys
@@ -517,9 +580,10 @@ things3/
 
 | File | Responsibility |
 |------|----------------|
-| `scheme.go` | Entry points, NewScheme(), WithToken(), Search(), Version() |
+| `scheme.go` | Entry points, NewScheme(), WithToken(), Show(), Search(), execute() |
+| `scheme_options.go` | SchemeOption, WithForeground() |
 | `scheme_builder.go` | TodoBuilder, ProjectBuilder for create operations |
-| `scheme_update.go` | AuthScheme, UpdateTodoBuilder, UpdateProjectBuilder |
+| `scheme_update.go` | UpdateTodoBuilder, UpdateProjectBuilder with Execute() |
 | `scheme_show.go` | ShowBuilder for navigation |
 | `scheme_json.go` | JSON command builders and options |
 | `scheme_constants.go` | URL parameter key constants |
@@ -721,8 +785,10 @@ url, _ := auth.UpdateTodo("uuid").Completed(true).Build()
 | Separation of Concerns | URL building independent of database |
 | Explicit Dependencies | Token required upfront via `WithToken()` |
 | Compile-time Safety | `*AuthScheme` type only exposes update methods |
-| Stateless | `Scheme` has no state, pure functions |
-| Builder Pattern | Chainable methods with terminal `.Build()` |
+| Functional Options | `SchemeOption` for configurable behavior |
+| Background by Default | Execution uses `osascript` to avoid stealing focus |
+| Delegation Pattern | `AuthScheme` references `Scheme` for shared config |
+| Builder Pattern | Chainable methods with terminal `.Build()` or `.Execute()` |
 | Type Safety | Enums for `When`, `ListID`, `Command` |
 
 ## References

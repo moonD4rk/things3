@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**things3** is a Go library providing read-only access to the Things 3 macOS application's SQLite database. It is a Go port of the Python things.py library with full API parity.
+**things3** is a Go library providing read-only access to the Things 3 macOS application's SQLite database and type-safe URL Scheme building and execution. It is a Go port of the Python things.py library with full API parity.
 
 ## Build and Development Commands
 
@@ -29,16 +29,21 @@ go build ./...                             # Build
 
 ### Design Patterns
 
-- **Client Configuration**: Functional Options pattern
+- **DB Configuration**: Functional Options pattern (DBOption)
+- **Scheme Configuration**: Functional Options pattern (SchemeOption)
 - **Query Building**: Builder pattern with chainable methods
+- **URL Building**: Builder pattern with Build() or Execute()
 - **Convenience Methods**: Direct access for common queries
 
 ### Core Components
 
 | File | Purpose |
 |------|---------|
-| `client.go` | Client type, New(), Close() |
-| `client_options.go` | Functional options for client config |
+| `db.go` | DB type, NewDB(), Close() |
+| `db_options.go` | Functional options for DB config |
+| `scheme.go` | Scheme type, NewScheme(), URL building and execution |
+| `scheme_options.go` | SchemeOption, WithForeground() |
+| `scheme_update.go` | UpdateTodoBuilder, UpdateProjectBuilder with Execute() |
 | `query.go` | TaskQuery builder with filter methods |
 | `query_area.go` | AreaQuery builder |
 | `query_tag.go` | TagQuery builder |
@@ -48,7 +53,6 @@ go build ./...                             # Build
 | `date.go` | Things date format conversion |
 | `sql.go` | SQL query building and execution |
 | `database.go` | Database connection and path discovery |
-| `url.go` | Things URL scheme support |
 | `errors.go` | Error definitions |
 | `constants.go` | Table names, column mappings |
 
@@ -78,11 +82,11 @@ Filter methods are chainable, terminal methods execute the query:
 
 | Python | Go |
 |--------|-----|
-| `tasks(uuid=X)` | `client.Tasks().WithUUID(X).First(ctx)` |
-| `tasks(**kwargs)` | `client.Tasks().<filters>.All(ctx)` |
-| `todos()` | `client.Todos(ctx)` |
-| `inbox()` | `client.Inbox(ctx)` |
-| `today()` | `client.Today(ctx)` |
+| `tasks(uuid=X)` | `db.Tasks().WithUUID(X).First(ctx)` |
+| `tasks(**kwargs)` | `db.Tasks().<filters>.All(ctx)` |
+| `todos()` | `db.Todos(ctx)` |
+| `inbox()` | `db.Inbox(ctx)` |
+| `today()` | `db.Today(ctx)` |
 
 ## Code Quality Standards
 

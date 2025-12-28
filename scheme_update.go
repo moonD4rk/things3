@@ -1,6 +1,7 @@
 package things3
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"time"
@@ -9,10 +10,11 @@ import (
 // UpdateTodoBuilder builds URLs for updating existing to-dos via the update command.
 // Requires authentication token (obtained via AuthScheme).
 type UpdateTodoBuilder struct {
-	token string
-	id    string
-	attrs urlAttrs
-	err   error
+	scheme *Scheme
+	token  string
+	id     string
+	attrs  urlAttrs
+	err    error
 }
 
 // getStore returns the attribute store for the builder.
@@ -168,13 +170,24 @@ func (b *UpdateTodoBuilder) Build() (string, error) {
 	return fmt.Sprintf("things:///%s?%s", CommandUpdate, encodeQuery(query)), nil
 }
 
+// Execute builds and executes the update URL.
+// Returns an error if the URL cannot be built or executed.
+func (b *UpdateTodoBuilder) Execute(ctx context.Context) error {
+	uri, err := b.Build()
+	if err != nil {
+		return err
+	}
+	return b.scheme.execute(ctx, uri)
+}
+
 // UpdateProjectBuilder builds URLs for updating existing projects via the update-project command.
 // Requires authentication token (obtained via AuthScheme).
 type UpdateProjectBuilder struct {
-	token string
-	id    string
-	attrs urlAttrs
-	err   error
+	scheme *Scheme
+	token  string
+	id     string
+	attrs  urlAttrs
+	err    error
 }
 
 // getStore returns the attribute store for the builder.
@@ -289,4 +302,14 @@ func (b *UpdateProjectBuilder) Build() (string, error) {
 	}
 
 	return fmt.Sprintf("things:///%s?%s", CommandUpdateProject, encodeQuery(query)), nil
+}
+
+// Execute builds and executes the update URL.
+// Returns an error if the URL cannot be built or executed.
+func (b *UpdateProjectBuilder) Execute(ctx context.Context) error {
+	uri, err := b.Build()
+	if err != nil {
+		return err
+	}
+	return b.scheme.execute(ctx, uri)
 }

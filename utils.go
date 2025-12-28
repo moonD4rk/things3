@@ -2,6 +2,8 @@ package things3
 
 import (
 	"database/sql"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -95,4 +97,11 @@ func nullStringValue(s sql.NullString) string {
 		return ""
 	}
 	return s.String
+}
+
+// encodeQuery encodes url.Values for Things URL scheme.
+// Things expects %20 for spaces, not + (which is standard form encoding).
+// This is safe because original + characters are encoded as %2B by url.Values.Encode().
+func encodeQuery(query url.Values) string {
+	return strings.ReplaceAll(query.Encode(), "+", "%20")
 }

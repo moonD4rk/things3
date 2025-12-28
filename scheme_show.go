@@ -1,6 +1,7 @@
 package things3
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 // ShowBuilder builds URLs for navigating to items or lists via the show command.
 type ShowBuilder struct {
+	scheme *Scheme
 	params map[string]string
 }
 
@@ -47,4 +49,10 @@ func (b *ShowBuilder) Build() string {
 		return fmt.Sprintf("things:///%s", CommandShow)
 	}
 	return fmt.Sprintf("things:///%s?%s", CommandShow, encodeQuery(query))
+}
+
+// Execute builds and executes the show URL.
+func (b *ShowBuilder) Execute(ctx context.Context) error {
+	uri := b.Build()
+	return b.scheme.execute(ctx, uri)
 }

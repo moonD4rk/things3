@@ -1,55 +1,68 @@
 package things3
 
 import (
+	"context"
 	"fmt"
 	"net/url"
-	"strings"
+	"os/exec"
 )
 
-// encodeQuery encodes url.Values for Things URL scheme.
-// Things expects %20 for spaces, not + (which is standard form encoding).
-// This is safe because original + characters are encoded as %2B by url.Values.Encode().
-func encodeQuery(query url.Values) string {
-	return strings.ReplaceAll(query.Encode(), "+", "%20")
-}
-
-// Scheme provides URL building for Things URL Scheme.
-// It is stateless and can be reused for multiple URL builds.
+// Scheme provides URL building and execution for Things URL Scheme.
 //
 // Use NewScheme() to create a new instance:
 //
 //	scheme := things3.NewScheme()
 //	url, _ := scheme.Todo().Title("Buy groceries").Build()
 //
+// For executing URL scheme operations:
+//
+//	// Show a task (runs in background by default)
+//	scheme.Show(ctx, "uuid")
+//
+//	// Show a task in foreground
+//	things3.NewScheme(things3.WithForeground()).Show(ctx, "uuid")
+//
 // For operations requiring authentication (update operations),
 // use WithToken() to get an AuthScheme:
 //
+//	token, _ := db.Token(ctx)
 //	auth := scheme.WithToken(token)
-//	url, _ := auth.UpdateTodo("uuid").Completed(true).Build()
-type Scheme struct{}
+//	auth.UpdateTodo("uuid").Completed(true).Execute(ctx)
+type Scheme struct {
+	foreground bool
+}
 
 // NewScheme creates a new URL Scheme builder.
-func NewScheme() *Scheme {
-	return &Scheme{}
+// Options can be provided to configure execution behavior.
+func NewScheme(opts ...SchemeOption) *Scheme {
+	s := &Scheme{}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // Todo returns a TodoBuilder for creating a new to-do.
 func (s *Scheme) Todo() *TodoBuilder {
 	return &TodoBuilder{
-		attrs: urlAttrs{params: make(map[string]string)},
+		scheme: s,
+		attrs:  urlAttrs{params: make(map[string]string)},
 	}
 }
 
 // Project returns a ProjectBuilder for creating a new project.
 func (s *Scheme) Project() *ProjectBuilder {
 	return &ProjectBuilder{
-		attrs: urlAttrs{params: make(map[string]string)},
+		scheme: s,
+		attrs:  urlAttrs{params: make(map[string]string)},
 	}
 }
 
-// Show returns a ShowBuilder for navigating to items or lists.
-func (s *Scheme) Show() *ShowBuilder {
+// ShowBuilder returns a ShowBuilder for navigating to items or lists.
+// For direct execution, use Show(ctx, uuid) instead.
+func (s *Scheme) ShowBuilder() *ShowBuilder {
 	return &ShowBuilder{
+		scheme: s,
 		params: make(map[string]string),
 	}
 }
@@ -58,12 +71,14 @@ func (s *Scheme) Show() *ShowBuilder {
 // For operations including updates, use AuthScheme.JSON() instead.
 func (s *Scheme) JSON() *JSONBuilder {
 	return &JSONBuilder{
-		items: make([]JSONItem, 0),
+		scheme: s,
+		items:  make([]JSONItem, 0),
 	}
 }
 
-// Search returns a URL to search for the given query in Things.
-func (s *Scheme) Search(query string) string {
+// SearchURL returns a URL to search for the given query in Things.
+// For direct execution, use Search(ctx, query) instead.
+func (s *Scheme) SearchURL(query string) string {
 	q := url.Values{}
 	q.Set("query", query)
 	return fmt.Sprintf("things:///%s?%s", CommandSearch, encodeQuery(q))
@@ -82,9 +97,11 @@ func (s *Scheme) Version() string {
 //	db, _ := things3.NewDB()
 //	token, _ := db.Token(ctx)
 //	auth := scheme.WithToken(token)
+//	auth.UpdateTodo("uuid").Completed(true).Execute(ctx)
 func (s *Scheme) WithToken(token string) *AuthScheme {
 	return &AuthScheme{
-		token: token,
+		scheme: s,
+		token:  token,
 	}
 }
 
@@ -96,31 +113,64 @@ func (s *Scheme) WithToken(token string) *AuthScheme {
 //   - UpdateProject(id) - modify an existing project
 //   - JSON() - batch operations including updates
 type AuthScheme struct {
-	token string
+	scheme *Scheme
+	token  string
 }
 
 // UpdateTodo returns an UpdateTodoBuilder for modifying an existing to-do.
 func (a *AuthScheme) UpdateTodo(id string) *UpdateTodoBuilder {
 	return &UpdateTodoBuilder{
-		token: a.token,
-		id:    id,
-		attrs: urlAttrs{params: make(map[string]string)},
+		scheme: a.scheme,
+		token:  a.token,
+		id:     id,
+		attrs:  urlAttrs{params: make(map[string]string)},
 	}
 }
 
 // UpdateProject returns an UpdateProjectBuilder for modifying an existing project.
 func (a *AuthScheme) UpdateProject(id string) *UpdateProjectBuilder {
 	return &UpdateProjectBuilder{
-		token: a.token,
-		id:    id,
-		attrs: urlAttrs{params: make(map[string]string)},
+		scheme: a.scheme,
+		token:  a.token,
+		id:     id,
+		attrs:  urlAttrs{params: make(map[string]string)},
 	}
 }
 
 // JSON returns an AuthJSONBuilder for batch operations including updates.
 func (a *AuthScheme) JSON() *AuthJSONBuilder {
 	return &AuthJSONBuilder{
-		token: a.token,
-		items: make([]JSONItem, 0),
+		scheme: a.scheme,
+		token:  a.token,
+		items:  make([]JSONItem, 0),
 	}
+}
+
+// execute opens a Things URL scheme.
+// By default, uses osascript to run in background without stealing focus.
+// If foreground is true, uses open command to bring Things to foreground.
+func (s *Scheme) execute(ctx context.Context, uri string) error {
+	if s.foreground {
+		return exec.CommandContext(ctx, "open", uri).Run()
+	}
+	script := fmt.Sprintf("open location %q", uri)
+	return exec.CommandContext(ctx, "osascript", "-e", script).Run()
+}
+
+// Show opens Things and shows the item with the given UUID.
+// By default, runs in background without stealing focus.
+// Use WithForeground() option to bring Things to foreground.
+func (s *Scheme) Show(ctx context.Context, uuid string) error {
+	uri := s.ShowBuilder().ID(uuid).Build()
+	return s.execute(ctx, uri)
+}
+
+// Search opens Things and performs a search for the given query.
+// By default, runs in background without stealing focus.
+// Use WithForeground() option to bring Things to foreground.
+func (s *Scheme) Search(ctx context.Context, query string) error {
+	q := url.Values{}
+	q.Set("query", query)
+	uri := fmt.Sprintf("things:///%s?%s", CommandSearch, encodeQuery(q))
+	return s.execute(ctx, uri)
 }

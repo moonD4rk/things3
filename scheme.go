@@ -169,8 +169,6 @@ func (s *Scheme) Show(ctx context.Context, uuid string) error {
 // By default, runs in background without stealing focus.
 // Use WithForeground() option to bring Things to foreground.
 func (s *Scheme) Search(ctx context.Context, query string) error {
-	q := url.Values{}
-	q.Set("query", query)
-	uri := fmt.Sprintf("things:///%s?%s", CommandSearch, encodeQuery(q))
+	uri := s.SearchURL(query)
 	return s.execute(ctx, uri)
 }

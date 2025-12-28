@@ -2159,3 +2159,171 @@ func TestEncodeQuery_DirectTest(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// Reminder Tests
+// =============================================================================
+
+func TestTodoBuilder_Reminder_WithWhen(t *testing.T) {
+	scheme := NewScheme()
+	thingsURL, err := scheme.Todo().
+		Title("Meeting").
+		When(WhenTomorrow).
+		Reminder(14, 30).
+		Build()
+	require.NoError(t, err)
+
+	cmd, params := parseThingsURL(t, thingsURL)
+	assert.Equal(t, "add", cmd)
+	assert.Equal(t, "Meeting", params.Get("title"))
+	assert.Equal(t, "tomorrow@14:30", params.Get("when"))
+}
+
+func TestTodoBuilder_Reminder_WithWhenDate(t *testing.T) {
+	scheme := NewScheme()
+	thingsURL, err := scheme.Todo().
+		Title("Appointment").
+		WhenDate(2025, time.March, 15).
+		Reminder(9, 0).
+		Build()
+	require.NoError(t, err)
+
+	cmd, params := parseThingsURL(t, thingsURL)
+	assert.Equal(t, "add", cmd)
+	assert.Equal(t, "Appointment", params.Get("title"))
+	assert.Equal(t, "2025-03-15@09:00", params.Get("when"))
+}
+
+func TestTodoBuilder_Reminder_DefaultsToToday(t *testing.T) {
+	scheme := NewScheme()
+	thingsURL, err := scheme.Todo().
+		Title("Call").
+		Reminder(15, 0).
+		Build()
+	require.NoError(t, err)
+
+	cmd, params := parseThingsURL(t, thingsURL)
+	assert.Equal(t, "add", cmd)
+	assert.Equal(t, "Call", params.Get("title"))
+	assert.Equal(t, "today@15:00", params.Get("when"))
+}
+
+func TestTodoBuilder_Reminder_WithEvening(t *testing.T) {
+	scheme := NewScheme()
+	thingsURL, err := scheme.Todo().
+		Title("Dry cleaning").
+		When(WhenEvening).
+		Reminder(18, 0).
+		Build()
+	require.NoError(t, err)
+
+	cmd, params := parseThingsURL(t, thingsURL)
+	assert.Equal(t, "add", cmd)
+	assert.Equal(t, "Dry cleaning", params.Get("title"))
+	assert.Equal(t, "evening@18:00", params.Get("when"))
+}
+
+func TestTodoBuilder_Reminder_InvalidHour(t *testing.T) {
+	scheme := NewScheme()
+	_, err := scheme.Todo().
+		Title("Test").
+		Reminder(24, 0).
+		Build()
+	require.ErrorIs(t, err, ErrInvalidReminderTime)
+
+	_, err = scheme.Todo().
+		Title("Test").
+		Reminder(-1, 0).
+		Build()
+	require.ErrorIs(t, err, ErrInvalidReminderTime)
+}
+
+func TestTodoBuilder_Reminder_InvalidMinute(t *testing.T) {
+	scheme := NewScheme()
+	_, err := scheme.Todo().
+		Title("Test").
+		Reminder(10, 60).
+		Build()
+	require.ErrorIs(t, err, ErrInvalidReminderTime)
+
+	_, err = scheme.Todo().
+		Title("Test").
+		Reminder(10, -1).
+		Build()
+	require.ErrorIs(t, err, ErrInvalidReminderTime)
+}
+
+func TestProjectBuilder_Reminder(t *testing.T) {
+	scheme := NewScheme()
+	thingsURL, err := scheme.Project().
+		Title("Project").
+		WhenDate(2025, time.June, 1).
+		Reminder(10, 15).
+		Build()
+	require.NoError(t, err)
+
+	cmd, params := parseThingsURL(t, thingsURL)
+	assert.Equal(t, "add-project", cmd)
+	assert.Equal(t, "Project", params.Get("title"))
+	assert.Equal(t, "2025-06-01@10:15", params.Get("when"))
+}
+
+func TestProjectBuilder_Reminder_DefaultsToToday(t *testing.T) {
+	scheme := NewScheme()
+	thingsURL, err := scheme.Project().
+		Title("Project").
+		Reminder(8, 30).
+		Build()
+	require.NoError(t, err)
+
+	cmd, params := parseThingsURL(t, thingsURL)
+	assert.Equal(t, "add-project", cmd)
+	assert.Equal(t, "Project", params.Get("title"))
+	assert.Equal(t, "today@08:30", params.Get("when"))
+}
+
+func TestUpdateTodoBuilder_Reminder(t *testing.T) {
+	scheme := NewScheme()
+	auth := scheme.WithToken("test-token")
+	thingsURL, err := auth.UpdateTodo("uuid-123").
+		When(WhenToday).
+		Reminder(16, 45).
+		Build()
+	require.NoError(t, err)
+
+	cmd, params := parseThingsURL(t, thingsURL)
+	assert.Equal(t, "update", cmd)
+	assert.Equal(t, "uuid-123", params.Get("id"))
+	assert.Equal(t, "test-token", params.Get("auth-token"))
+	assert.Equal(t, "today@16:45", params.Get("when"))
+}
+
+func TestUpdateTodoBuilder_Reminder_DefaultsToToday(t *testing.T) {
+	scheme := NewScheme()
+	auth := scheme.WithToken("test-token")
+	thingsURL, err := auth.UpdateTodo("uuid-123").
+		Reminder(12, 0).
+		Build()
+	require.NoError(t, err)
+
+	cmd, params := parseThingsURL(t, thingsURL)
+	assert.Equal(t, "update", cmd)
+	assert.Equal(t, "uuid-123", params.Get("id"))
+	assert.Equal(t, "today@12:00", params.Get("when"))
+}
+
+func TestUpdateProjectBuilder_Reminder(t *testing.T) {
+	scheme := NewScheme()
+	auth := scheme.WithToken("test-token")
+	thingsURL, err := auth.UpdateProject("project-uuid").
+		WhenDate(2025, time.July, 4).
+		Reminder(9, 0).
+		Build()
+	require.NoError(t, err)
+
+	cmd, params := parseThingsURL(t, thingsURL)
+	assert.Equal(t, "update-project", cmd)
+	assert.Equal(t, "project-uuid", params.Get("id"))
+	assert.Equal(t, "test-token", params.Get("auth-token"))
+	assert.Equal(t, "2025-07-04@09:00", params.Get("when"))
+}

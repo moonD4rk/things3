@@ -15,6 +15,14 @@ func TestNewScheme(t *testing.T) {
 	assert.NotNil(t, scheme)
 }
 
+func TestSchemeWithForeground(t *testing.T) {
+	scheme := NewScheme(WithForeground())
+	assert.True(t, scheme.foreground, "WithForeground() should set foreground to true")
+
+	schemeDefault := NewScheme()
+	assert.False(t, schemeDefault.foreground, "Default scheme should have foreground false")
+}
+
 // =============================================================================
 // TodoBuilder Tests
 // =============================================================================
@@ -526,7 +534,7 @@ func TestProjectBuilder_FullProject(t *testing.T) {
 
 func TestShowBuilder_ID(t *testing.T) {
 	scheme := NewScheme()
-	thingsURL := scheme.Show().ID("uuid-123").Build()
+	thingsURL := scheme.ShowBuilder().ID("uuid-123").Build()
 
 	cmd, params := parseThingsURL(t, thingsURL)
 	assert.Equal(t, "show", cmd)
@@ -554,7 +562,7 @@ func TestShowBuilder_List(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(string(tt.list), func(t *testing.T) {
 			scheme := NewScheme()
-			thingsURL := scheme.Show().List(tt.list).Build()
+			thingsURL := scheme.ShowBuilder().List(tt.list).Build()
 
 			cmd, params := parseThingsURL(t, thingsURL)
 			require.Equal(t, "show", cmd)
@@ -565,7 +573,7 @@ func TestShowBuilder_List(t *testing.T) {
 
 func TestShowBuilder_Query(t *testing.T) {
 	scheme := NewScheme()
-	thingsURL := scheme.Show().Query("My Project").Build()
+	thingsURL := scheme.ShowBuilder().Query("My Project").Build()
 
 	cmd, params := parseThingsURL(t, thingsURL)
 	assert.Equal(t, "show", cmd)
@@ -574,7 +582,7 @@ func TestShowBuilder_Query(t *testing.T) {
 
 func TestShowBuilder_Filter(t *testing.T) {
 	scheme := NewScheme()
-	thingsURL := scheme.Show().List(ListToday).Filter("work", "urgent").Build()
+	thingsURL := scheme.ShowBuilder().List(ListToday).Filter("work", "urgent").Build()
 
 	cmd, params := parseThingsURL(t, thingsURL)
 	assert.Equal(t, "show", cmd)
@@ -584,7 +592,7 @@ func TestShowBuilder_Filter(t *testing.T) {
 
 func TestShowBuilder_NoParams(t *testing.T) {
 	scheme := NewScheme()
-	thingsURL := scheme.Show().Build()
+	thingsURL := scheme.ShowBuilder().Build()
 	assert.Equal(t, "things:///show", thingsURL)
 }
 
@@ -594,7 +602,7 @@ func TestShowBuilder_NoParams(t *testing.T) {
 
 func TestScheme_Search(t *testing.T) {
 	scheme := NewScheme()
-	thingsURL := scheme.Search("my query")
+	thingsURL := scheme.SearchURL("my query")
 
 	cmd, params := parseThingsURL(t, thingsURL)
 	assert.Equal(t, "search", cmd)
@@ -1973,7 +1981,7 @@ func TestURLEncoding_SpacesAsPercent20(t *testing.T) {
 		{
 			name: "ShowBuilder with space in query",
 			buildURL: func() (string, error) {
-				return NewScheme().Show().Query("My Project").Build(), nil
+				return NewScheme().ShowBuilder().Query("My Project").Build(), nil
 			},
 		},
 		{
@@ -2046,7 +2054,7 @@ func TestURLEncoding_PlusCharacterPreserved(t *testing.T) {
 		{
 			name: "Search with plus sign",
 			buildURL: func() (string, error) {
-				return NewScheme().Search("C++"), nil
+				return NewScheme().SearchURL("C++"), nil
 			},
 		},
 	}

@@ -1,6 +1,7 @@
 package things3
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -330,6 +331,7 @@ func (p *JSONProjectBuilder) build() (JSONItem, error) {
 // JSONBuilder builds URLs for batch create operations via the json command.
 // Does not support update operations; use AuthJSONBuilder for updates.
 type JSONBuilder struct {
+	scheme *Scheme
 	items  []JSONItem
 	reveal bool
 	err    error
@@ -398,9 +400,20 @@ func (b *JSONBuilder) Build() (string, error) {
 	return fmt.Sprintf("things:///%s?%s", CommandJSON, encodeQuery(query)), nil
 }
 
+// Execute builds and executes the JSON batch URL.
+// Returns an error if the URL cannot be built or executed.
+func (b *JSONBuilder) Execute(ctx context.Context) error {
+	uri, err := b.Build()
+	if err != nil {
+		return err
+	}
+	return b.scheme.execute(ctx, uri)
+}
+
 // AuthJSONBuilder builds URLs for batch operations including updates via the json command.
 // Requires authentication token for update operations.
 type AuthJSONBuilder struct {
+	scheme *Scheme
 	token  string
 	items  []JSONItem
 	reveal bool
@@ -514,6 +527,16 @@ func (b *AuthJSONBuilder) Build() (string, error) {
 	}
 
 	return fmt.Sprintf("things:///%s?%s", CommandJSON, encodeQuery(query)), nil
+}
+
+// Execute builds and executes the JSON batch URL.
+// Returns an error if the URL cannot be built or executed.
+func (b *AuthJSONBuilder) Execute(ctx context.Context) error {
+	uri, err := b.Build()
+	if err != nil {
+		return err
+	}
+	return b.scheme.execute(ctx, uri)
 }
 
 // NewTodo creates a new JSONTodoBuilder for use with JSONBuilder.AddTodo.

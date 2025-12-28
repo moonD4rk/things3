@@ -1,6 +1,7 @@
 package things3
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
@@ -9,8 +10,9 @@ import (
 
 // TodoBuilder builds URLs for creating new to-dos via the add command.
 type TodoBuilder struct {
-	attrs urlAttrs
-	err   error
+	scheme *Scheme
+	attrs  urlAttrs
+	err    error
 }
 
 // getStore returns the attribute store for the builder.
@@ -133,10 +135,21 @@ func (b *TodoBuilder) Build() (string, error) {
 	return fmt.Sprintf("things:///%s?%s", CommandAdd, encodeQuery(query)), nil
 }
 
+// Execute builds and executes the add URL.
+// Returns an error if the URL cannot be built or executed.
+func (b *TodoBuilder) Execute(ctx context.Context) error {
+	uri, err := b.Build()
+	if err != nil {
+		return err
+	}
+	return b.scheme.execute(ctx, uri)
+}
+
 // ProjectBuilder builds URLs for creating new projects via the add-project command.
 type ProjectBuilder struct {
-	attrs urlAttrs
-	err   error
+	scheme *Scheme
+	attrs  urlAttrs
+	err    error
 }
 
 // getStore returns the attribute store for the builder.
@@ -228,4 +241,14 @@ func (b *ProjectBuilder) Build() (string, error) {
 	}
 
 	return fmt.Sprintf("things:///%s?%s", CommandAddProject, encodeQuery(query)), nil
+}
+
+// Execute builds and executes the add-project URL.
+// Returns an error if the URL cannot be built or executed.
+func (b *ProjectBuilder) Execute(ctx context.Context) error {
+	uri, err := b.Build()
+	if err != nil {
+		return err
+	}
+	return b.scheme.execute(ctx, uri)
 }

@@ -5,7 +5,7 @@ Author: @moond4rk
 
 ## Summary
 
-things3 is a Go library providing read-only access to the Things 3 macOS application's SQLite database and type-safe URL Scheme building. It is a complete port of the Python things.py library with full API parity, plus a modern URL builder API.
+things3 is a Go library providing read-only access to the Things 3 macOS application's SQLite database and type-safe URL Scheme building and execution. It is a complete port of the Python things.py library with full API parity, plus a modern URL builder API with background execution support.
 
 ## Architecture
 
@@ -21,19 +21,25 @@ things3 library
 |   +-- Query Builders: Todos(), Projects(), Areas(), Tags()
 |   +-- Auth Token: Token() -> for URL Scheme update operations
 |
-+-- NewScheme()  -> *Scheme  (URL building, stateless)
++-- NewScheme(opts...)  -> *Scheme  (URL building + execution)
     |
-    +-- [No Auth Required]
+    +-- Options: WithForeground()
+    |
+    +-- [Execution Methods]
+    |   +-- Show(ctx, uuid)      -> error
+    |   +-- Search(ctx, query)   -> error
+    |
+    +-- [URL Building - No Auth Required]
     |   +-- Todo()        -> *TodoBuilder       -> Build() string
     |   +-- Project()     -> *ProjectBuilder    -> Build() string
-    |   +-- Show()        -> *ShowBuilder       -> Build() string
+    |   +-- ShowBuilder() -> *ShowBuilder       -> Build() string
     |   +-- JSON()        -> *JSONBuilder       -> Build() string
-    |   +-- Search(query) -> string
+    |   +-- SearchURL(query) -> string
     |   +-- Version()     -> string
     |
     +-- WithToken(token)  -> *AuthScheme  (Authenticated operations)
-        +-- UpdateTodo(id)    -> *UpdateTodoBuilder    -> Build() string
-        +-- UpdateProject(id) -> *UpdateProjectBuilder -> Build() string
+        +-- UpdateTodo(id)    -> *UpdateTodoBuilder    -> Build() | Execute(ctx)
+        +-- UpdateProject(id) -> *UpdateProjectBuilder -> Build() | Execute(ctx)
         +-- JSON()            -> *AuthJSONBuilder      -> Build() string
 ```
 
@@ -41,11 +47,12 @@ things3 library
 
 | Principle | Implementation |
 |-----------|----------------|
-| Separation of Concerns | `NewDB()` for data, `NewScheme()` for URLs |
+| Separation of Concerns | `NewDB()` for data, `NewScheme()` for URLs and execution |
 | Compile-time Safety | `WithToken()` enforces auth requirements at compile time |
-| Builder Pattern | Chainable methods with terminal execution |
-| Context-First | DB queries accept `context.Context` |
-| Stateless URL Building | `Scheme` is pure, no side effects |
+| Functional Options | `SchemeOption` for configurable behavior |
+| Background by Default | URL execution uses `osascript` to avoid stealing focus |
+| Builder Pattern | Chainable methods with terminal `.Build()` or `.Execute()` |
+| Context-First | DB queries and execution accept `context.Context` |
 
 ## RFC Index
 
@@ -83,8 +90,7 @@ things3 library
 2. HTTP/gRPC service wrapper (library only)
 3. Cross-platform support (macOS only, matching Things 3 availability)
 4. Real-time sync or change detection
-5. URL execution via AppleScript (belongs in consumers)
-6. x-callback-url response handling
+5. x-callback-url response handling
 
 ## Core Decisions
 
@@ -98,7 +104,7 @@ things3 library
 
 **Entry Points**:
 - `NewDB()` - Database operations (stateful, requires connection)
-- `NewScheme()` - URL building (stateless, pure functions)
+- `NewScheme(opts...)` - URL building and execution (configurable via `SchemeOption`)
 
 **Token Handling**: `WithToken()` pattern
 - Token required upfront for update operations

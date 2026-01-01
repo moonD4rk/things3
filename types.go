@@ -192,26 +192,19 @@ func (c Command) String() string {
 	return string(c)
 }
 
-// When represents scheduling values for the "when" parameter in URL scheme.
-type When string
+// when represents scheduling values for the "when" parameter in URL scheme.
+// This is a private type; use When(time.Time) for dates or WhenEvening(),
+// WhenAnytime(), WhenSomeday() methods for Things 3-specific concepts.
+type when string
 
 const (
-	// WhenToday schedules for today.
-	WhenToday When = "today"
-	// WhenTomorrow schedules for tomorrow.
-	WhenTomorrow When = "tomorrow"
-	// WhenEvening schedules for this evening.
-	WhenEvening When = "evening"
-	// WhenAnytime schedules for anytime.
-	WhenAnytime When = "anytime"
-	// WhenSomeday schedules for someday.
-	WhenSomeday When = "someday"
+	// whenEvening schedules for this evening.
+	whenEvening when = "evening"
+	// whenAnytime schedules for anytime.
+	whenAnytime when = "anytime"
+	// whenSomeday schedules for someday.
+	whenSomeday when = "someday"
 )
-
-// String returns the string representation of the When value.
-func (w When) String() string {
-	return string(w)
-}
 
 // ListID represents built-in Things list identifiers for the show command.
 type ListID string

@@ -63,45 +63,53 @@ func TestTodoBuilder_NotesTooLong(t *testing.T) {
 }
 
 func TestTodoBuilder_When(t *testing.T) {
-	tests := []struct {
-		when     When
-		expected string
-	}{
-		{WhenToday, "today"},
-		{WhenTomorrow, "tomorrow"},
-		{WhenEvening, "evening"},
-		{WhenAnytime, "anytime"},
-		{WhenSomeday, "someday"},
-	}
-
-	for _, tt := range tests {
-		t.Run(string(tt.when), func(t *testing.T) {
-			scheme := NewScheme()
-			thingsURL, err := scheme.Todo().Title("Test").When(tt.when).Build()
-			require.NoError(t, err)
-
-			cmd, params := parseThingsURL(t, thingsURL)
-			require.Equal(t, "add", cmd)
-			require.Equal(t, "Test", params.Get("title"))
-			require.Equal(t, tt.expected, params.Get("when"))
-		})
-	}
-}
-
-func TestTodoBuilder_WhenDate(t *testing.T) {
 	scheme := NewScheme()
-	thingsURL, err := scheme.Todo().Title("Test").WhenDate(2025, time.December, 25).Build()
+
+	// Test with time.Time
+	testDate := time.Date(2025, 6, 15, 0, 0, 0, 0, time.Local)
+	thingsURL, err := scheme.Todo().Title("Test").When(testDate).Build()
 	require.NoError(t, err)
 
 	cmd, params := parseThingsURL(t, thingsURL)
-	assert.Equal(t, "add", cmd)
+	require.Equal(t, "add", cmd)
 	require.Equal(t, "Test", params.Get("title"))
-	require.Equal(t, "2025-12-25", params.Get("when"))
+	require.Equal(t, "2025-06-15", params.Get("when"))
+}
+
+func TestTodoBuilder_WhenEvening(t *testing.T) {
+	scheme := NewScheme()
+	thingsURL, err := scheme.Todo().Title("Test").WhenEvening().Build()
+	require.NoError(t, err)
+
+	cmd, params := parseThingsURL(t, thingsURL)
+	require.Equal(t, "add", cmd)
+	require.Equal(t, "evening", params.Get("when"))
+}
+
+func TestTodoBuilder_WhenAnytime(t *testing.T) {
+	scheme := NewScheme()
+	thingsURL, err := scheme.Todo().Title("Test").WhenAnytime().Build()
+	require.NoError(t, err)
+
+	cmd, params := parseThingsURL(t, thingsURL)
+	require.Equal(t, "add", cmd)
+	require.Equal(t, "anytime", params.Get("when"))
+}
+
+func TestTodoBuilder_WhenSomeday(t *testing.T) {
+	scheme := NewScheme()
+	thingsURL, err := scheme.Todo().Title("Test").WhenSomeday().Build()
+	require.NoError(t, err)
+
+	cmd, params := parseThingsURL(t, thingsURL)
+	require.Equal(t, "add", cmd)
+	require.Equal(t, "someday", params.Get("when"))
 }
 
 func TestTodoBuilder_Deadline(t *testing.T) {
 	scheme := NewScheme()
-	thingsURL, err := scheme.Todo().Title("Test").Deadline("2025-12-31").Build()
+	deadline := time.Date(2025, 12, 31, 0, 0, 0, 0, time.Local)
+	thingsURL, err := scheme.Todo().Title("Test").Deadline(deadline).Build()
 	require.NoError(t, err)
 
 	cmd, params := parseThingsURL(t, thingsURL)
@@ -294,7 +302,7 @@ func TestTodoBuilder_Chained(t *testing.T) {
 	thingsURL, err := scheme.Todo().
 		Title("Buy groceries").
 		Notes("Don't forget milk").
-		When(WhenToday).
+		When(Today()).
 		Tags("shopping").
 		Reveal(true).
 		Build()
@@ -304,7 +312,8 @@ func TestTodoBuilder_Chained(t *testing.T) {
 	assert.Equal(t, "add", cmd)
 	require.Equal(t, "Buy groceries", params.Get("title"))
 	require.Equal(t, "Don't forget milk", params.Get("notes"))
-	require.Equal(t, "today", params.Get("when"))
+	// Today() returns today's date in yyyy-mm-dd format
+	require.NotEmpty(t, params.Get("when"))
 	require.Equal(t, "shopping", params.Get("tags"))
 	require.Equal(t, "true", params.Get("reveal"))
 }
@@ -377,9 +386,9 @@ func TestProjectBuilder_Notes(t *testing.T) {
 	require.Equal(t, "Quarterly objectives and key results", params.Get("notes"))
 }
 
-func TestProjectBuilder_When(t *testing.T) {
+func TestProjectBuilder_WhenSomeday(t *testing.T) {
 	scheme := NewScheme()
-	thingsURL, err := scheme.Project().Title("Future Project").When(WhenSomeday).Build()
+	thingsURL, err := scheme.Project().Title("Future Project").WhenSomeday().Build()
 	require.NoError(t, err)
 
 	cmd, params := parseThingsURL(t, thingsURL)
@@ -388,11 +397,11 @@ func TestProjectBuilder_When(t *testing.T) {
 	require.Equal(t, "someday", params.Get("when"))
 }
 
-func TestProjectBuilder_WhenDate(t *testing.T) {
+func TestProjectBuilder_When(t *testing.T) {
 	scheme := NewScheme()
 	thingsURL, err := scheme.Project().
 		Title("Launch").
-		WhenDate(2025, time.March, 1).
+		When(time.Date(2025, time.March, 1, 0, 0, 0, 0, time.Local)).
 		Build()
 	require.NoError(t, err)
 
@@ -406,7 +415,7 @@ func TestProjectBuilder_Deadline(t *testing.T) {
 	scheme := NewScheme()
 	thingsURL, err := scheme.Project().
 		Title("Release v2.0").
-		Deadline("2025-06-30").
+		Deadline(time.Date(2025, time.June, 30, 0, 0, 0, 0, time.Local)).
 		Build()
 	require.NoError(t, err)
 
@@ -511,7 +520,7 @@ func TestProjectBuilder_FullProject(t *testing.T) {
 		Notes("Launch plan for v2.0").
 		Area("Work").
 		Tags("priority").
-		Deadline("2025-03-31").
+		Deadline(time.Date(2025, time.March, 31, 0, 0, 0, 0, time.Local)).
 		Todos("Design", "Development", "Testing", "Release").
 		Reveal(true).
 		Build()
@@ -738,29 +747,29 @@ func TestUpdateTodoBuilder_Notes(t *testing.T) {
 func TestUpdateTodoBuilder_When(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	thingsURL, err := auth.UpdateTodo("uuid").When(WhenTomorrow).Build()
+	thingsURL, err := auth.UpdateTodo("uuid").When(time.Date(2025, time.January, 15, 0, 0, 0, 0, time.Local)).Build()
 	require.NoError(t, err)
 
 	cmd, params := parseThingsURL(t, thingsURL)
 	assert.Equal(t, "update", cmd)
-	require.Equal(t, "tomorrow", params.Get("when"))
+	require.Equal(t, "2025-01-15", params.Get("when"))
 }
 
-func TestUpdateTodoBuilder_WhenDate(t *testing.T) {
+func TestUpdateTodoBuilder_WhenAnytime(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	thingsURL, err := auth.UpdateTodo("uuid").WhenDate(2025, time.February, 14).Build()
+	thingsURL, err := auth.UpdateTodo("uuid").WhenAnytime().Build()
 	require.NoError(t, err)
 
 	cmd, params := parseThingsURL(t, thingsURL)
 	assert.Equal(t, "update", cmd)
-	require.Equal(t, "2025-02-14", params.Get("when"))
+	require.Equal(t, "anytime", params.Get("when"))
 }
 
 func TestUpdateTodoBuilder_Deadline(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	thingsURL, err := auth.UpdateTodo("uuid").Deadline("2025-01-31").Build()
+	thingsURL, err := auth.UpdateTodo("uuid").Deadline(time.Date(2025, time.January, 31, 0, 0, 0, 0, time.Local)).Build()
 	require.NoError(t, err)
 
 	cmd, params := parseThingsURL(t, thingsURL)
@@ -983,10 +992,10 @@ func TestUpdateProjectBuilder_AppendNotes(t *testing.T) {
 	require.Equal(t, "\n- Added new requirement", params.Get("append-notes"))
 }
 
-func TestUpdateProjectBuilder_When(t *testing.T) {
+func TestUpdateProjectBuilder_WhenAnytime(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	thingsURL, err := auth.UpdateProject("uuid").When(WhenAnytime).Build()
+	thingsURL, err := auth.UpdateProject("uuid").WhenAnytime().Build()
 	require.NoError(t, err)
 
 	cmd, params := parseThingsURL(t, thingsURL)
@@ -994,10 +1003,10 @@ func TestUpdateProjectBuilder_When(t *testing.T) {
 	require.Equal(t, "anytime", params.Get("when"))
 }
 
-func TestUpdateProjectBuilder_WhenDate(t *testing.T) {
+func TestUpdateProjectBuilder_When(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	thingsURL, err := auth.UpdateProject("uuid").WhenDate(2025, time.April, 1).Build()
+	thingsURL, err := auth.UpdateProject("uuid").When(time.Date(2025, time.April, 1, 0, 0, 0, 0, time.Local)).Build()
 	require.NoError(t, err)
 
 	cmd, params := parseThingsURL(t, thingsURL)
@@ -1008,7 +1017,7 @@ func TestUpdateProjectBuilder_WhenDate(t *testing.T) {
 func TestUpdateProjectBuilder_Deadline(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
-	thingsURL, err := auth.UpdateProject("uuid").Deadline("2025-12-31").Build()
+	thingsURL, err := auth.UpdateProject("uuid").Deadline(time.Date(2025, time.December, 31, 0, 0, 0, 0, time.Local)).Build()
 	require.NoError(t, err)
 
 	cmd, params := parseThingsURL(t, thingsURL)
@@ -1282,14 +1291,14 @@ func TestJSONTodoBuilder_When(t *testing.T) {
 	scheme := NewScheme()
 	thingsURL, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
-			todo.Title("Test").When(WhenToday)
+			todo.Title("Test").When(time.Date(2025, time.January, 15, 0, 0, 0, 0, time.Local))
 		}).
 		Build()
 	require.NoError(t, err)
 
 	require.Equal(t, []JSONItem{{
 		Type:       JSONItemTypeTodo,
-		Attributes: map[string]any{"title": "Test", "when": "today"},
+		Attributes: map[string]any{"title": "Test", "when": "2025-01-15"},
 	}}, parseJSONItems(t, thingsURL))
 }
 
@@ -1340,7 +1349,7 @@ func TestJSONTodoBuilder_WhenDate(t *testing.T) {
 	scheme := NewScheme()
 	thingsURL, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
-			todo.Title("Test").WhenDate(2025, time.March, 15)
+			todo.Title("Test").When(time.Date(2025, time.March, 15, 0, 0, 0, 0, time.Local))
 		}).
 		Build()
 	require.NoError(t, err)
@@ -1356,7 +1365,7 @@ func TestJSONTodoBuilder_Deadline(t *testing.T) {
 	scheme := NewScheme()
 	thingsURL, err := scheme.JSON().
 		AddTodo(func(todo *JSONTodoBuilder) {
-			todo.Title("Test").Deadline("2025-06-30")
+			todo.Title("Test").Deadline(time.Date(2025, time.June, 30, 0, 0, 0, 0, time.Local))
 		}).
 		Build()
 	require.NoError(t, err)
@@ -1640,12 +1649,12 @@ func TestJSONProjectBuilder_Notes(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestJSONProjectBuilder_When tests scheduling project
-func TestJSONProjectBuilder_When(t *testing.T) {
+// TestJSONProjectBuilder_WhenSomeday tests scheduling project for someday
+func TestJSONProjectBuilder_WhenSomeday(t *testing.T) {
 	scheme := NewScheme()
 	thingsURL, err := scheme.JSON().
 		AddProject(func(project *JSONProjectBuilder) {
-			project.Title("Test").When(WhenSomeday)
+			project.Title("Test").WhenSomeday()
 		}).
 		Build()
 	require.NoError(t, err)
@@ -1656,12 +1665,12 @@ func TestJSONProjectBuilder_When(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestJSONProjectBuilder_WhenDate tests scheduling to specific date
-func TestJSONProjectBuilder_WhenDate(t *testing.T) {
+// TestJSONProjectBuilder_When tests scheduling to specific date
+func TestJSONProjectBuilder_When(t *testing.T) {
 	scheme := NewScheme()
 	thingsURL, err := scheme.JSON().
 		AddProject(func(project *JSONProjectBuilder) {
-			project.Title("Test").WhenDate(2025, time.July, 1)
+			project.Title("Test").When(time.Date(2025, time.July, 1, 0, 0, 0, 0, time.Local))
 		}).
 		Build()
 	require.NoError(t, err)
@@ -1677,7 +1686,7 @@ func TestJSONProjectBuilder_Deadline(t *testing.T) {
 	scheme := NewScheme()
 	thingsURL, err := scheme.JSON().
 		AddProject(func(project *JSONProjectBuilder) {
-			project.Title("Test").Deadline("2025-12-31")
+			project.Title("Test").Deadline(time.Date(2025, time.December, 31, 0, 0, 0, 0, time.Local))
 		}).
 		Build()
 	require.NoError(t, err)
@@ -1933,12 +1942,28 @@ func TestCommand_String(t *testing.T) {
 	assert.Equal(t, "json", CommandJSON.String())
 }
 
-func TestWhen_String(t *testing.T) {
-	assert.Equal(t, "today", WhenToday.String())
-	assert.Equal(t, "tomorrow", WhenTomorrow.String())
-	assert.Equal(t, "evening", WhenEvening.String())
-	assert.Equal(t, "anytime", WhenAnytime.String())
-	assert.Equal(t, "someday", WhenSomeday.String())
+// TestWhen_Values verifies internal when constants format correctly.
+// Note: When type is now private, so we test via builder methods.
+func TestWhen_Values(t *testing.T) {
+	scheme := NewScheme()
+
+	// Test WhenEvening
+	url1, err := scheme.Todo().Title("Test").WhenEvening().Build()
+	require.NoError(t, err)
+	_, params := parseThingsURL(t, url1)
+	assert.Equal(t, "evening", params.Get("when"))
+
+	// Test WhenAnytime
+	url2, err := scheme.Todo().Title("Test").WhenAnytime().Build()
+	require.NoError(t, err)
+	_, params = parseThingsURL(t, url2)
+	assert.Equal(t, "anytime", params.Get("when"))
+
+	// Test WhenSomeday
+	url3, err := scheme.Todo().Title("Test").WhenSomeday().Build()
+	require.NoError(t, err)
+	_, params = parseThingsURL(t, url3)
+	assert.Equal(t, "someday", params.Get("when"))
 }
 
 func TestListID_String(t *testing.T) {
@@ -2168,7 +2193,7 @@ func TestTodoBuilder_Reminder_WithWhen(t *testing.T) {
 	scheme := NewScheme()
 	thingsURL, err := scheme.Todo().
 		Title("Meeting").
-		When(WhenTomorrow).
+		When(time.Date(2025, time.January, 2, 0, 0, 0, 0, time.Local)).
 		Reminder(14, 30).
 		Build()
 	require.NoError(t, err)
@@ -2176,14 +2201,14 @@ func TestTodoBuilder_Reminder_WithWhen(t *testing.T) {
 	cmd, params := parseThingsURL(t, thingsURL)
 	assert.Equal(t, "add", cmd)
 	assert.Equal(t, "Meeting", params.Get("title"))
-	assert.Equal(t, "tomorrow@14:30", params.Get("when"))
+	assert.Equal(t, "2025-01-02@14:30", params.Get("when"))
 }
 
-func TestTodoBuilder_Reminder_WithWhenDate(t *testing.T) {
+func TestTodoBuilder_Reminder_WithWhenTime(t *testing.T) {
 	scheme := NewScheme()
 	thingsURL, err := scheme.Todo().
 		Title("Appointment").
-		WhenDate(2025, time.March, 15).
+		When(time.Date(2025, time.March, 15, 0, 0, 0, 0, time.Local)).
 		Reminder(9, 0).
 		Build()
 	require.NoError(t, err)
@@ -2212,7 +2237,7 @@ func TestTodoBuilder_Reminder_WithEvening(t *testing.T) {
 	scheme := NewScheme()
 	thingsURL, err := scheme.Todo().
 		Title("Dry cleaning").
-		When(WhenEvening).
+		WhenEvening().
 		Reminder(18, 0).
 		Build()
 	require.NoError(t, err)
@@ -2257,7 +2282,7 @@ func TestProjectBuilder_Reminder(t *testing.T) {
 	scheme := NewScheme()
 	thingsURL, err := scheme.Project().
 		Title("Project").
-		WhenDate(2025, time.June, 1).
+		When(time.Date(2025, time.June, 1, 0, 0, 0, 0, time.Local)).
 		Reminder(10, 15).
 		Build()
 	require.NoError(t, err)
@@ -2286,7 +2311,7 @@ func TestUpdateTodoBuilder_Reminder(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid-123").
-		When(WhenToday).
+		When(time.Date(2025, time.January, 1, 0, 0, 0, 0, time.Local)).
 		Reminder(16, 45).
 		Build()
 	require.NoError(t, err)
@@ -2295,7 +2320,7 @@ func TestUpdateTodoBuilder_Reminder(t *testing.T) {
 	assert.Equal(t, "update", cmd)
 	assert.Equal(t, "uuid-123", params.Get("id"))
 	assert.Equal(t, "test-token", params.Get("auth-token"))
-	assert.Equal(t, "today@16:45", params.Get("when"))
+	assert.Equal(t, "2025-01-01@16:45", params.Get("when"))
 }
 
 func TestUpdateTodoBuilder_Reminder_DefaultsToToday(t *testing.T) {
@@ -2316,7 +2341,7 @@ func TestUpdateProjectBuilder_Reminder(t *testing.T) {
 	scheme := NewScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateProject("project-uuid").
-		WhenDate(2025, time.July, 4).
+		When(time.Date(2025, time.July, 4, 0, 0, 0, 0, time.Local)).
 		Reminder(9, 0).
 		Build()
 	require.NoError(t, err)

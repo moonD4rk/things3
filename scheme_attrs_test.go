@@ -310,7 +310,23 @@ func TestSetDate(t *testing.T) {
 
 func TestSetWhenStr(t *testing.T) {
 	b := newMockBuilder()
-	result := setWhenStr(b, WhenToday)
+	result := setWhenStr(b, whenEvening)
 	assert.Same(t, b, result)
-	assert.Equal(t, "today", b.attrs.params["when"])
+	assert.Equal(t, "evening", b.attrs.params["when"])
+}
+
+func TestSetWhenTime(t *testing.T) {
+	b := newMockBuilder()
+	testDate := time.Date(2025, 6, 15, 14, 30, 0, 0, time.Local)
+	result := setWhenTime(b, testDate)
+	assert.Same(t, b, result)
+	assert.Equal(t, "2025-06-15", b.attrs.params["when"])
+}
+
+func TestSetDeadlineTime(t *testing.T) {
+	b := newMockBuilder()
+	testDate := time.Date(2025, 12, 31, 0, 0, 0, 0, time.Local)
+	result := setDeadlineTime(b, testDate)
+	assert.Same(t, b, result)
+	assert.Equal(t, "2025-12-31", b.attrs.params["deadline"])
 }

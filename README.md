@@ -65,10 +65,10 @@ scheme := things3.NewScheme()
 url, _ := scheme.Todo().
     Title("Buy groceries").
     Notes("Milk, eggs, bread").
-    When(things3.WhenToday).
+    When(things3.Today()).
     Tags("shopping").
     Build()
-// Output: things:///add?title=Buy+groceries&notes=Milk,+eggs,+bread&when=today&tags=shopping
+// Output: things:///add?title=Buy+groceries&notes=Milk,+eggs,+bread&when=2024-01-15&tags=shopping
 ```
 
 ## Database API
@@ -136,9 +136,13 @@ scheme := things3.NewScheme()
 url, _ := scheme.Todo().
     Title("Task title").
     Notes("Task notes").
-    When(things3.WhenToday).              // or WhenTomorrow, WhenEvening, WhenAnytime, WhenSomeday
-    WhenDate(2024, time.December, 25).    // specific date
-    Deadline("2024-12-31").
+    When(things3.Today()).                                    // today's date
+    When(things3.Tomorrow()).                                 // tomorrow's date
+    When(time.Date(2024, time.December, 25, 0, 0, 0, 0, time.Local)). // specific date
+    WhenEvening().                                            // this evening
+    WhenAnytime().                                            // anytime (no specific date)
+    WhenSomeday().                                            // someday (indefinite future)
+    Deadline(time.Date(2024, 12, 31, 0, 0, 0, 0, time.Local)).
     Tags("work", "urgent").
     ChecklistItems("Step 1", "Step 2").
     List("Project Name").                  // or ListID("project-uuid")
@@ -154,7 +158,7 @@ url, _ := scheme.Project().
     Notes("Project description").
     Area("Work").                          // or AreaID("area-uuid")
     Tags("important").
-    Deadline("2024-12-31").
+    Deadline(time.Date(2024, 12, 31, 0, 0, 0, 0, time.Local)).
     Todos("Task 1", "Task 2", "Task 3").   // child todos
     Build()
 ```
@@ -198,7 +202,7 @@ url, _ := scheme.JSON().
         t.Title("Task 1").Tags("work")
     }).
     AddTodo(func(t *things3.JSONTodoBuilder) {
-        t.Title("Task 2").When(things3.WhenToday)
+        t.Title("Task 2").When(things3.Today())
     }).
     AddProject(func(p *things3.JSONProjectBuilder) {
         p.Title("New Project").Notes("Description")
@@ -256,12 +260,15 @@ things3.StartInbox    // 0
 things3.StartAnytime  // 1
 things3.StartSomeday  // 2
 
-// When values for URL Scheme
-things3.WhenToday
-things3.WhenTomorrow
-things3.WhenEvening
-things3.WhenAnytime
-things3.WhenSomeday
+// Date helper functions for scheduling
+things3.Today()       // returns today's date at midnight
+things3.Tomorrow()    // returns tomorrow's date at midnight
+
+// Scheduling methods (called on builders)
+.When(time.Time)      // schedule for specific date
+.WhenEvening()        // schedule for this evening
+.WhenAnytime()        // schedule for anytime (no specific date)
+.WhenSomeday()        // schedule for someday (indefinite future)
 
 // List IDs for navigation
 things3.ListInbox

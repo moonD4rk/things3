@@ -43,28 +43,39 @@ func (b *UpdateTodoBuilder) AppendNotes(notes string) *UpdateTodoBuilder {
 	return setStr(b, appendNotesParam, notes)
 }
 
-// When sets the scheduling date.
-func (b *UpdateTodoBuilder) When(when When) *UpdateTodoBuilder {
-	return setWhenStr(b, when)
+// When sets the scheduling date using a time.Time value.
+// The date portion is used; time-of-day is ignored.
+func (b *UpdateTodoBuilder) When(t time.Time) *UpdateTodoBuilder {
+	return setWhenTime(b, t)
 }
 
-// WhenDate sets a specific date for scheduling.
-func (b *UpdateTodoBuilder) WhenDate(year int, month time.Month, day int) *UpdateTodoBuilder {
-	return setDate(b, whenParam, year, month, day)
+// WhenEvening schedules the to-do for this evening.
+func (b *UpdateTodoBuilder) WhenEvening() *UpdateTodoBuilder {
+	return setWhenStr(b, whenEvening)
+}
+
+// WhenAnytime schedules the to-do for anytime (no specific time).
+func (b *UpdateTodoBuilder) WhenAnytime() *UpdateTodoBuilder {
+	return setWhenStr(b, whenAnytime)
+}
+
+// WhenSomeday schedules the to-do for someday (indefinite future).
+func (b *UpdateTodoBuilder) WhenSomeday() *UpdateTodoBuilder {
+	return setWhenStr(b, whenSomeday)
 }
 
 // Reminder sets a reminder time for the to-do.
-// The reminder is combined with the scheduling date (When/WhenDate).
+// The reminder is combined with the scheduling date (When).
 // If no scheduling date is set, defaults to "today".
 // Hour must be 0-23, minute must be 0-59.
 func (b *UpdateTodoBuilder) Reminder(hour, minute int) *UpdateTodoBuilder {
 	return setReminder(b, hour, minute)
 }
 
-// Deadline sets the deadline date.
-// Pass empty string to clear the deadline.
-func (b *UpdateTodoBuilder) Deadline(date string) *UpdateTodoBuilder {
-	return setStr(b, deadlineParam, date)
+// Deadline sets the deadline date using a time.Time value.
+// The date portion is used; time-of-day is ignored.
+func (b *UpdateTodoBuilder) Deadline(t time.Time) *UpdateTodoBuilder {
+	return setDeadlineTime(b, t)
 }
 
 // ClearDeadline removes the deadline.
@@ -227,27 +238,39 @@ func (b *UpdateProjectBuilder) AppendNotes(notes string) *UpdateProjectBuilder {
 	return setStr(b, appendNotesParam, notes)
 }
 
-// When sets the scheduling date.
-func (b *UpdateProjectBuilder) When(when When) *UpdateProjectBuilder {
-	return setWhenStr(b, when)
+// When sets the scheduling date using a time.Time value.
+// The date portion is used; time-of-day is ignored.
+func (b *UpdateProjectBuilder) When(t time.Time) *UpdateProjectBuilder {
+	return setWhenTime(b, t)
 }
 
-// WhenDate sets a specific date for scheduling.
-func (b *UpdateProjectBuilder) WhenDate(year int, month time.Month, day int) *UpdateProjectBuilder {
-	return setDate(b, whenParam, year, month, day)
+// WhenEvening schedules the project for this evening.
+func (b *UpdateProjectBuilder) WhenEvening() *UpdateProjectBuilder {
+	return setWhenStr(b, whenEvening)
+}
+
+// WhenAnytime schedules the project for anytime (no specific time).
+func (b *UpdateProjectBuilder) WhenAnytime() *UpdateProjectBuilder {
+	return setWhenStr(b, whenAnytime)
+}
+
+// WhenSomeday schedules the project for someday (indefinite future).
+func (b *UpdateProjectBuilder) WhenSomeday() *UpdateProjectBuilder {
+	return setWhenStr(b, whenSomeday)
 }
 
 // Reminder sets a reminder time for the project.
-// The reminder is combined with the scheduling date (When/WhenDate).
+// The reminder is combined with the scheduling date (When).
 // If no scheduling date is set, defaults to "today".
 // Hour must be 0-23, minute must be 0-59.
 func (b *UpdateProjectBuilder) Reminder(hour, minute int) *UpdateProjectBuilder {
 	return setReminder(b, hour, minute)
 }
 
-// Deadline sets the deadline date.
-func (b *UpdateProjectBuilder) Deadline(date string) *UpdateProjectBuilder {
-	return setStr(b, deadlineParam, date)
+// Deadline sets the deadline date using a time.Time value.
+// The date portion is used; time-of-day is ignored.
+func (b *UpdateProjectBuilder) Deadline(t time.Time) *UpdateProjectBuilder {
+	return setDeadlineTime(b, t)
 }
 
 // ClearDeadline removes the deadline.

@@ -43,19 +43,43 @@ func (b *TodoBuilder) Notes(notes string) *TodoBuilder {
 	return setStr(b, notesParam, notes)
 }
 
-// When sets the scheduling date.
-func (b *TodoBuilder) When(when When) *TodoBuilder {
-	return setWhenStr(b, when)
+// When sets the scheduling date using a time.Time value.
+// The date portion is used; time-of-day is ignored.
+//
+// Example:
+//
+//	scheme.Todo().Title("Task").When(things3.Today())
+//	scheme.Todo().Title("Task").When(time.Now().AddDate(0, 0, 7))
+func (b *TodoBuilder) When(t time.Time) *TodoBuilder {
+	return setWhenTime(b, t)
 }
 
-// WhenDate sets a specific date for scheduling.
-func (b *TodoBuilder) WhenDate(year int, month time.Month, day int) *TodoBuilder {
-	return setDate(b, whenParam, year, month, day)
+// WhenEvening schedules the to-do for this evening.
+// This is a Things 3-specific concept that cannot be expressed as a date.
+func (b *TodoBuilder) WhenEvening() *TodoBuilder {
+	return setWhenStr(b, whenEvening)
 }
 
-// Deadline sets the deadline date in yyyy-mm-dd format.
-func (b *TodoBuilder) Deadline(date string) *TodoBuilder {
-	return setStr(b, deadlineParam, date)
+// WhenAnytime schedules the to-do for anytime (no specific time).
+// This is a Things 3-specific concept that cannot be expressed as a date.
+func (b *TodoBuilder) WhenAnytime() *TodoBuilder {
+	return setWhenStr(b, whenAnytime)
+}
+
+// WhenSomeday schedules the to-do for someday (indefinite future).
+// This is a Things 3-specific concept that cannot be expressed as a date.
+func (b *TodoBuilder) WhenSomeday() *TodoBuilder {
+	return setWhenStr(b, whenSomeday)
+}
+
+// Deadline sets the deadline date using a time.Time value.
+// The date portion is used; time-of-day is ignored.
+//
+// Example:
+//
+//	scheme.Todo().Title("Task").Deadline(time.Date(2025, 12, 31, 0, 0, 0, 0, time.Local))
+func (b *TodoBuilder) Deadline(t time.Time) *TodoBuilder {
+	return setDeadlineTime(b, t)
 }
 
 // Tags sets the tags for the to-do.
@@ -184,19 +208,31 @@ func (b *ProjectBuilder) Notes(notes string) *ProjectBuilder {
 	return setStr(b, notesParam, notes)
 }
 
-// When sets the scheduling date.
-func (b *ProjectBuilder) When(when When) *ProjectBuilder {
-	return setWhenStr(b, when)
+// When sets the scheduling date using a time.Time value.
+// The date portion is used; time-of-day is ignored.
+func (b *ProjectBuilder) When(t time.Time) *ProjectBuilder {
+	return setWhenTime(b, t)
 }
 
-// WhenDate sets a specific date for scheduling.
-func (b *ProjectBuilder) WhenDate(year int, month time.Month, day int) *ProjectBuilder {
-	return setDate(b, whenParam, year, month, day)
+// WhenEvening schedules the project for this evening.
+func (b *ProjectBuilder) WhenEvening() *ProjectBuilder {
+	return setWhenStr(b, whenEvening)
 }
 
-// Deadline sets the deadline date in yyyy-mm-dd format.
-func (b *ProjectBuilder) Deadline(date string) *ProjectBuilder {
-	return setStr(b, deadlineParam, date)
+// WhenAnytime schedules the project for anytime (no specific time).
+func (b *ProjectBuilder) WhenAnytime() *ProjectBuilder {
+	return setWhenStr(b, whenAnytime)
+}
+
+// WhenSomeday schedules the project for someday (indefinite future).
+func (b *ProjectBuilder) WhenSomeday() *ProjectBuilder {
+	return setWhenStr(b, whenSomeday)
+}
+
+// Deadline sets the deadline date using a time.Time value.
+// The date portion is used; time-of-day is ignored.
+func (b *ProjectBuilder) Deadline(t time.Time) *ProjectBuilder {
+	return setDeadlineTime(b, t)
 }
 
 // Tags sets the tags for the project.
@@ -236,7 +272,7 @@ func (b *ProjectBuilder) Reveal(reveal bool) *ProjectBuilder {
 }
 
 // Reminder sets a reminder time for the project.
-// The reminder is combined with the scheduling date (When/WhenDate).
+// The reminder is combined with the scheduling date (When).
 // If no scheduling date is set, defaults to "today".
 // Hour must be 0-23, minute must be 0-59.
 func (b *ProjectBuilder) Reminder(hour, minute int) *ProjectBuilder {

@@ -147,9 +147,24 @@ func setDate[T attrBuilder](b T, p dateParam, year int, month time.Month, day in
 	return b
 }
 
-// setWhenStr sets the when attribute using a When constant.
-func setWhenStr[T attrBuilder](b T, when When) T {
-	b.getStore().SetString(keyWhen, string(when))
+// setWhenStr sets the when attribute using a when constant (internal use only).
+func setWhenStr[T attrBuilder](b T, w when) T {
+	b.getStore().SetString(keyWhen, string(w))
+	return b
+}
+
+// setWhenTime sets the when attribute using a time.Time value.
+// The time is formatted as yyyy-mm-dd for the Things URL scheme.
+func setWhenTime[T attrBuilder](b T, t time.Time) T {
+	b.getStore().SetDate(keyWhen, t.Year(), t.Month(), t.Day())
+	return b
+}
+
+// setDeadlineTime sets the deadline attribute using a time.Time value.
+// The time is formatted as yyyy-mm-dd for the Things URL scheme.
+func setDeadlineTime[T attrBuilder](b T, t time.Time) T {
+	formatted := fmt.Sprintf("%04d-%02d-%02d", t.Year(), int(t.Month()), t.Day())
+	b.getStore().SetString(keyDeadline, formatted)
 	return b
 }
 
@@ -220,13 +235,13 @@ func (u *urlAttrs) FinalizeWhen() {
 		return
 	}
 
-	when, exists := u.params[keyWhen]
-	if !exists || when == "" {
-		when = string(WhenToday) // default to today if no when specified
+	w, exists := u.params[keyWhen]
+	if !exists || w == "" {
+		w = "today" // default to today if no when specified
 	}
 
 	// Append reminder time in HH:MM format
-	u.params[keyWhen] = fmt.Sprintf("%s@%02d:%02d", when, *u.reminderHour, *u.reminderMin)
+	u.params[keyWhen] = fmt.Sprintf("%s@%02d:%02d", w, *u.reminderHour, *u.reminderMin)
 }
 
 // jsonAttrs stores attributes as JSON values (native types).

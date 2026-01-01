@@ -155,16 +155,23 @@ func setWhenStr[T attrBuilder](b T, w when) T {
 
 // setWhenTime sets the when attribute using a time.Time value.
 // The time is formatted as yyyy-mm-dd for the Things URL scheme.
+// If the time is zero, the parameter is not set.
 func setWhenTime[T attrBuilder](b T, t time.Time) T {
+	if t.IsZero() {
+		return b
+	}
 	b.getStore().SetDate(keyWhen, t.Year(), t.Month(), t.Day())
 	return b
 }
 
 // setDeadlineTime sets the deadline attribute using a time.Time value.
 // The time is formatted as yyyy-mm-dd for the Things URL scheme.
+// If the time is zero, the parameter is not set.
 func setDeadlineTime[T attrBuilder](b T, t time.Time) T {
-	formatted := fmt.Sprintf("%04d-%02d-%02d", t.Year(), int(t.Month()), t.Day())
-	b.getStore().SetString(keyDeadline, formatted)
+	if t.IsZero() {
+		return b
+	}
+	b.getStore().SetDate(keyDeadline, t.Year(), t.Month(), t.Day())
 	return b
 }
 

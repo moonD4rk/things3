@@ -330,3 +330,21 @@ func TestSetDeadlineTime(t *testing.T) {
 	assert.Same(t, b, result)
 	assert.Equal(t, "2025-12-31", b.attrs.params["deadline"])
 }
+
+func TestSetWhenTime_ZeroValue(t *testing.T) {
+	b := newMockBuilder()
+	var zeroTime time.Time
+	result := setWhenTime(b, zeroTime)
+	assert.Same(t, b, result)
+	_, exists := b.attrs.params["when"]
+	assert.False(t, exists, "when parameter should not be set for zero time")
+}
+
+func TestSetDeadlineTime_ZeroValue(t *testing.T) {
+	b := newMockBuilder()
+	var zeroTime time.Time
+	result := setDeadlineTime(b, zeroTime)
+	assert.Same(t, b, result)
+	_, exists := b.attrs.params["deadline"]
+	assert.False(t, exists, "deadline parameter should not be set for zero time")
+}

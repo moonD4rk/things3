@@ -52,7 +52,9 @@ func (b *ShowBuilder) Build() string {
 }
 
 // Execute builds and executes the show URL.
+// By default, brings Things to foreground since the user wants to view content.
+// Use WithBackground() option to run in background without stealing focus.
 func (b *ShowBuilder) Execute(ctx context.Context) error {
 	uri := b.Build()
-	return b.scheme.execute(ctx, uri)
+	return b.scheme.executeNavigation(ctx, uri)
 }

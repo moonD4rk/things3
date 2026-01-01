@@ -62,3 +62,49 @@ func MonthsAgo(n int) time.Time {
 func YearsAgo(n int) time.Time {
 	return time.Now().AddDate(-n, 0, 0)
 }
+
+// WhenScheduler is implemented by builders that support scheduling.
+// All builder types (TodoBuilder, ProjectBuilder, UpdateTodoBuilder,
+// UpdateProjectBuilder, JSONTodoBuilder, JSONProjectBuilder) satisfy this interface.
+type WhenScheduler[T any] interface {
+	When(t time.Time) T
+	WhenEvening() T
+	WhenAnytime() T
+	WhenSomeday() T
+}
+
+// ApplyWhen parses a when string and applies scheduling to a builder.
+// Supports:
+//   - "today": schedules for today
+//   - "tomorrow": schedules for tomorrow
+//   - "evening": schedules for this evening
+//   - "anytime": removes specific scheduling (anytime)
+//   - "someday": schedules for someday (indefinite future)
+//   - "yyyy-mm-dd": schedules for specific date
+//
+// Returns the builder unchanged if the format is not recognized.
+//
+// Example:
+//
+//	todo := scheme.Todo().Title("Task")
+//	todo = things3.ApplyWhen(todo, "today")
+//	todo = things3.ApplyWhen(todo, "2024-12-25")
+func ApplyWhen[T WhenScheduler[T]](b T, when string) T {
+	switch when {
+	case "today":
+		return b.When(Today())
+	case "tomorrow":
+		return b.When(Tomorrow())
+	case "evening":
+		return b.WhenEvening()
+	case "anytime":
+		return b.WhenAnytime()
+	case "someday":
+		return b.WhenSomeday()
+	default:
+		if t, err := time.Parse(time.DateOnly, when); err == nil {
+			return b.When(t)
+		}
+		return b
+	}
+}

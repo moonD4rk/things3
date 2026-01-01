@@ -58,8 +58,16 @@ NewScheme(opts...)  -> *Scheme  (URL building + execution)
 ```
 
 **Execution Behavior:**
-- By default, URL scheme operations run in background using `osascript` without stealing focus
-- Use `WithForeground()` option to bring Things to foreground using `open` command
+
+Execution behavior differs by operation type:
+
+| Operation Type | Default Behavior | Override Option |
+|----------------|------------------|-----------------|
+| Navigation (Show, Search, ShowBuilder) | Foreground | `WithBackground()` |
+| Create/Update (Todo, Project, JSON, Update*) | Background | `WithForeground()` |
+
+- **Navigation operations** run in foreground by default since the user intends to view content
+- **Create/Update operations** run in background by default for silent operation without stealing focus
 
 ### Token Requirement Pattern
 
@@ -80,16 +88,22 @@ This ensures:
 ```go
 // Scheme provides URL building and execution for Things URL Scheme.
 type Scheme struct {
-    foreground bool
+    foreground bool // For create/update operations: if true, bring Things to foreground
+    background bool // For navigation operations: if true, run in background
 }
 
 // SchemeOption configures Scheme behavior.
 type SchemeOption func(*Scheme)
 
 // WithForeground configures the Scheme to bring Things to foreground
-// when executing URL scheme operations.
-// By default, operations run in background without stealing focus.
+// when executing create/update operations (Todo, Project, JSON, Update*).
+// By default, create/update operations run in background without stealing focus.
 func WithForeground() SchemeOption
+
+// WithBackground configures the Scheme to run navigation operations
+// (Show, Search, ShowBuilder) in the background without stealing focus.
+// By default, navigation operations bring Things to foreground.
+func WithBackground() SchemeOption
 
 // NewScheme creates a new URL Scheme builder.
 // Options can be provided to configure execution behavior.
@@ -452,18 +466,22 @@ err := auth.UpdateTodo("task-uuid").
 ### Executing URL Scheme Operations
 
 ```go
-// Default: runs in background without stealing focus
 scheme := things3.NewScheme()
 
-// Show a task in Things (background)
-err := scheme.Show(ctx, "task-uuid")
+// Navigation operations: foreground by default (user wants to view content)
+err := scheme.Show(ctx, "task-uuid")      // Opens Things in foreground
+err := scheme.Search(ctx, "meeting notes") // Opens Things with search results
 
-// Search in Things (background)
-err := scheme.Search(ctx, "meeting notes")
+// Run navigation in background (for programmatic use)
+bgScheme := things3.NewScheme(things3.WithBackground())
+err := bgScheme.Show(ctx, "task-uuid")  // Things stays in background
 
-// Bring Things to foreground for operations
+// Create/Update operations: background by default (silent operation)
+err := scheme.Todo().Title("Buy milk").Execute(ctx)  // Creates without focus change
+
+// Bring Things to foreground for create/update operations
 fgScheme := things3.NewScheme(things3.WithForeground())
-err := fgScheme.Show(ctx, "task-uuid")  // Opens Things in foreground
+err := fgScheme.Todo().Title("Buy milk").Execute(ctx)  // Things comes to foreground
 
 // Update with foreground execution
 auth := fgScheme.WithToken(token)
@@ -580,8 +598,8 @@ things3/
 
 | File | Responsibility |
 |------|----------------|
-| `scheme.go` | Entry points, NewScheme(), WithToken(), Show(), Search(), execute() |
-| `scheme_options.go` | SchemeOption, WithForeground() |
+| `scheme.go` | Entry points, NewScheme(), WithToken(), Show(), Search(), execute(), executeNavigation() |
+| `scheme_options.go` | SchemeOption, WithForeground(), WithBackground() |
 | `scheme_builder.go` | TodoBuilder, ProjectBuilder for create operations |
 | `scheme_update.go` | UpdateTodoBuilder, UpdateProjectBuilder with Execute() |
 | `scheme_show.go` | ShowBuilder for navigation |
@@ -786,7 +804,7 @@ url, _ := auth.UpdateTodo("uuid").Completed(true).Build()
 | Explicit Dependencies | Token required upfront via `WithToken()` |
 | Compile-time Safety | `*AuthScheme` type only exposes update methods |
 | Functional Options | `SchemeOption` for configurable behavior |
-| Background by Default | Execution uses `osascript` to avoid stealing focus |
+| Intent-Based Defaults | Navigation ops foreground (view), Create/Update ops background (silent) |
 | Delegation Pattern | `AuthScheme` references `Scheme` for shared config |
 | Builder Pattern | Chainable methods with terminal `.Build()` or `.Execute()` |
 | Type Safety | Enums for `When`, `ListID`, `Command` |

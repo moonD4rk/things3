@@ -14,13 +14,26 @@ import (
 //	scheme := things3.NewScheme()
 //	url, _ := scheme.Todo().Title("Buy groceries").Build()
 //
-// For executing URL scheme operations:
+// Execution behavior differs by operation type:
 //
-//	// Show a task (runs in background by default)
-//	scheme.Show(ctx, "uuid")
+// Navigation operations (Show, Search, ShowBuilder) run in foreground by default,
+// since the user intends to view Things content:
 //
-//	// Show a task in foreground
-//	things3.NewScheme(things3.WithForeground()).Show(ctx, "uuid")
+//	scheme.Show(ctx, "uuid")           // Opens Things in foreground
+//	scheme.Search(ctx, "groceries")    // Opens Things with search results
+//
+// Use WithBackground() to run navigation operations without stealing focus:
+//
+//	things3.NewScheme(things3.WithBackground()).Show(ctx, "uuid")
+//
+// Create/Update operations (Todo, Project, JSON, Update*) run in background by default,
+// since the user typically wants silent operation:
+//
+//	scheme.Todo().Title("Buy milk").Execute(ctx)  // Creates without focus change
+//
+// Use WithForeground() to bring Things to foreground for create/update operations:
+//
+//	things3.NewScheme(things3.WithForeground()).Todo().Title("Buy milk").Execute(ctx)
 //
 // For operations requiring authentication (update operations),
 // use WithToken() to get an AuthScheme:
@@ -29,7 +42,8 @@ import (
 //	auth := scheme.WithToken(token)
 //	auth.UpdateTodo("uuid").Completed(true).Execute(ctx)
 type Scheme struct {
-	foreground bool
+	foreground bool // For create/update operations: if true, bring Things to foreground
+	background bool // For navigation operations: if true, run in background
 }
 
 // NewScheme creates a new URL Scheme builder.
@@ -146,9 +160,12 @@ func (a *AuthScheme) JSON() *AuthJSONBuilder {
 	}
 }
 
-// execute opens a Things URL scheme.
-// By default, uses osascript to run in background without stealing focus.
+// execute opens a Things URL scheme for create/update operations.
+// By default, uses AppleScript to run in background without stealing focus.
 // If foreground is true, uses open command to bring Things to foreground.
+//
+// This method is used by create/update operations (Todo, Project, JSON, Update*)
+// where background execution is typically desired.
 func (s *Scheme) execute(ctx context.Context, uri string) error {
 	if s.foreground {
 		return exec.CommandContext(ctx, "open", uri).Run()
@@ -157,18 +174,32 @@ func (s *Scheme) execute(ctx context.Context, uri string) error {
 	return exec.CommandContext(ctx, "osascript", "-e", script).Run()
 }
 
+// executeNavigation opens a Things URL scheme for navigation operations.
+// By default, brings Things to foreground since the user wants to view content.
+// If foreground is explicitly set to false via WithBackground(), runs in background.
+//
+// This method is used by navigation operations (Show, Search, ShowBuilder)
+// where the user intends to view Things content.
+func (s *Scheme) executeNavigation(ctx context.Context, uri string) error {
+	if !s.background {
+		return exec.CommandContext(ctx, "open", uri).Run()
+	}
+	script := fmt.Sprintf(`tell application "Things3" to open location %q`, uri)
+	return exec.CommandContext(ctx, "osascript", "-e", script).Run()
+}
+
 // Show opens Things and shows the item with the given UUID.
-// By default, runs in background without stealing focus.
-// Use WithForeground() option to bring Things to foreground.
+// By default, brings Things to foreground since the user wants to view the item.
+// Use WithBackground() option to run in background without stealing focus.
 func (s *Scheme) Show(ctx context.Context, uuid string) error {
 	uri := s.ShowBuilder().ID(uuid).Build()
-	return s.execute(ctx, uri)
+	return s.executeNavigation(ctx, uri)
 }
 
 // Search opens Things and performs a search for the given query.
-// By default, runs in background without stealing focus.
-// Use WithForeground() option to bring Things to foreground.
+// By default, brings Things to foreground since the user wants to view results.
+// Use WithBackground() option to run in background without stealing focus.
 func (s *Scheme) Search(ctx context.Context, query string) error {
 	uri := s.SearchURL(query)
-	return s.execute(ctx, uri)
+	return s.executeNavigation(ctx, uri)
 }

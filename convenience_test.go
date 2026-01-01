@@ -3,6 +3,7 @@ package things3
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -350,21 +351,21 @@ func TestCreatedWithin(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	// Test 0 days - should return empty (IsZero returns true)
-	_, err := db.CreatedWithin(ctx, Days(0))
+	// Test zero time - should return error
+	_, err := db.CreatedWithin(ctx, time.Time{})
 	require.ErrorIs(t, err, ErrInvalidParameter)
 
-	// Test many weeks - should return results
-	tasks, err := db.CreatedWithin(ctx, Weeks(10000))
+	// Test many weeks ago - should return results
+	tasks, err := db.CreatedWithin(ctx, WeeksAgo(10000))
 	require.NoError(t, err)
 	assert.Len(t, tasks, testTasksIncompleteFiltered)
 
-	// Test months
-	_, err = db.CreatedWithin(ctx, Months(1))
+	// Test months ago
+	_, err = db.CreatedWithin(ctx, MonthsAgo(1))
 	require.NoError(t, err)
 
-	// Test years
-	_, err = db.CreatedWithin(ctx, Years(1))
+	// Test years ago
+	_, err = db.CreatedWithin(ctx, YearsAgo(1))
 	require.NoError(t, err)
 }
 
@@ -375,7 +376,7 @@ func TestTasks(t *testing.T) {
 	// Test tasks count with filters
 	count, err := db.Tasks().
 		Status().Completed().
-		CreatedWithin(Years(100)).
+		CreatedAfter(YearsAgo(100)).
 		Count(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, testCompleted, count)

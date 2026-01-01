@@ -3,6 +3,7 @@ package things3
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 // TaskQuery provides a fluent interface for building task queries.
@@ -25,7 +26,7 @@ type TaskQuery struct {
 	deadlineSuppressed *bool
 	trashed            *bool
 	contextTrashed     *bool
-	createdWithin      *Duration
+	createdAfter       *time.Time
 	searchQuery        *string
 	index              string
 
@@ -168,10 +169,10 @@ func (q *TaskQuery) ContextTrashed(trashed bool) *TaskQuery {
 	return q
 }
 
-// CreatedWithin filters tasks created within the specified duration.
-// Example: db.Tasks().CreatedWithin(Days(7)).All(ctx)
-func (q *TaskQuery) CreatedWithin(d Duration) *TaskQuery {
-	q.createdWithin = &d
+// CreatedAfter filters tasks created after the specified time.
+// Example: db.Tasks().CreatedAfter(things3.DaysAgo(7)).All(ctx)
+func (q *TaskQuery) CreatedAfter(t time.Time) *TaskQuery {
+	q.createdAfter = &t
 	return q
 }
 
@@ -305,9 +306,9 @@ func (q *TaskQuery) buildWhere() string {
 		fb.addDateFilterValue(fmt.Sprintf("TASK.%s", colDeadline), q.deadlineFilter, true)
 	}
 
-	// CreatedWithin filter
-	if q.createdWithin != nil && !q.createdWithin.IsZero() {
-		fb.addDurationFilter(fmt.Sprintf("TASK.%s", colCreationDate), *q.createdWithin)
+	// CreatedAfter filter
+	if q.createdAfter != nil {
+		fb.addCreatedAfterFilter(fmt.Sprintf("TASK.%s", colCreationDate), *q.createdAfter)
 	}
 
 	// Search filter

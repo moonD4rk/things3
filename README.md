@@ -87,7 +87,7 @@ db.Todos(ctx)                    // All incomplete to-dos
 db.Projects(ctx)                 // All incomplete projects
 db.Deadlines(ctx)                // Tasks with deadlines
 db.Search(ctx, "query")          // Search tasks
-db.CreatedWithin(ctx, Days(7))   // Tasks from last 7 days
+db.CreatedWithin(ctx, DaysAgo(7)) // Tasks from last 7 days
 ```
 
 ### Fluent Query Builder

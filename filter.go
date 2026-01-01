@@ -336,29 +336,29 @@ func unixTime(column string, op dateOp, value string) filter {
 	return unixTimeFilter{column: column, op: op, value: value}
 }
 
-// durationFilter handles Duration-based time range filters.
-type durationFilter struct {
-	column   string
-	duration Duration
+// createdAfterFilter handles time-based filters for creation date.
+type createdAfterFilter struct {
+	column string
+	after  time.Time
 }
 
-func (f durationFilter) SQL() string {
-	modifier := f.duration.toSQLModifier()
-	if modifier == "" {
+func (f createdAfterFilter) SQL() string {
+	if f.after.IsZero() {
 		return ""
 	}
 	columnDatetime := fmt.Sprintf("datetime(%s, 'unixepoch', 'localtime')", f.column)
-	offsetDatetime := fmt.Sprintf("datetime('now', '%s')", modifier)
-	return fmt.Sprintf("%s > %s", columnDatetime, offsetDatetime)
+	// Format as ISO 8601 for SQLite datetime comparison
+	afterStr := f.after.Format("2006-01-02 15:04:05")
+	return fmt.Sprintf("%s > '%s'", columnDatetime, afterStr)
 }
 
-func (f durationFilter) IsEmpty() bool {
-	return f.duration.IsZero()
+func (f createdAfterFilter) IsEmpty() bool {
+	return f.after.IsZero()
 }
 
-// duration creates a filter for items created within the specified duration.
-func duration(column string, d Duration) filter {
-	return durationFilter{column: column, duration: d}
+// createdAfter creates a filter for items created after the specified time.
+func createdAfter(column string, t time.Time) filter {
+	return createdAfterFilter{column: column, after: t}
 }
 
 // addThingsDateValue adds a Things date filter to the builder.
@@ -371,9 +371,9 @@ func (b *filterBuilder) addUnixTimeValue(column string, op dateOp, value string)
 	return b.add(unixTime(column, op, value))
 }
 
-// addDurationFilter adds a Duration-based filter to the builder.
-func (b *filterBuilder) addDurationFilter(column string, d Duration) *filterBuilder {
-	return b.add(duration(column, d))
+// addCreatedAfterFilter adds a time-based filter to the builder.
+func (b *filterBuilder) addCreatedAfterFilter(column string, t time.Time) *filterBuilder {
+	return b.add(createdAfter(column, t))
 }
 
 // addDateFilterValue adds a date filter using the new type-safe dateFilterValue.

@@ -176,7 +176,7 @@ func (s *Scheme) execute(ctx context.Context, uri string) error {
 
 // executeNavigation opens a Things URL scheme for navigation operations.
 // By default, brings Things to foreground since the user wants to view content.
-// If foreground is explicitly set to false via WithBackground(), runs in background.
+// If background is set to true via WithBackground(), runs in background instead.
 //
 // This method is used by navigation operations (Show, Search, ShowBuilder)
 // where the user intends to view Things content.

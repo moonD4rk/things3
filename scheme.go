@@ -153,7 +153,7 @@ func (s *Scheme) execute(ctx context.Context, uri string) error {
 	if s.foreground {
 		return exec.CommandContext(ctx, "open", uri).Run()
 	}
-	script := fmt.Sprintf("open location %q", uri)
+	script := fmt.Sprintf(`tell application "Things3" to open location %q`, uri)
 	return exec.CommandContext(ctx, "osascript", "-e", script).Run()
 }
 

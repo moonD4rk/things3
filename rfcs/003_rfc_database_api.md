@@ -78,8 +78,8 @@ func (db *DB) Canceled(ctx context.Context) ([]Task, error)
 // Deadlines returns all tasks with deadlines.
 func (db *DB) Deadlines(ctx context.Context) ([]Task, error)
 
-// CreatedWithin returns tasks created within the specified duration.
-func (db *DB) CreatedWithin(ctx context.Context, d Duration) ([]Task, error)
+// CreatedWithin returns tasks created after the specified time.
+func (db *DB) CreatedWithin(ctx context.Context, since time.Time) ([]Task, error)
 
 // Search returns tasks matching the search query.
 func (db *DB) Search(ctx context.Context, query string) ([]Task, error)
@@ -124,7 +124,7 @@ func (q *TaskQuery) WithDeadlineSuppressed(suppressed bool) *TaskQuery
 func (q *TaskQuery) ContextTrashed(trashed bool) *TaskQuery
 func (q *TaskQuery) IncludeItems(include bool) *TaskQuery
 func (q *TaskQuery) OrderByTodayIndex() *TaskQuery
-func (q *TaskQuery) CreatedWithin(d Duration) *TaskQuery
+func (q *TaskQuery) CreatedAfter(t time.Time) *TaskQuery
 func (q *TaskQuery) Search(query string) *TaskQuery
 
 // Type-safe sub-builders (chainable, return *TaskQuery)
@@ -287,7 +287,7 @@ count, _ := db.Tasks().
 
 // Find tasks created within last 7 days
 tasks, _ := db.Tasks().
-    CreatedWithin(things3.Days(7)).
+    CreatedAfter(things3.DaysAgo(7)).
     All(ctx)
 
 // Search for tasks
@@ -343,7 +343,7 @@ things3/
     models.go           # Task, Area, Tag, ChecklistItem structs
     types.go            # TaskType, Status, StartBucket enums
     date.go             # Things date format conversion
-    duration.go         # Duration type for time-based queries
+    time_helpers.go     # Time helper functions (DaysAgo, WeeksAgo, etc.)
     database.go         # Database connection and path discovery
     url.go              # Things URL scheme support
     errors.go           # Error definitions

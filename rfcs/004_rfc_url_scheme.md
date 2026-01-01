@@ -176,24 +176,44 @@ const (
 )
 ```
 
-### When Values
+### Scheduling API
+
+The scheduling API uses `time.Time` for all date operations, with dedicated methods for Things 3-specific concepts that cannot be expressed as dates.
 
 ```go
-// When represents scheduling values for the "when" parameter.
-type When string
+// Package-level convenience functions
+func Today() time.Time     // returns today's date at midnight (00:00:00)
+func Tomorrow() time.Time  // returns tomorrow's date at midnight (00:00:00)
+
+// Builder methods for scheduling
+func (b *TodoBuilder) When(t time.Time) *TodoBuilder  // schedule for specific date
+func (b *TodoBuilder) WhenEvening() *TodoBuilder      // this evening
+func (b *TodoBuilder) WhenAnytime() *TodoBuilder      // anytime (no specific date)
+func (b *TodoBuilder) WhenSomeday() *TodoBuilder      // someday (indefinite future)
+func (b *TodoBuilder) Deadline(t time.Time) *TodoBuilder  // deadline date
+func (b *TodoBuilder) Reminder(hour, minute int) *TodoBuilder  // reminder time
+
+// Internal type (private, not exported)
+type when string
 
 const (
-    WhenToday    When = "today"
-    WhenTomorrow When = "tomorrow"
-    WhenEvening  When = "evening"
-    WhenAnytime  When = "anytime"
-    WhenSomeday  When = "someday"
+    whenEvening when = "evening"
+    whenAnytime when = "anytime"
+    whenSomeday when = "someday"
 )
+```
 
-// WhenDate creates a When value from a specific date.
-func WhenDate(year int, month time.Month, day int) When {
-    return When(fmt.Sprintf("%04d-%02d-%02d", year, int(month), day))
-}
+**Usage Examples:**
+
+```go
+scheme.Todo().When(things3.Today())                      // today's date
+scheme.Todo().When(things3.Tomorrow())                   // tomorrow's date
+scheme.Todo().When(time.Now().AddDate(0, 0, 7))          // 7 days from now
+scheme.Todo().WhenEvening()                              // this evening
+scheme.Todo().WhenAnytime()                              // anytime
+scheme.Todo().WhenSomeday()                              // someday
+scheme.Todo().Deadline(time.Date(2025, 12, 31, 0, 0, 0, 0, time.Local))  // deadline
+scheme.Todo().When(time.Now()).Reminder(14, 30)          // today at 14:30
 ```
 
 ### List IDs
@@ -231,8 +251,12 @@ type TodoBuilder struct {
 func (b *TodoBuilder) Title(title string) *TodoBuilder
 func (b *TodoBuilder) Titles(titles ...string) *TodoBuilder
 func (b *TodoBuilder) Notes(notes string) *TodoBuilder
-func (b *TodoBuilder) When(when When) *TodoBuilder
-func (b *TodoBuilder) Deadline(date string) *TodoBuilder
+func (b *TodoBuilder) When(t time.Time) *TodoBuilder      // schedule for specific date
+func (b *TodoBuilder) WhenEvening() *TodoBuilder          // this evening
+func (b *TodoBuilder) WhenAnytime() *TodoBuilder          // anytime
+func (b *TodoBuilder) WhenSomeday() *TodoBuilder          // someday
+func (b *TodoBuilder) Deadline(t time.Time) *TodoBuilder  // deadline date
+func (b *TodoBuilder) Reminder(hour, minute int) *TodoBuilder
 func (b *TodoBuilder) Tags(tags ...string) *TodoBuilder
 func (b *TodoBuilder) ChecklistItems(items ...string) *TodoBuilder
 func (b *TodoBuilder) List(name string) *TodoBuilder
@@ -283,8 +307,12 @@ type ProjectBuilder struct {
 
 func (b *ProjectBuilder) Title(title string) *ProjectBuilder
 func (b *ProjectBuilder) Notes(notes string) *ProjectBuilder
-func (b *ProjectBuilder) When(when When) *ProjectBuilder
-func (b *ProjectBuilder) Deadline(date string) *ProjectBuilder
+func (b *ProjectBuilder) When(t time.Time) *ProjectBuilder      // schedule for specific date
+func (b *ProjectBuilder) WhenEvening() *ProjectBuilder          // this evening
+func (b *ProjectBuilder) WhenAnytime() *ProjectBuilder          // anytime
+func (b *ProjectBuilder) WhenSomeday() *ProjectBuilder          // someday
+func (b *ProjectBuilder) Deadline(t time.Time) *ProjectBuilder  // deadline date
+func (b *ProjectBuilder) Reminder(hour, minute int) *ProjectBuilder
 func (b *ProjectBuilder) Tags(tags ...string) *ProjectBuilder
 func (b *ProjectBuilder) Area(name string) *ProjectBuilder
 func (b *ProjectBuilder) AreaID(id string) *ProjectBuilder
@@ -424,15 +452,15 @@ scheme := things3.NewScheme()
 // Simple todo
 url, err := scheme.Todo().
     Title("Buy groceries").
-    When(things3.WhenToday).
+    When(things3.Today()).
     Build()
 
 // Complex todo
 url, err := scheme.Todo().
     Title("Review PR #123").
     Notes("Check the authentication changes").
-    When(things3.WhenTomorrow).
-    Deadline("2024-12-15").
+    When(things3.Tomorrow()).
+    Deadline(time.Date(2024, 12, 15, 0, 0, 0, 0, time.Local)).
     Tags("work", "urgent").
     ChecklistItems("Check tests", "Review security", "Add comments").
     ListID("project-uuid").
@@ -498,7 +526,7 @@ scheme := things3.NewScheme()
 url, err := scheme.Project().
     Title("Q1 Planning").
     Notes("Quarterly planning for 2024").
-    When(things3.WhenAnytime).
+    WhenAnytime().
     Tags("planning", "2024").
     Todos("Define goals", "Create timeline", "Assign owners").
     AreaID("area-uuid").
@@ -532,12 +560,15 @@ scheme := things3.NewScheme()
 
 // Create multiple items (no token needed) - use scheme.JSON()
 url, err := scheme.JSON().
-    AddTodo(things3.JSONTitle("First task"), things3.JSONWhen(things3.WhenToday)).
-    AddTodo(things3.JSONTitle("Second task"), things3.JSONWhen(things3.WhenTomorrow)).
-    AddProject(
-        things3.JSONTitle("New Project"),
-        things3.JSONNotes("Project description"),
-    ).
+    AddTodo(func(t *things3.JSONTodoBuilder) {
+        t.Title("First task").When(things3.Today())
+    }).
+    AddTodo(func(t *things3.JSONTodoBuilder) {
+        t.Title("Second task").When(things3.Tomorrow())
+    }).
+    AddProject(func(p *things3.JSONProjectBuilder) {
+        p.Title("New Project").Notes("Project description")
+    }).
     Reveal(true).
     Build()
 
@@ -547,8 +578,12 @@ token, _ := db.Token(ctx)
 auth := scheme.WithToken(token)
 
 url, err := auth.JSON().
-    AddTodo(things3.JSONTitle("New task")).
-    UpdateTodo("existing-uuid", things3.JSONCompleted(true)).
+    AddTodo(func(t *things3.JSONTodoBuilder) {
+        t.Title("New task")
+    }).
+    UpdateTodo("existing-uuid", func(t *things3.JSONTodoBuilder) {
+        t.Completed(true)
+    }).
     Build()
 ```
 
@@ -653,10 +688,10 @@ func TestTodoBuilder(t *testing.T) {
             build: func() (string, error) {
                 return scheme.Todo().
                     Title("Test").
-                    When(things3.WhenToday).
+                    When(things3.Today()).
                     Build()
             },
-            contains: []string{"things:///add?", "title=Test", "when=today"},
+            contains: []string{"things:///add?", "title=Test", "when="},
         },
         {
             name: "todo with all options",
@@ -664,7 +699,7 @@ func TestTodoBuilder(t *testing.T) {
                 return scheme.Todo().
                     Title("Review PR").
                     Notes("Check changes").
-                    Deadline("2024-12-15").
+                    Deadline(time.Date(2024, 12, 15, 0, 0, 0, 0, time.Local)).
                     Tags("work", "urgent").
                     ChecklistItems("Item 1", "Item 2").
                     Build()

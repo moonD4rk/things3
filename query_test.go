@@ -284,36 +284,35 @@ func TestTaskQuerySearch(t *testing.T) {
 	assert.Empty(t, tasks)
 }
 
-func TestTaskQueryCreatedWithin(t *testing.T) {
+func TestTaskQueryCreatedAfter(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	// Test 0 days - zero duration means no filter, returns all incomplete tasks
+	// Test many years ago - should return all tasks created after that time
 	tasks, err := db.Tasks().
-		CreatedWithin(Days(0)).
+		CreatedAfter(YearsAgo(100)).
 		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tasks, testTasksIncomplete, "Days(0) should be a no-op filter")
+	assert.Len(t, tasks, testTasksIncomplete, "YearsAgo(100) should include all test tasks")
 
-	// Test many years - should return results
-	tasks, err = db.Tasks().
-		CreatedWithin(Years(100)).
-		Status().Incomplete().
-		All(ctx)
-	require.NoError(t, err)
-	assert.Len(t, tasks, testTasksIncomplete, "Years(100) should include all test tasks")
-
-	// Test weeks
+	// Test weeks ago
 	_, err = db.Tasks().
-		CreatedWithin(Weeks(2)).
+		CreatedAfter(WeeksAgo(2)).
 		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 
-	// Test months
+	// Test months ago
 	_, err = db.Tasks().
-		CreatedWithin(Months(1)).
+		CreatedAfter(MonthsAgo(1)).
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+
+	// Test days ago
+	_, err = db.Tasks().
+		CreatedAfter(DaysAgo(7)).
 		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)

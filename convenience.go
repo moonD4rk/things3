@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"time"
 )
 
 // Todos returns all incomplete to-do items.
@@ -188,15 +189,15 @@ func (d *DB) Deadlines(ctx context.Context) ([]Task, error) {
 	return tasks, nil
 }
 
-// CreatedWithin returns tasks created within the specified duration.
-// Example: db.CreatedWithin(ctx, Days(7))
-func (d *DB) CreatedWithin(ctx context.Context, duration Duration) ([]Task, error) {
-	if duration.IsZero() {
+// CreatedWithin returns tasks created after the specified time.
+// Example: db.CreatedWithin(ctx, things3.DaysAgo(7))
+func (d *DB) CreatedWithin(ctx context.Context, since time.Time) ([]Task, error) {
+	if since.IsZero() {
 		return nil, ErrInvalidParameter
 	}
 
 	tasks, err := d.Tasks().
-		CreatedWithin(duration).
+		CreatedAfter(since).
 		Status().Incomplete().
 		ContextTrashed(false).
 		All(ctx)

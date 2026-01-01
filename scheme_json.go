@@ -97,19 +97,31 @@ func (t *JSONTodoBuilder) Notes(notes string) *JSONTodoBuilder {
 	return setStr(t, notesParam, notes)
 }
 
-// When sets the scheduling date.
-func (t *JSONTodoBuilder) When(when When) *JSONTodoBuilder {
-	return setWhenStr(t, when)
+// When sets the scheduling date using a time.Time value.
+// The date portion is used; time-of-day is ignored.
+func (t *JSONTodoBuilder) When(tm time.Time) *JSONTodoBuilder {
+	return setWhenTime(t, tm)
 }
 
-// WhenDate sets a specific date for scheduling.
-func (t *JSONTodoBuilder) WhenDate(year int, month time.Month, day int) *JSONTodoBuilder {
-	return setDate(t, whenParam, year, month, day)
+// WhenEvening schedules the to-do for this evening.
+func (t *JSONTodoBuilder) WhenEvening() *JSONTodoBuilder {
+	return setWhenStr(t, whenEvening)
 }
 
-// Deadline sets the deadline date.
-func (t *JSONTodoBuilder) Deadline(date string) *JSONTodoBuilder {
-	return setStr(t, deadlineParam, date)
+// WhenAnytime schedules the to-do for anytime (no specific time).
+func (t *JSONTodoBuilder) WhenAnytime() *JSONTodoBuilder {
+	return setWhenStr(t, whenAnytime)
+}
+
+// WhenSomeday schedules the to-do for someday (indefinite future).
+func (t *JSONTodoBuilder) WhenSomeday() *JSONTodoBuilder {
+	return setWhenStr(t, whenSomeday)
+}
+
+// Deadline sets the deadline date using a time.Time value.
+// The date portion is used; time-of-day is ignored.
+func (t *JSONTodoBuilder) Deadline(tm time.Time) *JSONTodoBuilder {
+	return setDeadlineTime(t, tm)
 }
 
 // Tags sets the tags for the to-do.
@@ -241,19 +253,31 @@ func (p *JSONProjectBuilder) Notes(notes string) *JSONProjectBuilder {
 	return setStr(p, notesParam, notes)
 }
 
-// When sets the scheduling date.
-func (p *JSONProjectBuilder) When(when When) *JSONProjectBuilder {
-	return setWhenStr(p, when)
+// When sets the scheduling date using a time.Time value.
+// The date portion is used; time-of-day is ignored.
+func (p *JSONProjectBuilder) When(t time.Time) *JSONProjectBuilder {
+	return setWhenTime(p, t)
 }
 
-// WhenDate sets a specific date for scheduling.
-func (p *JSONProjectBuilder) WhenDate(year int, month time.Month, day int) *JSONProjectBuilder {
-	return setDate(p, whenParam, year, month, day)
+// WhenEvening schedules the project for this evening.
+func (p *JSONProjectBuilder) WhenEvening() *JSONProjectBuilder {
+	return setWhenStr(p, whenEvening)
 }
 
-// Deadline sets the deadline date.
-func (p *JSONProjectBuilder) Deadline(date string) *JSONProjectBuilder {
-	return setStr(p, deadlineParam, date)
+// WhenAnytime schedules the project for anytime (no specific time).
+func (p *JSONProjectBuilder) WhenAnytime() *JSONProjectBuilder {
+	return setWhenStr(p, whenAnytime)
+}
+
+// WhenSomeday schedules the project for someday (indefinite future).
+func (p *JSONProjectBuilder) WhenSomeday() *JSONProjectBuilder {
+	return setWhenStr(p, whenSomeday)
+}
+
+// Deadline sets the deadline date using a time.Time value.
+// The date portion is used; time-of-day is ignored.
+func (p *JSONProjectBuilder) Deadline(t time.Time) *JSONProjectBuilder {
+	return setDeadlineTime(p, t)
 }
 
 // Tags sets the tags for the project.

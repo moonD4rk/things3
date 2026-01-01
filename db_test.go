@@ -170,17 +170,9 @@ func TestScanTask_TagsFlagHandling(t *testing.T) {
 	allTags, err := db.Tags().All(ctx)
 	require.NoError(t, err)
 
-	if len(allTags) == 0 {
-		t.Skip("no tags in test database")
-	}
-
 	// Query tasks with a specific tag
 	tasksWithTag, err := db.Tasks().InTag(allTags[0].Title).All(ctx)
 	require.NoError(t, err)
-
-	if len(tasksWithTag) == 0 {
-		t.Skip("no tasks with tags in test database")
-	}
 
 	// Verify that tasks with tags have the Tags slice populated
 	// Note: Tags are loaded separately after initial scan

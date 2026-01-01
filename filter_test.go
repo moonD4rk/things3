@@ -2,6 +2,7 @@ package things3
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -430,61 +431,30 @@ func TestUnixTimeFilter(t *testing.T) {
 	}
 }
 
-func TestDurationFilter(t *testing.T) {
+func TestCreatedAfterFilter(t *testing.T) {
+	// Use a fixed time for testing
+	testTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.Local)
+
 	tests := []struct {
-		name     string
-		column   string
-		duration Duration
-		want     string
-		isEmpty  bool
+		name    string
+		column  string
+		after   time.Time
+		want    string
+		isEmpty bool
 	}{
-		// Days
 		{
-			"7 days", "creationDate", Days(7),
-			"datetime(creationDate, 'unixepoch', 'localtime') > datetime('now', '-7 days')", false,
+			"specific time", "creationDate", testTime,
+			"datetime(creationDate, 'unixepoch', 'localtime') > '2024-06-15 10:30:00'", false,
 		},
 		{
-			"30 days", "creationDate", Days(30),
-			"datetime(creationDate, 'unixepoch', 'localtime') > datetime('now', '-30 days')", false,
+			"zero time", "creationDate",
+			time.Time{},
+			"", true,
 		},
-
-		// Weeks (converted to days)
-		{
-			"2 weeks", "creationDate", Weeks(2),
-			"datetime(creationDate, 'unixepoch', 'localtime') > datetime('now', '-14 days')", false,
-		},
-		{
-			"4 weeks", "creationDate", Weeks(4),
-			"datetime(creationDate, 'unixepoch', 'localtime') > datetime('now', '-28 days')", false,
-		},
-
-		// Months
-		{
-			"1 month", "creationDate", Months(1),
-			"datetime(creationDate, 'unixepoch', 'localtime') > datetime('now', '-1 months')", false,
-		},
-		{
-			"6 months", "creationDate", Months(6),
-			"datetime(creationDate, 'unixepoch', 'localtime') > datetime('now', '-6 months')", false,
-		},
-
-		// Years
-		{
-			"1 year", "creationDate", Years(1),
-			"datetime(creationDate, 'unixepoch', 'localtime') > datetime('now', '-1 years')", false,
-		},
-		{
-			"2 years", "creationDate", Years(2),
-			"datetime(creationDate, 'unixepoch', 'localtime') > datetime('now', '-2 years')", false,
-		},
-
-		// Empty/zero cases
-		{"zero duration", "creationDate", Duration{}, "", true},
-		{"zero days", "creationDate", Days(0), "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := duration(tt.column, tt.duration)
+			f := createdAfter(tt.column, tt.after)
 			assert.Equal(t, tt.want, f.SQL())
 			assert.Equal(t, tt.isEmpty, f.IsEmpty())
 		})
@@ -493,17 +463,18 @@ func TestDurationFilter(t *testing.T) {
 
 func TestFilterBuilderWithDateFilters(t *testing.T) {
 	t.Run("mixed date filters", func(t *testing.T) {
+		testTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.Local)
 		fb := newFilterBuilder().
 			addStatic(filterIsTodo).
 			addThingsDateValue("TASK.startDate", dateOpAfter, "2024-01-01").
 			addUnixTimeValue("TASK.stopDate", dateOpPast, "").
-			addDurationFilter("TASK.creationDate", Days(30))
+			addCreatedAfterFilter("TASK.creationDate", testTime)
 
 		sql := fb.sql()
 		assert.Contains(t, sql, "type = 0")
 		assert.Contains(t, sql, "TASK.startDate >")
 		assert.Contains(t, sql, "date(TASK.stopDate, 'unixepoch', 'localtime') <= date('now', 'localtime')")
-		assert.Contains(t, sql, "datetime(TASK.creationDate, 'unixepoch', 'localtime') > datetime('now', '-30 days')")
+		assert.Contains(t, sql, "datetime(TASK.creationDate, 'unixepoch', 'localtime') > '2024-01-01 00:00:00'")
 	})
 
 	t.Run("deadline before specific date", func(t *testing.T) {

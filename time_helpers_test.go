@@ -80,7 +80,7 @@ func TestApplyWhen(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			todo := scheme.Todo().Title("Test")
+			todo := scheme.AddTodo().Title("Test")
 			todo = ApplyWhen(todo, tt.when)
 			thingsURL, err := todo.Build()
 			require.NoError(t, err)
@@ -102,16 +102,16 @@ func TestApplyWhenWithDifferentBuilders(t *testing.T) {
 	todayStr := Today().Format(time.DateOnly)
 	tomorrowStr := Tomorrow().Format(time.DateOnly)
 
-	// Test TodoBuilder
-	todo := scheme.Todo().Title("Todo")
+	// Test AddTodoBuilder
+	todo := scheme.AddTodo().Title("Todo")
 	todo = ApplyWhen(todo, "today")
 	todoURL, err := todo.Build()
 	require.NoError(t, err)
 	_, todoParams := parseThingsURL(t, todoURL)
 	assert.Equal(t, todayStr, todoParams.Get("when"))
 
-	// Test ProjectBuilder
-	project := scheme.Project().Title("Project")
+	// Test AddProjectBuilder
+	project := scheme.AddProject().Title("Project")
 	project = ApplyWhen(project, "tomorrow")
 	projectURL, err := project.Build()
 	require.NoError(t, err)

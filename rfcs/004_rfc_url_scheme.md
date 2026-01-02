@@ -44,17 +44,17 @@ NewScheme(opts...)  -> *Scheme  (URL building + execution)
     |   +-- Search(ctx, query)   -> error  (execute directly)
     |
     +-- [URL Building - No Auth Required]
-    |   +-- Todo()        -> *TodoBuilder       -> Build() string
-    |   +-- Project()     -> *ProjectBuilder    -> Build() string
+    |   +-- AddTodo()     -> *AddTodoBuilder    -> Build() string
+    |   +-- AddProject()  -> *AddProjectBuilder -> Build() string
     |   +-- ShowBuilder() -> *ShowBuilder       -> Build() string
-    |   +-- JSON()        -> *JSONBuilder       -> Build() string (add only)
+    |   +-- Batch()       -> *BatchBuilder      -> Build() string (add only)
     |   +-- SearchURL(query) -> string
     |   +-- Version()     -> string
     |
     +-- WithToken(token)  -> *AuthScheme  (Authenticated operations)
         +-- UpdateTodo(id)    -> *UpdateTodoBuilder    -> Build() | Execute(ctx)
         +-- UpdateProject(id) -> *UpdateProjectBuilder -> Build() | Execute(ctx)
-        +-- JSON()            -> *AuthJSONBuilder      -> Build() string
+        +-- Batch()           -> *AuthBatchBuilder     -> Build() string
 ```
 
 **Execution Behavior:**
@@ -75,8 +75,8 @@ The design uses **compile-time type safety** to enforce token requirements:
 
 | Entry Point | Available Methods | Token Required |
 |-------------|-------------------|----------------|
-| `scheme.` | Todo, Project, Show, JSON, Search, Version | No |
-| `scheme.WithToken(token).` | UpdateTodo, UpdateProject, JSON | Yes (upfront) |
+| `scheme.` | AddTodo, AddProject, Show, Batch, Search, Version | No |
+| `scheme.WithToken(token).` | UpdateTodo, UpdateProject, Batch | Yes (upfront) |
 
 This ensures:
 - Users cannot accidentally call update operations without a token
@@ -118,10 +118,10 @@ func (s *Scheme) Show(ctx context.Context, uuid string) error
 func (s *Scheme) Search(ctx context.Context, query string) error
 
 // URL building methods
-func (s *Scheme) Todo() *TodoBuilder
-func (s *Scheme) Project() *ProjectBuilder
+func (s *Scheme) AddTodo() *AddTodoBuilder
+func (s *Scheme) AddProject() *AddProjectBuilder
 func (s *Scheme) ShowBuilder() *ShowBuilder  // For building show URLs
-func (s *Scheme) JSON() *JSONBuilder         // Only AddTodo, AddProject available
+func (s *Scheme) Batch() *BatchBuilder       // Only AddTodo, AddProject available
 
 // Simple URL methods
 func (s *Scheme) SearchURL(query string) string  // Returns URL string
@@ -149,11 +149,11 @@ type AuthScheme struct {
 // Update builders
 func (a *AuthScheme) UpdateTodo(id string) *UpdateTodoBuilder
 func (a *AuthScheme) UpdateProject(id string) *UpdateProjectBuilder
-func (a *AuthScheme) JSON() *AuthJSONBuilder  // AddTodo, AddProject, UpdateTodo, UpdateProject available
+func (a *AuthScheme) Batch() *AuthBatchBuilder  // AddTodo, AddProject, UpdateTodo, UpdateProject available
 ```
 
 **Design Note:** AuthScheme uses pointer reference (not embedding) to Scheme. This is intentional:
-- Embedding (`*Scheme`) would expose all Scheme methods on AuthScheme (e.g., `auth.Todo()`)
+- Embedding (`*Scheme`) would expose all Scheme methods on AuthScheme (e.g., `auth.AddTodo()`)
 - Pointer reference only exposes Update methods, keeping the API clean and focused
 
 ## Type System
@@ -239,38 +239,38 @@ const (
 
 ## Builders
 
-### TodoBuilder (for add command)
+### AddTodoBuilder (for add command)
 
 ```go
-type TodoBuilder struct {
+type AddTodoBuilder struct {
     params map[string]string
     errors []error
 }
 
 // Chainable methods
-func (b *TodoBuilder) Title(title string) *TodoBuilder
-func (b *TodoBuilder) Titles(titles ...string) *TodoBuilder
-func (b *TodoBuilder) Notes(notes string) *TodoBuilder
-func (b *TodoBuilder) When(t time.Time) *TodoBuilder      // schedule for specific date
-func (b *TodoBuilder) WhenEvening() *TodoBuilder          // this evening
-func (b *TodoBuilder) WhenAnytime() *TodoBuilder          // anytime
-func (b *TodoBuilder) WhenSomeday() *TodoBuilder          // someday
-func (b *TodoBuilder) Deadline(t time.Time) *TodoBuilder  // deadline date
-func (b *TodoBuilder) Reminder(hour, minute int) *TodoBuilder
-func (b *TodoBuilder) Tags(tags ...string) *TodoBuilder
-func (b *TodoBuilder) ChecklistItems(items ...string) *TodoBuilder
-func (b *TodoBuilder) List(name string) *TodoBuilder
-func (b *TodoBuilder) ListID(id string) *TodoBuilder
-func (b *TodoBuilder) Heading(name string) *TodoBuilder
-func (b *TodoBuilder) HeadingID(id string) *TodoBuilder
-func (b *TodoBuilder) Completed(completed bool) *TodoBuilder
-func (b *TodoBuilder) Canceled(canceled bool) *TodoBuilder
-func (b *TodoBuilder) Reveal(reveal bool) *TodoBuilder
-func (b *TodoBuilder) CreationDate(date time.Time) *TodoBuilder
-func (b *TodoBuilder) CompletionDate(date time.Time) *TodoBuilder
+func (b *AddTodoBuilder) Title(title string) *AddTodoBuilder
+func (b *AddTodoBuilder) Titles(titles ...string) *AddTodoBuilder
+func (b *AddTodoBuilder) Notes(notes string) *AddTodoBuilder
+func (b *AddTodoBuilder) When(t time.Time) *AddTodoBuilder      // schedule for specific date
+func (b *AddTodoBuilder) WhenEvening() *AddTodoBuilder          // this evening
+func (b *AddTodoBuilder) WhenAnytime() *AddTodoBuilder          // anytime
+func (b *AddTodoBuilder) WhenSomeday() *AddTodoBuilder          // someday
+func (b *AddTodoBuilder) Deadline(t time.Time) *AddTodoBuilder  // deadline date
+func (b *AddTodoBuilder) Reminder(hour, minute int) *AddTodoBuilder
+func (b *AddTodoBuilder) Tags(tags ...string) *AddTodoBuilder
+func (b *AddTodoBuilder) ChecklistItems(items ...string) *AddTodoBuilder
+func (b *AddTodoBuilder) List(name string) *AddTodoBuilder
+func (b *AddTodoBuilder) ListID(id string) *AddTodoBuilder
+func (b *AddTodoBuilder) Heading(name string) *AddTodoBuilder
+func (b *AddTodoBuilder) HeadingID(id string) *AddTodoBuilder
+func (b *AddTodoBuilder) Completed(completed bool) *AddTodoBuilder
+func (b *AddTodoBuilder) Canceled(canceled bool) *AddTodoBuilder
+func (b *AddTodoBuilder) Reveal(reveal bool) *AddTodoBuilder
+func (b *AddTodoBuilder) CreationDate(date time.Time) *AddTodoBuilder
+func (b *AddTodoBuilder) CompletionDate(date time.Time) *AddTodoBuilder
 
 // Terminal method
-func (b *TodoBuilder) Build() (string, error)
+func (b *AddTodoBuilder) Build() (string, error)
 ```
 
 ### UpdateTodoBuilder (for update command)
@@ -297,31 +297,31 @@ func (b *UpdateTodoBuilder) Build() (string, error)      // Returns URL string
 func (b *UpdateTodoBuilder) Execute(ctx context.Context) error  // Builds and executes
 ```
 
-### ProjectBuilder (for add-project command)
+### AddProjectBuilder (for add-project command)
 
 ```go
-type ProjectBuilder struct {
+type AddProjectBuilder struct {
     params map[string]string
     errors []error
 }
 
-func (b *ProjectBuilder) Title(title string) *ProjectBuilder
-func (b *ProjectBuilder) Notes(notes string) *ProjectBuilder
-func (b *ProjectBuilder) When(t time.Time) *ProjectBuilder      // schedule for specific date
-func (b *ProjectBuilder) WhenEvening() *ProjectBuilder          // this evening
-func (b *ProjectBuilder) WhenAnytime() *ProjectBuilder          // anytime
-func (b *ProjectBuilder) WhenSomeday() *ProjectBuilder          // someday
-func (b *ProjectBuilder) Deadline(t time.Time) *ProjectBuilder  // deadline date
-func (b *ProjectBuilder) Reminder(hour, minute int) *ProjectBuilder
-func (b *ProjectBuilder) Tags(tags ...string) *ProjectBuilder
-func (b *ProjectBuilder) Area(name string) *ProjectBuilder
-func (b *ProjectBuilder) AreaID(id string) *ProjectBuilder
-func (b *ProjectBuilder) Todos(titles ...string) *ProjectBuilder
-func (b *ProjectBuilder) Completed(completed bool) *ProjectBuilder
-func (b *ProjectBuilder) Canceled(canceled bool) *ProjectBuilder
-func (b *ProjectBuilder) Reveal(reveal bool) *ProjectBuilder
+func (b *AddProjectBuilder) Title(title string) *AddProjectBuilder
+func (b *AddProjectBuilder) Notes(notes string) *AddProjectBuilder
+func (b *AddProjectBuilder) When(t time.Time) *AddProjectBuilder      // schedule for specific date
+func (b *AddProjectBuilder) WhenEvening() *AddProjectBuilder          // this evening
+func (b *AddProjectBuilder) WhenAnytime() *AddProjectBuilder          // anytime
+func (b *AddProjectBuilder) WhenSomeday() *AddProjectBuilder          // someday
+func (b *AddProjectBuilder) Deadline(t time.Time) *AddProjectBuilder  // deadline date
+func (b *AddProjectBuilder) Reminder(hour, minute int) *AddProjectBuilder
+func (b *AddProjectBuilder) Tags(tags ...string) *AddProjectBuilder
+func (b *AddProjectBuilder) Area(name string) *AddProjectBuilder
+func (b *AddProjectBuilder) AreaID(id string) *AddProjectBuilder
+func (b *AddProjectBuilder) Todos(titles ...string) *AddProjectBuilder
+func (b *AddProjectBuilder) Completed(completed bool) *AddProjectBuilder
+func (b *AddProjectBuilder) Canceled(canceled bool) *AddProjectBuilder
+func (b *AddProjectBuilder) Reveal(reveal bool) *AddProjectBuilder
 
-func (b *ProjectBuilder) Build() (string, error)
+func (b *AddProjectBuilder) Build() (string, error)
 ```
 
 ### UpdateProjectBuilder (for update-project command)
@@ -360,32 +360,32 @@ func (b *ShowBuilder) Filter(tags ...string) *ShowBuilder
 func (b *ShowBuilder) Build() string
 ```
 
-### JSONBuilder (for json command - create only)
+### BatchBuilder (for json command - create only)
 
 ```go
-// JSONBuilder is for batch create operations (no token required).
-// For update operations, use AuthScheme.JSON() to get AuthJSONBuilder.
-type JSONBuilder struct {
+// BatchBuilder is for batch create operations (no token required).
+// For update operations, use AuthScheme.Batch() to get AuthBatchBuilder.
+type BatchBuilder struct {
     items  []JSONItem
     reveal bool
     errors []error
 }
 
 // Only create operations available
-func (b *JSONBuilder) AddTodo(opts ...JSONOption) *JSONBuilder
-func (b *JSONBuilder) AddProject(opts ...JSONOption) *JSONBuilder
-func (b *JSONBuilder) Reveal(reveal bool) *JSONBuilder
+func (b *BatchBuilder) AddTodo(opts ...JSONOption) *BatchBuilder
+func (b *BatchBuilder) AddProject(opts ...JSONOption) *BatchBuilder
+func (b *BatchBuilder) Reveal(reveal bool) *BatchBuilder
 
 // Terminal method (no token needed for create-only operations)
-func (b *JSONBuilder) Build() (string, error)
+func (b *BatchBuilder) Build() (string, error)
 ```
 
-### AuthJSONBuilder (for json command - create and update)
+### AuthBatchBuilder (for json command - create and update)
 
 ```go
-// AuthJSONBuilder is for batch operations including updates (token required).
-// Obtained via AuthScheme.JSON().
-type AuthJSONBuilder struct {
+// AuthBatchBuilder is for batch operations including updates (token required).
+// Obtained via AuthScheme.Batch().
+type AuthBatchBuilder struct {
     token  string
     items  []JSONItem
     reveal bool
@@ -393,16 +393,16 @@ type AuthJSONBuilder struct {
 }
 
 // Create operations
-func (b *AuthJSONBuilder) AddTodo(opts ...JSONOption) *AuthJSONBuilder
-func (b *AuthJSONBuilder) AddProject(opts ...JSONOption) *AuthJSONBuilder
+func (b *AuthBatchBuilder) AddTodo(opts ...JSONOption) *AuthBatchBuilder
+func (b *AuthBatchBuilder) AddProject(opts ...JSONOption) *AuthBatchBuilder
 
-// Update operations (only available on AuthJSONBuilder)
-func (b *AuthJSONBuilder) UpdateTodo(id string, opts ...JSONOption) *AuthJSONBuilder
-func (b *AuthJSONBuilder) UpdateProject(id string, opts ...JSONOption) *AuthJSONBuilder
-func (b *AuthJSONBuilder) Reveal(reveal bool) *AuthJSONBuilder
+// Update operations (only available on AuthBatchBuilder)
+func (b *AuthBatchBuilder) UpdateTodo(id string, opts ...JSONOption) *AuthBatchBuilder
+func (b *AuthBatchBuilder) UpdateProject(id string, opts ...JSONOption) *AuthBatchBuilder
+func (b *AuthBatchBuilder) Reveal(reveal bool) *AuthBatchBuilder
 
 // Terminal method (token already set via AuthScheme)
-func (b *AuthJSONBuilder) Build() (string, error)
+func (b *AuthBatchBuilder) Build() (string, error)
 ```
 
 ### JSON Shared Types
@@ -450,13 +450,13 @@ Note: `ErrTokenRequired` is no longer needed because the type system now enforce
 scheme := things3.NewScheme()
 
 // Simple todo
-url, err := scheme.Todo().
+url, err := scheme.AddTodo().
     Title("Buy groceries").
     When(things3.Today()).
     Build()
 
 // Complex todo
-url, err := scheme.Todo().
+url, err := scheme.AddTodo().
     Title("Review PR #123").
     Notes("Check the authentication changes").
     When(things3.Tomorrow()).
@@ -505,11 +505,11 @@ bgScheme := things3.NewScheme(things3.WithBackground())
 err := bgScheme.Show(ctx, "task-uuid")  // Things stays in background
 
 // Create/Update operations: background by default (silent operation)
-err := scheme.Todo().Title("Buy milk").Execute(ctx)  // Creates without focus change
+err := scheme.AddTodo().Title("Buy milk").Execute(ctx)  // Creates without focus change
 
 // Bring Things to foreground for create/update operations
 fgScheme := things3.NewScheme(things3.WithForeground())
-err := fgScheme.Todo().Title("Buy milk").Execute(ctx)  // Things comes to foreground
+err := fgScheme.AddTodo().Title("Buy milk").Execute(ctx)  // Things comes to foreground
 
 // Update with foreground execution
 auth := fgScheme.WithToken(token)
@@ -523,7 +523,7 @@ err := auth.UpdateTodo("task-uuid").
 ```go
 scheme := things3.NewScheme()
 
-url, err := scheme.Project().
+url, err := scheme.AddProject().
     Title("Q1 Planning").
     Notes("Quarterly planning for 2024").
     WhenAnytime().
@@ -553,35 +553,35 @@ url := scheme.Show().
     Build()
 ```
 
-### Batch Operations with JSON
+### Batch Operations
 
 ```go
 scheme := things3.NewScheme()
 
-// Create multiple items (no token needed) - use scheme.JSON()
-url, err := scheme.JSON().
-    AddTodo(func(t *things3.JSONTodoBuilder) {
+// Create multiple items (no token needed) - use scheme.Batch()
+url, err := scheme.Batch().
+    AddTodo(func(t *things3.BatchTodoBuilder) {
         t.Title("First task").When(things3.Today())
     }).
-    AddTodo(func(t *things3.JSONTodoBuilder) {
+    AddTodo(func(t *things3.BatchTodoBuilder) {
         t.Title("Second task").When(things3.Tomorrow())
     }).
-    AddProject(func(p *things3.JSONProjectBuilder) {
+    AddProject(func(p *things3.BatchProjectBuilder) {
         p.Title("New Project").Notes("Project description")
     }).
     Reveal(true).
     Build()
 
-// Mixed create and update (token required) - use auth.JSON()
+// Mixed create and update (token required) - use auth.Batch()
 db, _ := things3.NewDB()
 token, _ := db.Token(ctx)
 auth := scheme.WithToken(token)
 
-url, err := auth.JSON().
-    AddTodo(func(t *things3.JSONTodoBuilder) {
+url, err := auth.Batch().
+    AddTodo(func(t *things3.BatchTodoBuilder) {
         t.Title("New task")
     }).
-    UpdateTodo("existing-uuid", func(t *things3.JSONTodoBuilder) {
+    UpdateTodo("existing-uuid", func(t *things3.BatchTodoBuilder) {
         t.Completed(true)
     }).
     Build()
@@ -635,10 +635,10 @@ things3/
 |------|----------------|
 | `scheme.go` | Entry points, NewScheme(), WithToken(), Show(), Search(), execute(), executeNavigation() |
 | `scheme_options.go` | SchemeOption, WithForeground(), WithBackground() |
-| `scheme_builder.go` | TodoBuilder, ProjectBuilder for create operations |
+| `scheme_builder.go` | AddTodoBuilder, AddProjectBuilder for create operations |
 | `scheme_update.go` | UpdateTodoBuilder, UpdateProjectBuilder with Execute() |
 | `scheme_show.go` | ShowBuilder for navigation |
-| `scheme_json.go` | JSON command builders and options |
+| `scheme_json.go` | Batch command builders (BatchBuilder, AuthBatchBuilder) and options |
 | `scheme_constants.go` | URL parameter key constants |
 | `scheme_test.go` | Unit tests for all builders |
 
@@ -674,7 +674,7 @@ const RateLimitWindow = 10 * time.Second
 ### Scheme Builder Tests (No Auth Required)
 
 ```go
-func TestTodoBuilder(t *testing.T) {
+func TestAddTodoBuilder(t *testing.T) {
     scheme := things3.NewScheme()
 
     tests := []struct {
@@ -686,7 +686,7 @@ func TestTodoBuilder(t *testing.T) {
         {
             name: "simple todo",
             build: func() (string, error) {
-                return scheme.Todo().
+                return scheme.AddTodo().
                     Title("Test").
                     When(things3.Today()).
                     Build()
@@ -696,7 +696,7 @@ func TestTodoBuilder(t *testing.T) {
         {
             name: "todo with all options",
             build: func() (string, error) {
-                return scheme.Todo().
+                return scheme.AddTodo().
                     Title("Review PR").
                     Notes("Check changes").
                     Deadline(time.Date(2024, 12, 15, 0, 0, 0, 0, time.Local)).
@@ -748,12 +748,12 @@ func TestAuthScheme_UpdateTodo(t *testing.T) {
     assert.Contains(t, url, "completed=true")
 }
 
-func TestAuthScheme_JSON(t *testing.T) {
+func TestAuthScheme_Batch(t *testing.T) {
     scheme := things3.NewScheme()
     auth := scheme.WithToken("test-token")
 
-    // AuthJSONBuilder has UpdateTodo method
-    url, err := auth.JSON().
+    // AuthBatchBuilder has UpdateTodo method
+    url, err := auth.Batch().
         AddTodo(things3.JSONTitle("New task")).
         UpdateTodo("uuid-123", things3.JSONCompleted(true)).
         Build()
@@ -763,11 +763,11 @@ func TestAuthScheme_JSON(t *testing.T) {
     assert.Contains(t, url, "auth-token=test-token")
 }
 
-func TestScheme_JSON_NoUpdateMethods(t *testing.T) {
+func TestScheme_Batch_NoUpdateMethods(t *testing.T) {
     scheme := things3.NewScheme()
 
-    // JSONBuilder (non-auth) only has AddTodo, AddProject - no UpdateTodo
-    url, err := scheme.JSON().
+    // BatchBuilder (non-auth) only has AddTodo, AddProject - no UpdateTodo
+    url, err := scheme.Batch().
         AddTodo(things3.JSONTitle("Task 1")).
         AddProject(things3.JSONTitle("Project 1")).
         Build()
@@ -795,7 +795,7 @@ func TestWithToken_EmptyToken(t *testing.T) {
 The following methods on `Client` are deprecated in favor of `NewScheme()`:
 
 ```go
-// Deprecated: Use things3.NewScheme().Todo().Build() instead
+// Deprecated: Use things3.NewScheme().AddTodo().Build() instead
 func (c *Client) AddTodoURL(params map[string]string) string
 
 // Deprecated: Use things3.NewScheme().WithToken(token).UpdateTodo(id).Build()
@@ -811,7 +811,7 @@ url := client.AddTodoURL(map[string]string{"title": "Task"})
 
 // After (recommended)
 scheme := things3.NewScheme()
-url, _ := scheme.Todo().Title("Task").Build()
+url, _ := scheme.AddTodo().Title("Task").Build()
 ```
 
 ```go

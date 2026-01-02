@@ -17,9 +17,13 @@ func WithDBPath(path string) DBOption {
 	}
 }
 
-// WithPrintSQL enables SQL query logging to stdout.
+// WithDBPrintSQL enables SQL query logging to stdout.
 // Useful for debugging and understanding the queries being executed.
-func WithPrintSQL(enabled bool) DBOption {
+//
+// Example:
+//
+//	db, err := things3.NewDB(things3.WithDBPrintSQL(true))
+func WithDBPrintSQL(enabled bool) DBOption {
 	return func(opts *dbOptions) {
 		opts.printSQL = enabled
 	}

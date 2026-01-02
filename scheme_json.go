@@ -37,33 +37,33 @@ type JSONItem struct {
 	Attributes map[string]any `json:"attributes,omitempty"`
 }
 
-// JSONTodoBuilder builds a to-do entry for JSON batch operations.
-// Unlike TodoBuilder which generates a complete URL, JSONTodoBuilder creates
-// a JSON object that becomes part of a JSONBuilder or AuthJSONBuilder batch.
+// BatchTodoBuilder builds a to-do entry for batch operations.
+// Unlike AddTodoBuilder which generates a complete URL, BatchTodoBuilder creates
+// a JSON object that becomes part of a BatchBuilder or AuthBatchBuilder batch.
 //
 // Example:
 //
-//	Scheme.JSON().
-//	    AddTodo(func(b *JSONTodoBuilder) {
+//	Scheme.Batch().
+//	    AddTodo(func(b *BatchTodoBuilder) {
 //	        b.Title("Buy milk").Tags("shopping")
 //	    }).
 //	    Build()
-type JSONTodoBuilder struct {
+type BatchTodoBuilder struct {
 	item      JSONItem
 	jsonAttrs jsonAttrs
 	err       error
 }
 
 // getStore returns the attribute store for the builder.
-func (t *JSONTodoBuilder) getStore() attrStore { return &t.jsonAttrs }
+func (t *BatchTodoBuilder) getStore() attrStore { return &t.jsonAttrs }
 
 // setErr sets the error field for the builder.
-func (t *JSONTodoBuilder) setErr(err error) { t.err = err }
+func (t *BatchTodoBuilder) setErr(err error) { t.err = err }
 
-// newJSONTodoBuilder creates a new JSONTodoBuilder for create operations.
-func newJSONTodoBuilder() *JSONTodoBuilder {
+// newBatchTodoBuilder creates a new BatchTodoBuilder for create operations.
+func newBatchTodoBuilder() *BatchTodoBuilder {
 	attrs := make(map[string]any)
-	return &JSONTodoBuilder{
+	return &BatchTodoBuilder{
 		item: JSONItem{
 			Type:       JSONItemTypeTodo,
 			Operation:  JSONOperationCreate,
@@ -73,10 +73,10 @@ func newJSONTodoBuilder() *JSONTodoBuilder {
 	}
 }
 
-// newJSONTodoBuilderUpdate creates a new JSONTodoBuilder for update operations.
-func newJSONTodoBuilderUpdate(id string) *JSONTodoBuilder {
+// newBatchTodoBuilderUpdate creates a new BatchTodoBuilder for update operations.
+func newBatchTodoBuilderUpdate(id string) *BatchTodoBuilder {
 	attrs := make(map[string]any)
-	return &JSONTodoBuilder{
+	return &BatchTodoBuilder{
 		item: JSONItem{
 			Type:       JSONItemTypeTodo,
 			Operation:  JSONOperationUpdate,
@@ -88,49 +88,49 @@ func newJSONTodoBuilderUpdate(id string) *JSONTodoBuilder {
 }
 
 // Title sets the to-do title.
-func (t *JSONTodoBuilder) Title(title string) *JSONTodoBuilder {
+func (t *BatchTodoBuilder) Title(title string) *BatchTodoBuilder {
 	return setStr(t, titleParam, title)
 }
 
 // Notes sets the to-do notes.
-func (t *JSONTodoBuilder) Notes(notes string) *JSONTodoBuilder {
+func (t *BatchTodoBuilder) Notes(notes string) *BatchTodoBuilder {
 	return setStr(t, notesParam, notes)
 }
 
 // When sets the scheduling date using a time.Time value.
 // The date portion is used; time-of-day is ignored.
-func (t *JSONTodoBuilder) When(tm time.Time) *JSONTodoBuilder {
+func (t *BatchTodoBuilder) When(tm time.Time) *BatchTodoBuilder {
 	return setWhenTime(t, tm)
 }
 
 // WhenEvening schedules the to-do for this evening.
-func (t *JSONTodoBuilder) WhenEvening() *JSONTodoBuilder {
+func (t *BatchTodoBuilder) WhenEvening() *BatchTodoBuilder {
 	return setWhenStr(t, whenEvening)
 }
 
 // WhenAnytime schedules the to-do for anytime (no specific time).
-func (t *JSONTodoBuilder) WhenAnytime() *JSONTodoBuilder {
+func (t *BatchTodoBuilder) WhenAnytime() *BatchTodoBuilder {
 	return setWhenStr(t, whenAnytime)
 }
 
 // WhenSomeday schedules the to-do for someday (indefinite future).
-func (t *JSONTodoBuilder) WhenSomeday() *JSONTodoBuilder {
+func (t *BatchTodoBuilder) WhenSomeday() *BatchTodoBuilder {
 	return setWhenStr(t, whenSomeday)
 }
 
 // Deadline sets the deadline date using a time.Time value.
 // The date portion is used; time-of-day is ignored.
-func (t *JSONTodoBuilder) Deadline(tm time.Time) *JSONTodoBuilder {
+func (t *BatchTodoBuilder) Deadline(tm time.Time) *BatchTodoBuilder {
 	return setDeadlineTime(t, tm)
 }
 
 // Tags sets the tags for the to-do.
-func (t *JSONTodoBuilder) Tags(tags ...string) *JSONTodoBuilder {
+func (t *BatchTodoBuilder) Tags(tags ...string) *BatchTodoBuilder {
 	return setStrs(t, tagsParam, tags)
 }
 
 // ChecklistItems sets the checklist items.
-func (t *JSONTodoBuilder) ChecklistItems(items ...string) *JSONTodoBuilder {
+func (t *BatchTodoBuilder) ChecklistItems(items ...string) *BatchTodoBuilder {
 	if len(items) > maxChecklistItems {
 		t.err = ErrTooManyChecklistItems
 		return t
@@ -147,79 +147,79 @@ func (t *JSONTodoBuilder) ChecklistItems(items ...string) *JSONTodoBuilder {
 }
 
 // List sets the target project or area by name.
-func (t *JSONTodoBuilder) List(name string) *JSONTodoBuilder {
+func (t *BatchTodoBuilder) List(name string) *BatchTodoBuilder {
 	return setStr(t, listParam, name)
 }
 
 // ListID sets the target project or area by UUID.
-func (t *JSONTodoBuilder) ListID(id string) *JSONTodoBuilder {
+func (t *BatchTodoBuilder) ListID(id string) *BatchTodoBuilder {
 	return setStr(t, listIDParam, id)
 }
 
 // Heading sets the target heading within a project by name.
-func (t *JSONTodoBuilder) Heading(name string) *JSONTodoBuilder {
+func (t *BatchTodoBuilder) Heading(name string) *BatchTodoBuilder {
 	return setStr(t, headingParam, name)
 }
 
 // Completed sets the completion status.
-func (t *JSONTodoBuilder) Completed(completed bool) *JSONTodoBuilder {
+func (t *BatchTodoBuilder) Completed(completed bool) *BatchTodoBuilder {
 	return setBool(t, completedParam, completed)
 }
 
 // Canceled sets the canceled status.
-func (t *JSONTodoBuilder) Canceled(canceled bool) *JSONTodoBuilder {
+func (t *BatchTodoBuilder) Canceled(canceled bool) *BatchTodoBuilder {
 	return setBool(t, canceledParam, canceled)
 }
 
 // CreationDate sets the creation timestamp.
-func (t *JSONTodoBuilder) CreationDate(date time.Time) *JSONTodoBuilder {
+func (t *BatchTodoBuilder) CreationDate(date time.Time) *BatchTodoBuilder {
 	return setTime(t, creationDateParam, date)
 }
 
 // CompletionDate sets the completion timestamp.
-func (t *JSONTodoBuilder) CompletionDate(date time.Time) *JSONTodoBuilder {
+func (t *BatchTodoBuilder) CompletionDate(date time.Time) *BatchTodoBuilder {
 	return setTime(t, completionDateParam, date)
 }
 
 // PrependNotes prepends text to existing notes (update only).
-func (t *JSONTodoBuilder) PrependNotes(notes string) *JSONTodoBuilder {
+func (t *BatchTodoBuilder) PrependNotes(notes string) *BatchTodoBuilder {
 	return setStr(t, prependNotesParam, notes)
 }
 
 // AppendNotes appends text to existing notes (update only).
-func (t *JSONTodoBuilder) AppendNotes(notes string) *JSONTodoBuilder {
+func (t *BatchTodoBuilder) AppendNotes(notes string) *BatchTodoBuilder {
 	return setStr(t, appendNotesParam, notes)
 }
 
 // AddTags adds tags without replacing existing ones (update only).
-func (t *JSONTodoBuilder) AddTags(tags ...string) *JSONTodoBuilder {
+func (t *BatchTodoBuilder) AddTags(tags ...string) *BatchTodoBuilder {
 	return setStrs(t, addTagsParam, tags)
 }
 
 // build returns the JSON item and any error.
-func (t *JSONTodoBuilder) build() (JSONItem, error) {
+func (t *BatchTodoBuilder) build() (JSONItem, error) {
 	return t.item, t.err
 }
 
-// JSONProjectBuilder builds a project entry for JSON batch operations.
-// Unlike ProjectBuilder which generates a complete URL, JSONProjectBuilder creates
-// a JSON object that becomes part of a JSONBuilder or AuthJSONBuilder batch.
-type JSONProjectBuilder struct {
+// BatchProjectBuilder builds a project entry for batch operations.
+// Unlike AddProjectBuilder which generates a complete URL, BatchProjectBuilder creates
+// a JSON object that becomes part of a BatchBuilder or AuthBatchBuilder batch.
+type BatchProjectBuilder struct {
 	item      JSONItem
 	jsonAttrs jsonAttrs
 	err       error
 }
 
 // getStore returns the attribute store for the builder.
-func (p *JSONProjectBuilder) getStore() attrStore { return &p.jsonAttrs }
+func (p *BatchProjectBuilder) getStore() attrStore { return &p.jsonAttrs }
 
 // setErr sets the error field for the builder.
-func (p *JSONProjectBuilder) setErr(err error) { p.err = err }
+func (p *BatchProjectBuilder) setErr(err error) { p.err = err }
 
-// newJSONProjectBuilder creates a new JSONProjectBuilder for create operations.
-func newJSONProjectBuilder() *JSONProjectBuilder {
+// newBatchProjectBuilder creates a new BatchProjectBuilder for create operations.
+func newBatchProjectBuilder() *BatchProjectBuilder {
 	attrs := make(map[string]any)
-	return &JSONProjectBuilder{
+	return &BatchProjectBuilder{
 		item: JSONItem{
 			Type:       JSONItemTypeProject,
 			Operation:  JSONOperationCreate,
@@ -229,10 +229,10 @@ func newJSONProjectBuilder() *JSONProjectBuilder {
 	}
 }
 
-// newJSONProjectBuilderUpdate creates a new JSONProjectBuilder for update operations.
-func newJSONProjectBuilderUpdate(id string) *JSONProjectBuilder {
+// newBatchProjectBuilderUpdate creates a new BatchProjectBuilder for update operations.
+func newBatchProjectBuilderUpdate(id string) *BatchProjectBuilder {
 	attrs := make(map[string]any)
-	return &JSONProjectBuilder{
+	return &BatchProjectBuilder{
 		item: JSONItem{
 			Type:       JSONItemTypeProject,
 			Operation:  JSONOperationUpdate,
@@ -244,94 +244,94 @@ func newJSONProjectBuilderUpdate(id string) *JSONProjectBuilder {
 }
 
 // Title sets the project title.
-func (p *JSONProjectBuilder) Title(title string) *JSONProjectBuilder {
+func (p *BatchProjectBuilder) Title(title string) *BatchProjectBuilder {
 	return setStr(p, titleParam, title)
 }
 
 // Notes sets the project notes.
-func (p *JSONProjectBuilder) Notes(notes string) *JSONProjectBuilder {
+func (p *BatchProjectBuilder) Notes(notes string) *BatchProjectBuilder {
 	return setStr(p, notesParam, notes)
 }
 
 // When sets the scheduling date using a time.Time value.
 // The date portion is used; time-of-day is ignored.
-func (p *JSONProjectBuilder) When(t time.Time) *JSONProjectBuilder {
+func (p *BatchProjectBuilder) When(t time.Time) *BatchProjectBuilder {
 	return setWhenTime(p, t)
 }
 
 // WhenEvening schedules the project for this evening.
-func (p *JSONProjectBuilder) WhenEvening() *JSONProjectBuilder {
+func (p *BatchProjectBuilder) WhenEvening() *BatchProjectBuilder {
 	return setWhenStr(p, whenEvening)
 }
 
 // WhenAnytime schedules the project for anytime (no specific time).
-func (p *JSONProjectBuilder) WhenAnytime() *JSONProjectBuilder {
+func (p *BatchProjectBuilder) WhenAnytime() *BatchProjectBuilder {
 	return setWhenStr(p, whenAnytime)
 }
 
 // WhenSomeday schedules the project for someday (indefinite future).
-func (p *JSONProjectBuilder) WhenSomeday() *JSONProjectBuilder {
+func (p *BatchProjectBuilder) WhenSomeday() *BatchProjectBuilder {
 	return setWhenStr(p, whenSomeday)
 }
 
 // Deadline sets the deadline date using a time.Time value.
 // The date portion is used; time-of-day is ignored.
-func (p *JSONProjectBuilder) Deadline(t time.Time) *JSONProjectBuilder {
+func (p *BatchProjectBuilder) Deadline(t time.Time) *BatchProjectBuilder {
 	return setDeadlineTime(p, t)
 }
 
 // Tags sets the tags for the project.
-func (p *JSONProjectBuilder) Tags(tags ...string) *JSONProjectBuilder {
+func (p *BatchProjectBuilder) Tags(tags ...string) *BatchProjectBuilder {
 	return setStrs(p, tagsParam, tags)
 }
 
 // Area sets the parent area by name.
-func (p *JSONProjectBuilder) Area(name string) *JSONProjectBuilder {
+func (p *BatchProjectBuilder) Area(name string) *BatchProjectBuilder {
 	return setStr(p, areaParam, name)
 }
 
 // AreaID sets the parent area by UUID.
-func (p *JSONProjectBuilder) AreaID(id string) *JSONProjectBuilder {
+func (p *BatchProjectBuilder) AreaID(id string) *BatchProjectBuilder {
 	return setStr(p, areaIDParam, id)
 }
 
 // Completed sets the completion status.
-func (p *JSONProjectBuilder) Completed(completed bool) *JSONProjectBuilder {
+func (p *BatchProjectBuilder) Completed(completed bool) *BatchProjectBuilder {
 	return setBool(p, completedParam, completed)
 }
 
 // Canceled sets the canceled status.
-func (p *JSONProjectBuilder) Canceled(canceled bool) *JSONProjectBuilder {
+func (p *BatchProjectBuilder) Canceled(canceled bool) *BatchProjectBuilder {
 	return setBool(p, canceledParam, canceled)
 }
 
 // CreationDate sets the creation timestamp.
-func (p *JSONProjectBuilder) CreationDate(date time.Time) *JSONProjectBuilder {
+func (p *BatchProjectBuilder) CreationDate(date time.Time) *BatchProjectBuilder {
 	return setTime(p, creationDateParam, date)
 }
 
 // CompletionDate sets the completion timestamp.
-func (p *JSONProjectBuilder) CompletionDate(date time.Time) *JSONProjectBuilder {
+func (p *BatchProjectBuilder) CompletionDate(date time.Time) *BatchProjectBuilder {
 	return setTime(p, completionDateParam, date)
 }
 
 // PrependNotes prepends text to existing notes (update only).
-func (p *JSONProjectBuilder) PrependNotes(notes string) *JSONProjectBuilder {
+func (p *BatchProjectBuilder) PrependNotes(notes string) *BatchProjectBuilder {
 	return setStr(p, prependNotesParam, notes)
 }
 
 // AppendNotes appends text to existing notes (update only).
-func (p *JSONProjectBuilder) AppendNotes(notes string) *JSONProjectBuilder {
+func (p *BatchProjectBuilder) AppendNotes(notes string) *BatchProjectBuilder {
 	return setStr(p, appendNotesParam, notes)
 }
 
 // AddTags adds tags without replacing existing ones (update only).
-func (p *JSONProjectBuilder) AddTags(tags ...string) *JSONProjectBuilder {
+func (p *BatchProjectBuilder) AddTags(tags ...string) *BatchProjectBuilder {
 	return setStrs(p, addTagsParam, tags)
 }
 
 // Todos sets the child to-do items.
-func (p *JSONProjectBuilder) Todos(items ...*JSONTodoBuilder) *JSONProjectBuilder {
+func (p *BatchProjectBuilder) Todos(items ...*BatchTodoBuilder) *BatchProjectBuilder {
 	todos := make([]map[string]any, 0, len(items))
 	for _, item := range items {
 		if item.err != nil {
@@ -348,13 +348,13 @@ func (p *JSONProjectBuilder) Todos(items ...*JSONTodoBuilder) *JSONProjectBuilde
 }
 
 // build returns the JSON item and any error.
-func (p *JSONProjectBuilder) build() (JSONItem, error) {
+func (p *BatchProjectBuilder) build() (JSONItem, error) {
 	return p.item, p.err
 }
 
-// JSONBuilder builds URLs for batch create operations via the json command.
-// Does not support update operations; use AuthJSONBuilder for updates.
-type JSONBuilder struct {
+// BatchBuilder builds URLs for batch create operations via the json command.
+// Does not support update operations; use AuthBatchBuilder for updates.
+type BatchBuilder struct {
 	scheme *Scheme
 	items  []JSONItem
 	reveal bool
@@ -362,8 +362,8 @@ type JSONBuilder struct {
 }
 
 // AddTodo adds a to-do creation to the batch.
-func (b *JSONBuilder) AddTodo(configure func(*JSONTodoBuilder)) *JSONBuilder {
-	item := newJSONTodoBuilder()
+func (b *BatchBuilder) AddTodo(configure func(*BatchTodoBuilder)) *BatchBuilder {
+	item := newBatchTodoBuilder()
 	configure(item)
 	built, err := item.build()
 	if err != nil {
@@ -375,8 +375,8 @@ func (b *JSONBuilder) AddTodo(configure func(*JSONTodoBuilder)) *JSONBuilder {
 }
 
 // AddProject adds a project creation to the batch.
-func (b *JSONBuilder) AddProject(configure func(*JSONProjectBuilder)) *JSONBuilder {
-	item := newJSONProjectBuilder()
+func (b *BatchBuilder) AddProject(configure func(*BatchProjectBuilder)) *BatchBuilder {
+	item := newBatchProjectBuilder()
 	configure(item)
 	built, err := item.build()
 	if err != nil {
@@ -388,13 +388,13 @@ func (b *JSONBuilder) AddProject(configure func(*JSONProjectBuilder)) *JSONBuild
 }
 
 // Reveal navigates to the first created item after processing.
-func (b *JSONBuilder) Reveal(reveal bool) *JSONBuilder {
+func (b *BatchBuilder) Reveal(reveal bool) *BatchBuilder {
 	b.reveal = reveal
 	return b
 }
 
 // Build returns the Things URL for the JSON batch operation.
-func (b *JSONBuilder) Build() (string, error) {
+func (b *BatchBuilder) Build() (string, error) {
 	if b.err != nil {
 		return "", b.err
 	}
@@ -426,7 +426,7 @@ func (b *JSONBuilder) Build() (string, error) {
 
 // Execute builds and executes the JSON batch URL.
 // Returns an error if the URL cannot be built or executed.
-func (b *JSONBuilder) Execute(ctx context.Context) error {
+func (b *BatchBuilder) Execute(ctx context.Context) error {
 	uri, err := b.Build()
 	if err != nil {
 		return err
@@ -434,9 +434,9 @@ func (b *JSONBuilder) Execute(ctx context.Context) error {
 	return b.scheme.execute(ctx, uri)
 }
 
-// AuthJSONBuilder builds URLs for batch operations including updates via the json command.
+// AuthBatchBuilder builds URLs for batch operations including updates via the json command.
 // Requires authentication token for update operations.
-type AuthJSONBuilder struct {
+type AuthBatchBuilder struct {
 	scheme *Scheme
 	token  string
 	items  []JSONItem
@@ -445,8 +445,8 @@ type AuthJSONBuilder struct {
 }
 
 // AddTodo adds a to-do creation to the batch.
-func (b *AuthJSONBuilder) AddTodo(configure func(*JSONTodoBuilder)) *AuthJSONBuilder {
-	item := newJSONTodoBuilder()
+func (b *AuthBatchBuilder) AddTodo(configure func(*BatchTodoBuilder)) *AuthBatchBuilder {
+	item := newBatchTodoBuilder()
 	configure(item)
 	built, err := item.build()
 	if err != nil {
@@ -458,8 +458,8 @@ func (b *AuthJSONBuilder) AddTodo(configure func(*JSONTodoBuilder)) *AuthJSONBui
 }
 
 // AddProject adds a project creation to the batch.
-func (b *AuthJSONBuilder) AddProject(configure func(*JSONProjectBuilder)) *AuthJSONBuilder {
-	item := newJSONProjectBuilder()
+func (b *AuthBatchBuilder) AddProject(configure func(*BatchProjectBuilder)) *AuthBatchBuilder {
+	item := newBatchProjectBuilder()
 	configure(item)
 	built, err := item.build()
 	if err != nil {
@@ -471,8 +471,8 @@ func (b *AuthJSONBuilder) AddProject(configure func(*JSONProjectBuilder)) *AuthJ
 }
 
 // UpdateTodo adds a to-do update to the batch.
-func (b *AuthJSONBuilder) UpdateTodo(id string, configure func(*JSONTodoBuilder)) *AuthJSONBuilder {
-	item := newJSONTodoBuilderUpdate(id)
+func (b *AuthBatchBuilder) UpdateTodo(id string, configure func(*BatchTodoBuilder)) *AuthBatchBuilder {
+	item := newBatchTodoBuilderUpdate(id)
 	configure(item)
 	built, err := item.build()
 	if err != nil {
@@ -484,8 +484,8 @@ func (b *AuthJSONBuilder) UpdateTodo(id string, configure func(*JSONTodoBuilder)
 }
 
 // UpdateProject adds a project update to the batch.
-func (b *AuthJSONBuilder) UpdateProject(id string, configure func(*JSONProjectBuilder)) *AuthJSONBuilder {
-	item := newJSONProjectBuilderUpdate(id)
+func (b *AuthBatchBuilder) UpdateProject(id string, configure func(*BatchProjectBuilder)) *AuthBatchBuilder {
+	item := newBatchProjectBuilderUpdate(id)
 	configure(item)
 	built, err := item.build()
 	if err != nil {
@@ -497,13 +497,13 @@ func (b *AuthJSONBuilder) UpdateProject(id string, configure func(*JSONProjectBu
 }
 
 // Reveal navigates to the first item after processing.
-func (b *AuthJSONBuilder) Reveal(reveal bool) *AuthJSONBuilder {
+func (b *AuthBatchBuilder) Reveal(reveal bool) *AuthBatchBuilder {
 	b.reveal = reveal
 	return b
 }
 
 // Build returns the Things URL for the JSON batch operation.
-func (b *AuthJSONBuilder) Build() (string, error) {
+func (b *AuthBatchBuilder) Build() (string, error) {
 	if b.err != nil {
 		return "", b.err
 	}
@@ -555,7 +555,7 @@ func (b *AuthJSONBuilder) Build() (string, error) {
 
 // Execute builds and executes the JSON batch URL.
 // Returns an error if the URL cannot be built or executed.
-func (b *AuthJSONBuilder) Execute(ctx context.Context) error {
+func (b *AuthBatchBuilder) Execute(ctx context.Context) error {
 	uri, err := b.Build()
 	if err != nil {
 		return err
@@ -563,20 +563,20 @@ func (b *AuthJSONBuilder) Execute(ctx context.Context) error {
 	return b.scheme.execute(ctx, uri)
 }
 
-// NewTodo creates a new JSONTodoBuilder for use with JSONBuilder.AddTodo.
+// NewTodo creates a new BatchTodoBuilder for use with JSONBuilder.AddTodo.
 // This is a convenience function for inline configuration.
-func NewTodo() *JSONTodoBuilder {
-	return newJSONTodoBuilder()
+func NewTodo() *BatchTodoBuilder {
+	return newBatchTodoBuilder()
 }
 
-// NewProject creates a new JSONProjectBuilder for use with JSONBuilder.AddProject.
+// NewProject creates a new BatchProjectBuilder for use with JSONBuilder.AddProject.
 // This is a convenience function for inline configuration.
-func NewProject() *JSONProjectBuilder {
-	return newJSONProjectBuilder()
+func NewProject() *BatchProjectBuilder {
+	return newBatchProjectBuilder()
 }
 
 // Headings creates heading entries for a project's items.
-// Used within JSONProjectBuilder.Todos to organize to-dos under headings.
+// Used within BatchProjectBuilder.Todos to organize to-dos under headings.
 func Headings(headings ...string) string {
 	return strings.Join(headings, "\n")
 }

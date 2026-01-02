@@ -195,7 +195,16 @@ func (b *UpdateTodoBuilder) Build() (string, error) {
 
 // Execute builds and executes the update URL.
 // Returns an error if the URL cannot be built or executed.
+// If token is not set but tokenFunc is provided, it will fetch the token first.
 func (b *UpdateTodoBuilder) Execute(ctx context.Context) error {
+	// Lazy load token if needed
+	if b.token == "" && b.tokenFunc != nil {
+		token, err := b.tokenFunc(ctx)
+		if err != nil {
+			return err
+		}
+		b.token = token
+	}
 	uri, err := b.Build()
 	if err != nil {
 		return err
@@ -204,13 +213,14 @@ func (b *UpdateTodoBuilder) Execute(ctx context.Context) error {
 }
 
 // UpdateProjectBuilder builds URLs for updating existing projects via the update-project command.
-// Requires authentication token (obtained via AuthScheme).
+// Requires authentication token (obtained via AuthScheme or Client).
 type UpdateProjectBuilder struct {
-	scheme *Scheme
-	token  string
-	id     string
-	attrs  urlAttrs
-	err    error
+	scheme    *Scheme
+	token     string
+	tokenFunc func(context.Context) (string, error) // Optional lazy token loader
+	id        string
+	attrs     urlAttrs
+	err       error
 }
 
 // getStore returns the attribute store for the builder.
@@ -352,7 +362,16 @@ func (b *UpdateProjectBuilder) Build() (string, error) {
 
 // Execute builds and executes the update URL.
 // Returns an error if the URL cannot be built or executed.
+// If token is not set but tokenFunc is provided, it will fetch the token first.
 func (b *UpdateProjectBuilder) Execute(ctx context.Context) error {
+	// Lazy load token if needed
+	if b.token == "" && b.tokenFunc != nil {
+		token, err := b.tokenFunc(ctx)
+		if err != nil {
+			return err
+		}
+		b.token = token
+	}
 	uri, err := b.Build()
 	if err != nil {
 		return err

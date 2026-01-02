@@ -8,13 +8,14 @@ import (
 )
 
 // UpdateTodoBuilder builds URLs for updating existing to-dos via the update command.
-// Requires authentication token (obtained via AuthScheme).
+// Requires authentication token (obtained via AuthScheme or Client).
 type UpdateTodoBuilder struct {
-	scheme *Scheme
-	token  string
-	id     string
-	attrs  urlAttrs
-	err    error
+	scheme    *Scheme
+	token     string
+	tokenFunc func(context.Context) (string, error) // Optional lazy token loader
+	id        string
+	attrs     urlAttrs
+	err       error
 }
 
 // getStore returns the attribute store for the builder.

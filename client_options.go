@@ -58,7 +58,7 @@ func WithForegroundExecution() ClientOption {
 }
 
 // WithBackgroundNavigation configures the Client to run navigation operations
-// (Reveal, RevealList, RevealSearch) in the background without stealing focus.
+// (Show, ShowList, ShowSearch) in the background without stealing focus.
 //
 // By default, navigation operations bring Things to foreground since
 // the user typically wants to view the content.
@@ -67,7 +67,7 @@ func WithForegroundExecution() ClientOption {
 // Example:
 //
 //	client, err := things3.NewClient(things3.WithBackgroundNavigation())
-//	client.Reveal(ctx, "uuid")  // Things stays in background
+//	client.Show(ctx, "uuid")  // Things stays in background
 func WithBackgroundNavigation() ClientOption {
 	return func(opts *clientOptions) {
 		opts.background = true

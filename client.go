@@ -74,7 +74,7 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 		dbOpts = append(dbOpts, WithDBPath(options.databasePath))
 	}
 	if options.printSQL {
-		dbOpts = append(dbOpts, withDBPrintSQL(options.printSQL))
+		dbOpts = append(dbOpts, WithDBPrintSQL(options.printSQL))
 	}
 
 	// Build Scheme options

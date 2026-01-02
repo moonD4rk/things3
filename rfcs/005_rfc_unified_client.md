@@ -407,25 +407,6 @@ var builder *things3.AddTodoBuilder
 var batchBuilder *things3.BatchBuilder
 ```
 
-## Backward Compatibility
-
-The following will be deprecated but remain functional:
-
-```go
-// Deprecated type aliases (to be removed in v2.0)
-type TodoBuilder = AddTodoBuilder
-type ProjectBuilder = AddProjectBuilder
-type JSONBuilder = BatchBuilder
-type JSONTodoBuilder = BatchTodoBuilder
-type JSONProjectBuilder = BatchProjectBuilder
-type AuthJSONBuilder = AuthBatchBuilder
-
-// Deprecated method aliases on Scheme (to be removed in v2.0)
-func (s *Scheme) Todo() *AddTodoBuilder    // Use AddTodo()
-func (s *Scheme) Project() *AddProjectBuilder  // Use AddProject()
-func (s *Scheme) JSON() *BatchBuilder      // Use Batch()
-```
-
 ## Design Principles
 
 | Principle | Implementation |
@@ -434,7 +415,6 @@ func (s *Scheme) JSON() *BatchBuilder      // Use Batch()
 | Automatic Token Management | Lazy loading with `sync.Once` |
 | Clear Intent | Method names express action (Add, Update, Show, Batch) |
 | Consistency | Same naming pattern across Client and Scheme |
-| Backward Compatibility | Type aliases and deprecated methods for migration |
 | Separation of Concerns | Client composes DB and Scheme, doesn't replace them |
 
 ## References

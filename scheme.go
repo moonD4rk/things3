@@ -12,7 +12,7 @@ import (
 // Use NewScheme() to create a new instance:
 //
 //	scheme := things3.NewScheme()
-//	url, _ := scheme.Todo().Title("Buy groceries").Build()
+//	url, _ := scheme.AddTodo().Title("Buy groceries").Build()
 //
 // Execution behavior differs by operation type:
 //
@@ -26,14 +26,14 @@ import (
 //
 //	things3.NewScheme(things3.WithBackground()).Show(ctx, "uuid")
 //
-// Create/Update operations (Todo, Project, JSON, Update*) run in background by default,
+// Create/Update operations (AddTodo, AddProject, Batch, Update*) run in background by default,
 // since the user typically wants silent operation:
 //
-//	scheme.Todo().Title("Buy milk").Execute(ctx)  // Creates without focus change
+//	scheme.AddTodo().Title("Buy milk").Execute(ctx)  // Creates without focus change
 //
 // Use WithForeground() to bring Things to foreground for create/update operations:
 //
-//	things3.NewScheme(things3.WithForeground()).Todo().Title("Buy milk").Execute(ctx)
+//	things3.NewScheme(things3.WithForeground()).AddTodo().Title("Buy milk").Execute(ctx)
 //
 // For operations requiring authentication (update operations),
 // use WithToken() to get an AuthScheme:
@@ -56,17 +56,17 @@ func NewScheme(opts ...SchemeOption) *Scheme {
 	return s
 }
 
-// Todo returns a TodoBuilder for creating a new to-do.
-func (s *Scheme) Todo() *TodoBuilder {
-	return &TodoBuilder{
+// AddTodo returns an AddTodoBuilder for creating a new to-do.
+func (s *Scheme) AddTodo() *AddTodoBuilder {
+	return &AddTodoBuilder{
 		scheme: s,
 		attrs:  urlAttrs{params: make(map[string]string)},
 	}
 }
 
-// Project returns a ProjectBuilder for creating a new project.
-func (s *Scheme) Project() *ProjectBuilder {
-	return &ProjectBuilder{
+// AddProject returns an AddProjectBuilder for creating a new project.
+func (s *Scheme) AddProject() *AddProjectBuilder {
+	return &AddProjectBuilder{
 		scheme: s,
 		attrs:  urlAttrs{params: make(map[string]string)},
 	}
@@ -81,10 +81,10 @@ func (s *Scheme) ShowBuilder() *ShowBuilder {
 	}
 }
 
-// JSON returns a JSONBuilder for batch create operations.
-// For operations including updates, use AuthScheme.JSON() instead.
-func (s *Scheme) JSON() *JSONBuilder {
-	return &JSONBuilder{
+// Batch returns a BatchBuilder for batch create operations.
+// For operations including updates, use AuthScheme.Batch() instead.
+func (s *Scheme) Batch() *BatchBuilder {
+	return &BatchBuilder{
 		scheme: s,
 		items:  make([]JSONItem, 0),
 	}
@@ -125,7 +125,7 @@ func (s *Scheme) WithToken(token string) *AuthScheme {
 // AuthScheme exposes update methods that require authentication:
 //   - UpdateTodo(id) - modify an existing to-do
 //   - UpdateProject(id) - modify an existing project
-//   - JSON() - batch operations including updates
+//   - Batch() - batch operations including updates
 type AuthScheme struct {
 	scheme *Scheme
 	token  string
@@ -151,9 +151,9 @@ func (a *AuthScheme) UpdateProject(id string) *UpdateProjectBuilder {
 	}
 }
 
-// JSON returns an AuthJSONBuilder for batch operations including updates.
-func (a *AuthScheme) JSON() *AuthJSONBuilder {
-	return &AuthJSONBuilder{
+// Batch returns an AuthBatchBuilder for batch operations including updates.
+func (a *AuthScheme) Batch() *AuthBatchBuilder {
+	return &AuthBatchBuilder{
 		scheme: a.scheme,
 		token:  a.token,
 		items:  make([]JSONItem, 0),

@@ -31,9 +31,9 @@ import (
 //
 //	client.UpdateTodo(uuid).Completed(true).Execute(ctx)
 //
-// Reveal operations show items in the Things app:
+// Show operations display items in the Things app:
 //
-//	client.Reveal(ctx, uuid)
+//	client.Show(ctx, uuid)
 type Client struct {
 	db     *DB
 	scheme *Scheme
@@ -251,7 +251,7 @@ func (c *Client) ChecklistItems(ctx context.Context, todoUUID string) ([]Checkli
 // Add Operations
 // ============================================================================
 
-// AddTodo returns a TodoBuilder for creating a new to-do.
+// AddTodo returns an AddTodoBuilder for creating a new to-do.
 //
 // Example:
 //
@@ -260,11 +260,11 @@ func (c *Client) ChecklistItems(ctx context.Context, todoUUID string) ([]Checkli
 //	    Notes("From the grocery store").
 //	    When(things3.Today()).
 //	    Execute(ctx)
-func (c *Client) AddTodo() *TodoBuilder {
-	return c.scheme.Todo()
+func (c *Client) AddTodo() *AddTodoBuilder {
+	return c.scheme.AddTodo()
 }
 
-// AddProject returns a ProjectBuilder for creating a new project.
+// AddProject returns an AddProjectBuilder for creating a new project.
 //
 // Example:
 //
@@ -272,20 +272,24 @@ func (c *Client) AddTodo() *TodoBuilder {
 //	    Title("Home Renovation").
 //	    Notes("Kitchen and bathroom").
 //	    Execute(ctx)
-func (c *Client) AddProject() *ProjectBuilder {
-	return c.scheme.Project()
+func (c *Client) AddProject() *AddProjectBuilder {
+	return c.scheme.AddProject()
 }
 
-// AddJSON returns a JSONBuilder for batch create operations.
+// Batch returns a BatchBuilder for batch create operations.
 //
 // Example:
 //
-//	client.AddJSON().
-//	    AddTodo().Title("Task 1").Done().
-//	    AddTodo().Title("Task 2").Done().
+//	client.Batch().
+//	    AddTodo(func(b *BatchTodoBuilder) {
+//	        b.Title("Task 1")
+//	    }).
+//	    AddTodo(func(b *BatchTodoBuilder) {
+//	        b.Title("Task 2")
+//	    }).
 //	    Execute(ctx)
-func (c *Client) AddJSON() *JSONBuilder {
-	return c.scheme.JSON()
+func (c *Client) Batch() *BatchBuilder {
+	return c.scheme.Batch()
 }
 
 // ============================================================================
@@ -327,34 +331,34 @@ func (c *Client) UpdateProject(id string) *UpdateProjectBuilder {
 }
 
 // ============================================================================
-// Reveal Operations
+// Show Operations
 // ============================================================================
 
-// Reveal opens Things and shows the item with the given UUID.
+// Show opens Things and displays the item with the given UUID.
 // By default, brings Things to foreground since the user wants to view the item.
 // Use WithBackgroundNavigation() option to run in background without stealing focus.
-func (c *Client) Reveal(ctx context.Context, uuid string) error {
+func (c *Client) Show(ctx context.Context, uuid string) error {
 	return c.scheme.Show(ctx, uuid)
 }
 
-// RevealList opens Things and shows the specified list.
+// ShowList opens Things and displays the specified list.
 // Use ListID constants like ListInbox, ListToday, etc.
 //
 // Example:
 //
-//	client.RevealList(ctx, things3.ListToday)
-func (c *Client) RevealList(ctx context.Context, list ListID) error {
+//	client.ShowList(ctx, things3.ListToday)
+func (c *Client) ShowList(ctx context.Context, list ListID) error {
 	uri := c.scheme.ShowBuilder().List(list).Build()
 	return c.scheme.executeNavigation(ctx, uri)
 }
 
-// RevealSearch opens Things and performs a search for the given query.
+// ShowSearch opens Things and performs a search for the given query.
 // By default, brings Things to foreground since the user wants to view results.
-func (c *Client) RevealSearch(ctx context.Context, query string) error {
+func (c *Client) ShowSearch(ctx context.Context, query string) error {
 	return c.scheme.Search(ctx, query)
 }
 
-// RevealBuilder returns a ShowBuilder for complex navigation operations.
-func (c *Client) RevealBuilder() *ShowBuilder {
+// ShowBuilder returns a ShowBuilder for complex navigation operations.
+func (c *Client) ShowBuilder() *ShowBuilder {
 	return c.scheme.ShowBuilder()
 }

@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **No Emoji**: Never use emoji in any file (code, docs, comments, commits)
 - **No Local Paths**: Never expose local machine paths in code, tests, or documentation
 - **Design Focus**: RFC documents focus on design decisions, avoid large code blocks
+- **No Backward Compatibility**: Breaking changes are acceptable. Prioritize optimal design and elegant code over backward compatibility. Do not deprecate, just remove or redesign
 
 ## Project Overview
 

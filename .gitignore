@@ -244,3 +244,5 @@ things3
 # test data for sqlite
 !testdata/*.sqlite
 !testdata/db2022/*.sqlite
+
+cmd/**/**

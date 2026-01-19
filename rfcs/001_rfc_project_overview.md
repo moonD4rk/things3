@@ -62,6 +62,8 @@ things3 library
 | 002 | Database Schema | Accepted | Things 3 SQLite schema and SQL patterns |
 | 003 | Database API | Draft | `NewDB()`, query builders, convenience methods |
 | 004 | URL Scheme | Draft | `NewScheme()`, URL builders, official reference |
+| 005 | Unified Client | Draft | `NewClient()`, single entry point, token management |
+| 006 | Interface Abstraction | Draft | Public interfaces, hide implementation details |
 
 ### RFC Dependencies
 
@@ -73,6 +75,10 @@ things3 library
  |    +-- 003 Database API (uses schema)
  |
  +-- 004 URL Scheme (uses Token from 003)
+ |
+ +-- 005 Unified Client (combines 003 + 004)
+      |
+      +-- 006 Interface Abstraction (evolves 005)
 ```
 
 ## Goals

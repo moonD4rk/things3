@@ -10,11 +10,12 @@ Go library for [Things 3](https://culturedcode.com/things/) on macOS. Provides r
 
 ## Features
 
+- Unified client API with `NewClient()` as single entry point
 - Read-only access to Things 3 SQLite database
 - Fluent query builder with type-safe filters
 - Full [Things URL Scheme](https://culturedcode.com/things/support/articles/2803573/) support
 - Create todos, projects, and batch operations via URL
-- Update existing items with authentication
+- Update existing items with automatic authentication
 
 ## Installation
 
@@ -25,8 +26,6 @@ go get github.com/moond4rk/things3
 > **Note**: Requires CGO enabled (uses `go-sqlite3`). macOS only.
 
 ## Quick Start
-
-### Reading from Database
 
 ```go
 package main
@@ -40,198 +39,189 @@ import (
 )
 
 func main() {
-    db, err := things3.NewDB()
+    client, err := things3.NewClient()
     if err != nil {
         log.Fatal(err)
     }
-    defer db.Close()
+    defer client.Close()
 
     ctx := context.Background()
 
     // Get today's tasks
-    today, _ := db.Today(ctx)
+    today, _ := client.Today(ctx)
     for _, task := range today {
         fmt.Printf("- %s\n", task.Title)
     }
+
+    // Create a new todo
+    client.AddTodo().
+        Title("Buy groceries").
+        Notes("Milk, eggs, bread").
+        When(things3.Today()).
+        Execute(ctx)
 }
 ```
 
-### Creating Tasks via URL Scheme
+## API Overview
+
+### Query Operations
+
+#### Convenience Methods
 
 ```go
-scheme := things3.NewScheme()
-
-// Create a new todo
-url, _ := scheme.Todo().
-    Title("Buy groceries").
-    Notes("Milk, eggs, bread").
-    When(things3.Today()).
-    Tags("shopping").
-    Build()
-// Output: things:///add?title=Buy+groceries&notes=Milk,+eggs,+bread&when=2024-01-15&tags=shopping
+client.Inbox(ctx)                      // Tasks in Inbox
+client.Today(ctx)                      // Today's tasks
+client.Upcoming(ctx)                   // Scheduled future tasks
+client.Anytime(ctx)                    // Anytime tasks
+client.Someday(ctx)                    // Someday tasks
+client.Logbook(ctx)                    // Completed/canceled tasks
+client.Trash(ctx)                      // Trashed tasks
+client.Todos(ctx)                      // All incomplete to-dos
+client.Projects(ctx)                   // All incomplete projects
+client.Deadlines(ctx)                  // Tasks with deadlines
+client.Search(ctx, "query")            // Search tasks
+client.CreatedWithin(ctx, DaysAgo(7))  // Tasks from last 7 days
 ```
 
-## Database API
-
-### Convenience Methods
-
-```go
-db.Inbox(ctx)                    // Tasks in Inbox
-db.Today(ctx)                    // Today's tasks
-db.Upcoming(ctx)                 // Scheduled future tasks
-db.Anytime(ctx)                  // Anytime tasks
-db.Someday(ctx)                  // Someday tasks
-db.Logbook(ctx)                  // Completed/canceled tasks
-db.Trash(ctx)                    // Trashed tasks
-db.Todos(ctx)                    // All incomplete to-dos
-db.Projects(ctx)                 // All incomplete projects
-db.Deadlines(ctx)                // Tasks with deadlines
-db.Search(ctx, "query")          // Search tasks
-db.CreatedWithin(ctx, DaysAgo(7)) // Tasks from last 7 days
-```
-
-### Fluent Query Builder
+#### Fluent Query Builder
 
 ```go
 // Type-safe status filtering
-tasks, _ := db.Tasks().
+tasks, _ := client.Tasks().
     Type().Todo().
     Status().Incomplete().
     All(ctx)
 
 // Date filtering
-tasks, _ := db.Tasks().
+tasks, _ := client.Tasks().
     StartDate().Future().
     Deadline().OnOrBefore(time.Now().AddDate(0, 0, 7)).
     All(ctx)
 
 // Filter by area, project, or tag
-tasks, _ := db.Tasks().
+tasks, _ := client.Tasks().
     InArea("area-uuid").
     InTag("work").
     All(ctx)
 
 // Get single task or count
-task, _ := db.Tasks().WithUUID("task-uuid").First(ctx)
-count, _ := db.Tasks().Status().Completed().Count(ctx)
+task, _ := client.Tasks().WithUUID("task-uuid").First(ctx)
+count, _ := client.Tasks().Status().Completed().Count(ctx)
 ```
 
-### Areas and Tags
+#### Areas and Tags
 
 ```go
 // Get all areas with their tasks
-areas, _ := db.Areas().IncludeItems(true).All(ctx)
+areas, _ := client.Areas().IncludeItems(true).All(ctx)
 
 // Get all tags
-tags, _ := db.Tags().All(ctx)
+tags, _ := client.Tags().All(ctx)
 ```
 
-## URL Scheme API
+### Add Operations
 
-### Create Todo
+#### Create Todo
 
 ```go
-scheme := things3.NewScheme()
-
-url, _ := scheme.Todo().
+client.AddTodo().
     Title("Task title").
     Notes("Task notes").
-    When(things3.Today()).                                    // today's date
-    When(things3.Tomorrow()).                                 // tomorrow's date
-    When(time.Date(2024, time.December, 25, 0, 0, 0, 0, time.Local)). // specific date
-    WhenEvening().                                            // this evening
-    WhenAnytime().                                            // anytime (no specific date)
-    WhenSomeday().                                            // someday (indefinite future)
+    When(things3.Today()).              // today's date
     Deadline(time.Date(2024, 12, 31, 0, 0, 0, 0, time.Local)).
     Tags("work", "urgent").
     ChecklistItems("Step 1", "Step 2").
-    List("Project Name").                  // or ListID("project-uuid")
+    List("Project Name").               // or ListID("project-uuid")
     Reveal(true).
-    Build()
+    Execute(ctx)
 ```
 
-### Create Project
+#### Create Project
 
 ```go
-url, _ := scheme.Project().
+client.AddProject().
     Title("New Project").
     Notes("Project description").
-    Area("Work").                          // or AreaID("area-uuid")
+    Area("Work").                       // or AreaID("area-uuid")
     Tags("important").
     Deadline(time.Date(2024, 12, 31, 0, 0, 0, 0, time.Local)).
-    Todos("Task 1", "Task 2", "Task 3").   // child todos
-    Build()
+    Todos("Task 1", "Task 2", "Task 3"). // child todos
+    Execute(ctx)
 ```
 
-### Navigate to Views
+### Update Operations
+
+Update operations automatically manage authentication tokens.
 
 ```go
-scheme.Show().List(things3.ListToday).Build()    // things:///show?id=today
-scheme.Show().List(things3.ListInbox).Build()    // things:///show?id=inbox
-scheme.Show().ID("project-uuid").Build()          // things:///show?id=project-uuid
-scheme.Search("urgent tasks")                     // things:///search?query=urgent+tasks
-```
-
-### Update Existing Items (Requires Auth)
-
-```go
-// Get auth token from database
-token, _ := db.Token(ctx)
-auth := scheme.WithToken(token)
-
 // Update a todo
-url, _ := auth.UpdateTodo("todo-uuid").
+client.UpdateTodo("todo-uuid").
     Title("Updated title").
     Completed(true).
     AddTags("done").
-    Build()
+    Execute(ctx)
 
 // Update a project
-url, _ := auth.UpdateProject("project-uuid").
+client.UpdateProject("project-uuid").
     Notes("Updated notes").
     Canceled(true).
-    Build()
+    Execute(ctx)
 ```
 
-### Batch Operations with JSON
+### Show Operations
+
+```go
+client.Show(ctx, "item-uuid")                    // Show specific item
+client.ShowList(ctx, things3.ListToday)          // Show Today view
+client.ShowSearch(ctx, "urgent tasks")           // Show search results
+
+// Complex navigation
+client.ShowBuilder().
+    List(things3.ListInbox).
+    Filter("work", "urgent").
+    Execute(ctx)
+```
+
+### Batch Operations
 
 ```go
 // Create multiple items at once
-url, _ := scheme.JSON().
-    AddTodo(func(t *things3.JSONTodoBuilder) {
+client.Batch().
+    AddTodo(func(t things3.BatchTodoConfigurator) {
         t.Title("Task 1").Tags("work")
     }).
-    AddTodo(func(t *things3.JSONTodoBuilder) {
+    AddTodo(func(t things3.BatchTodoConfigurator) {
         t.Title("Task 2").When(things3.Today())
     }).
-    AddProject(func(p *things3.JSONProjectBuilder) {
+    AddProject(func(p things3.BatchProjectConfigurator) {
         p.Title("New Project").Notes("Description")
     }).
     Reveal(true).
-    Build()
-
-// Batch updates (requires auth)
-url, _ := auth.JSON().
-    UpdateTodo("uuid-1", func(t *things3.JSONTodoBuilder) {
-        t.Completed(true)
-    }).
-    UpdateTodo("uuid-2", func(t *things3.JSONTodoBuilder) {
-        t.Canceled(true)
-    }).
-    Build()
+    Execute(ctx)
 ```
 
 ## Configuration
 
 ```go
 // Use custom database path
-db, _ := things3.NewDB(
+client, _ := things3.NewClient(
     things3.WithDatabasePath("/path/to/main.sqlite"),
 )
 
 // Enable SQL logging for debugging
-db, _ := things3.NewDB(
+client, _ := things3.NewClient(
     things3.WithPrintSQL(true),
+)
+
+// Control Things app focus behavior
+client, _ := things3.NewClient(
+    things3.WithForeground(),        // Bring Things to foreground (default for show)
+    things3.WithBackground(),        // Run in background without stealing focus
+)
+
+// Preload authentication token
+client, _ := things3.NewClient(
+    things3.WithPreloadToken(),
 )
 ```
 
@@ -260,7 +250,7 @@ things3.StartInbox    // 0
 things3.StartAnytime  // 1
 things3.StartSomeday  // 2
 
-// Date helper functions for scheduling
+// Date helper functions
 things3.Today()       // returns today's date at midnight
 things3.Tomorrow()    // returns tomorrow's date at midnight
 

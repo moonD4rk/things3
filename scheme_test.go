@@ -10,16 +10,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewScheme(t *testing.T) {
-	scheme := NewScheme()
+func Test_newScheme(t *testing.T) {
+	scheme := newScheme()
 	assert.NotNil(t, scheme)
 }
 
-func TestSchemeWithForeground(t *testing.T) {
-	scheme := NewScheme(WithForeground())
-	assert.True(t, scheme.foreground, "WithForeground() should set foreground to true")
+func TestSchemewithForeground(t *testing.T) {
+	scheme := newScheme(withForeground())
+	assert.True(t, scheme.foreground, "withForeground() should set foreground to true")
 
-	schemeDefault := NewScheme()
+	schemeDefault := newScheme()
 	assert.False(t, schemeDefault.foreground, "Default scheme should have foreground false")
 }
 
@@ -28,7 +28,7 @@ func TestSchemeWithForeground(t *testing.T) {
 // =============================================================================
 
 func TestAddTodoBuilder_Title(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().Title("Buy groceries").Build()
 	require.NoError(t, err)
 
@@ -38,14 +38,14 @@ func TestAddTodoBuilder_Title(t *testing.T) {
 }
 
 func TestAddTodoBuilder_TitleTooLong(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	longTitle := strings.Repeat("a", 4001)
 	_, err := scheme.AddTodo().Title(longTitle).Build()
 	assert.ErrorIs(t, err, ErrTitleTooLong)
 }
 
 func TestAddTodoBuilder_Notes(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().Title("Test").Notes("Some notes").Build()
 	require.NoError(t, err)
 
@@ -56,14 +56,14 @@ func TestAddTodoBuilder_Notes(t *testing.T) {
 }
 
 func TestAddTodoBuilder_NotesTooLong(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	longNotes := strings.Repeat("a", 10001)
 	_, err := scheme.AddTodo().Title("Test").Notes(longNotes).Build()
 	assert.ErrorIs(t, err, ErrNotesTooLong)
 }
 
 func TestAddTodoBuilder_When(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 
 	// Test with time.Time
 	testDate := time.Date(2025, 6, 15, 0, 0, 0, 0, time.Local)
@@ -77,7 +77,7 @@ func TestAddTodoBuilder_When(t *testing.T) {
 }
 
 func TestAddTodoBuilder_WhenEvening(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().Title("Test").WhenEvening().Build()
 	require.NoError(t, err)
 
@@ -87,7 +87,7 @@ func TestAddTodoBuilder_WhenEvening(t *testing.T) {
 }
 
 func TestAddTodoBuilder_WhenAnytime(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().Title("Test").WhenAnytime().Build()
 	require.NoError(t, err)
 
@@ -97,7 +97,7 @@ func TestAddTodoBuilder_WhenAnytime(t *testing.T) {
 }
 
 func TestAddTodoBuilder_WhenSomeday(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().Title("Test").WhenSomeday().Build()
 	require.NoError(t, err)
 
@@ -107,7 +107,7 @@ func TestAddTodoBuilder_WhenSomeday(t *testing.T) {
 }
 
 func TestAddTodoBuilder_Deadline(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	deadline := time.Date(2025, 12, 31, 0, 0, 0, 0, time.Local)
 	thingsURL, err := scheme.AddTodo().Title("Test").Deadline(deadline).Build()
 	require.NoError(t, err)
@@ -119,7 +119,7 @@ func TestAddTodoBuilder_Deadline(t *testing.T) {
 }
 
 func TestAddTodoBuilder_Tags(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().Title("Test").Tags("work", "urgent").Build()
 	require.NoError(t, err)
 
@@ -130,7 +130,7 @@ func TestAddTodoBuilder_Tags(t *testing.T) {
 }
 
 func TestAddTodoBuilder_ChecklistItems(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().Title("Test").ChecklistItems("Item 1", "Item 2").Build()
 	require.NoError(t, err)
 
@@ -141,7 +141,7 @@ func TestAddTodoBuilder_ChecklistItems(t *testing.T) {
 }
 
 func TestAddTodoBuilder_TooManyChecklistItems(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	items := make([]string, 101)
 	for i := range items {
 		items[i] = "checklist entry"
@@ -151,7 +151,7 @@ func TestAddTodoBuilder_TooManyChecklistItems(t *testing.T) {
 }
 
 func TestAddTodoBuilder_List(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().Title("Test").List("My Project").Build()
 	require.NoError(t, err)
 
@@ -162,7 +162,7 @@ func TestAddTodoBuilder_List(t *testing.T) {
 }
 
 func TestAddTodoBuilder_ListID(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().Title("Test").ListID("uuid-123").Build()
 	require.NoError(t, err)
 
@@ -173,7 +173,7 @@ func TestAddTodoBuilder_ListID(t *testing.T) {
 }
 
 func TestAddTodoBuilder_Completed(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().Title("Test").Completed(true).Build()
 	require.NoError(t, err)
 
@@ -184,7 +184,7 @@ func TestAddTodoBuilder_Completed(t *testing.T) {
 }
 
 func TestAddTodoBuilder_Canceled(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().Title("Test").Canceled(true).Build()
 	require.NoError(t, err)
 
@@ -195,7 +195,7 @@ func TestAddTodoBuilder_Canceled(t *testing.T) {
 }
 
 func TestAddTodoBuilder_ShowQuickEntry(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().Title("Test").ShowQuickEntry(true).Build()
 	require.NoError(t, err)
 
@@ -206,7 +206,7 @@ func TestAddTodoBuilder_ShowQuickEntry(t *testing.T) {
 }
 
 func TestAddTodoBuilder_Reveal(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().Title("Test").Reveal(true).Build()
 	require.NoError(t, err)
 
@@ -217,7 +217,7 @@ func TestAddTodoBuilder_Reveal(t *testing.T) {
 }
 
 func TestAddTodoBuilder_Titles(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().Titles("Task 1", "Task 2", "Task 3").Build()
 	require.NoError(t, err)
 
@@ -227,14 +227,14 @@ func TestAddTodoBuilder_Titles(t *testing.T) {
 }
 
 func TestAddTodoBuilder_TitlesTooLong(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	longTitle := strings.Repeat("a", 2000)
 	_, err := scheme.AddTodo().Titles(longTitle, longTitle, longTitle).Build()
 	assert.ErrorIs(t, err, ErrTitleTooLong)
 }
 
 func TestAddTodoBuilder_Heading(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().
 		Title("Subtask").
 		List("My Project").
@@ -250,7 +250,7 @@ func TestAddTodoBuilder_Heading(t *testing.T) {
 }
 
 func TestAddTodoBuilder_HeadingID(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().
 		Title("Subtask").
 		ListID("project-uuid").
@@ -266,7 +266,7 @@ func TestAddTodoBuilder_HeadingID(t *testing.T) {
 }
 
 func TestAddTodoBuilder_CreationDate(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	pastDate := time.Date(2024, time.January, 15, 10, 30, 0, 0, time.UTC)
 	thingsURL, err := scheme.AddTodo().
 		Title("Historical task").
@@ -281,7 +281,7 @@ func TestAddTodoBuilder_CreationDate(t *testing.T) {
 }
 
 func TestAddTodoBuilder_CompletionDate(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	completedAt := time.Date(2024, time.December, 1, 14, 0, 0, 0, time.UTC)
 	thingsURL, err := scheme.AddTodo().
 		Title("Imported completed task").
@@ -298,7 +298,7 @@ func TestAddTodoBuilder_CompletionDate(t *testing.T) {
 }
 
 func TestAddTodoBuilder_Chained(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().
 		Title("Buy groceries").
 		Notes("Don't forget milk").
@@ -323,7 +323,7 @@ func TestAddTodoBuilder_Chained(t *testing.T) {
 // =============================================================================
 
 func TestAddProjectBuilder_Title(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddProject().Title("New Project").Build()
 	require.NoError(t, err)
 
@@ -333,14 +333,14 @@ func TestAddProjectBuilder_Title(t *testing.T) {
 }
 
 func TestAddProjectBuilder_TitleTooLong(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	longTitle := strings.Repeat("a", 4001)
 	_, err := scheme.AddProject().Title(longTitle).Build()
 	assert.ErrorIs(t, err, ErrTitleTooLong)
 }
 
 func TestAddProjectBuilder_Area(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddProject().Title("Test").Area("Work").Build()
 	require.NoError(t, err)
 
@@ -351,7 +351,7 @@ func TestAddProjectBuilder_Area(t *testing.T) {
 }
 
 func TestAddProjectBuilder_AreaID(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddProject().Title("Test").AreaID("uuid-123").Build()
 	require.NoError(t, err)
 
@@ -362,7 +362,7 @@ func TestAddProjectBuilder_AreaID(t *testing.T) {
 }
 
 func TestAddProjectBuilder_Todos(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddProject().Title("Test").Todos("Task 1", "Task 2").Build()
 	require.NoError(t, err)
 
@@ -373,7 +373,7 @@ func TestAddProjectBuilder_Todos(t *testing.T) {
 }
 
 func TestAddProjectBuilder_Notes(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddProject().
 		Title("Q1 Goals").
 		Notes("Quarterly objectives and key results").
@@ -387,7 +387,7 @@ func TestAddProjectBuilder_Notes(t *testing.T) {
 }
 
 func TestAddProjectBuilder_WhenSomeday(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddProject().Title("Future Project").WhenSomeday().Build()
 	require.NoError(t, err)
 
@@ -398,7 +398,7 @@ func TestAddProjectBuilder_WhenSomeday(t *testing.T) {
 }
 
 func TestAddProjectBuilder_When(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddProject().
 		Title("Launch").
 		When(time.Date(2025, time.March, 1, 0, 0, 0, 0, time.Local)).
@@ -412,7 +412,7 @@ func TestAddProjectBuilder_When(t *testing.T) {
 }
 
 func TestAddProjectBuilder_Deadline(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddProject().
 		Title("Release v2.0").
 		Deadline(time.Date(2025, time.June, 30, 0, 0, 0, 0, time.Local)).
@@ -426,7 +426,7 @@ func TestAddProjectBuilder_Deadline(t *testing.T) {
 }
 
 func TestAddProjectBuilder_Tags(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddProject().
 		Title("Website Redesign").
 		Tags("work", "high-priority").
@@ -440,7 +440,7 @@ func TestAddProjectBuilder_Tags(t *testing.T) {
 }
 
 func TestAddProjectBuilder_Completed(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddProject().
 		Title("Archived Project").
 		Completed(true).
@@ -454,7 +454,7 @@ func TestAddProjectBuilder_Completed(t *testing.T) {
 }
 
 func TestAddProjectBuilder_Canceled(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddProject().
 		Title("Discontinued Project").
 		Canceled(true).
@@ -468,7 +468,7 @@ func TestAddProjectBuilder_Canceled(t *testing.T) {
 }
 
 func TestAddProjectBuilder_Reveal(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddProject().
 		Title("New Project").
 		Reveal(true).
@@ -482,7 +482,7 @@ func TestAddProjectBuilder_Reveal(t *testing.T) {
 }
 
 func TestAddProjectBuilder_CreationDate(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	created := time.Date(2024, time.June, 1, 9, 0, 0, 0, time.UTC)
 	thingsURL, err := scheme.AddProject().
 		Title("Historical Project").
@@ -497,7 +497,7 @@ func TestAddProjectBuilder_CreationDate(t *testing.T) {
 }
 
 func TestAddProjectBuilder_CompletionDate(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	completed := time.Date(2024, time.November, 15, 17, 0, 0, 0, time.UTC)
 	thingsURL, err := scheme.AddProject().
 		Title("Imported Completed Project").
@@ -514,7 +514,7 @@ func TestAddProjectBuilder_CompletionDate(t *testing.T) {
 }
 
 func TestAddProjectBuilder_FullProject(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddProject().
 		Title("Product Launch").
 		Notes("Launch plan for v2.0").
@@ -542,7 +542,7 @@ func TestAddProjectBuilder_FullProject(t *testing.T) {
 // =============================================================================
 
 func TestShowBuilder_ID(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL := scheme.ShowBuilder().ID("uuid-123").Build()
 
 	cmd, params := parseThingsURL(t, thingsURL)
@@ -570,7 +570,7 @@ func TestShowBuilder_List(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.list), func(t *testing.T) {
-			scheme := NewScheme()
+			scheme := newScheme()
 			thingsURL := scheme.ShowBuilder().List(tt.list).Build()
 
 			cmd, params := parseThingsURL(t, thingsURL)
@@ -581,7 +581,7 @@ func TestShowBuilder_List(t *testing.T) {
 }
 
 func TestShowBuilder_Query(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL := scheme.ShowBuilder().Query("My Project").Build()
 
 	cmd, params := parseThingsURL(t, thingsURL)
@@ -590,7 +590,7 @@ func TestShowBuilder_Query(t *testing.T) {
 }
 
 func TestShowBuilder_Filter(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL := scheme.ShowBuilder().List(ListToday).Filter("work", "urgent").Build()
 
 	cmd, params := parseThingsURL(t, thingsURL)
@@ -600,7 +600,7 @@ func TestShowBuilder_Filter(t *testing.T) {
 }
 
 func TestShowBuilder_NoParams(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL := scheme.ShowBuilder().Build()
 	assert.Equal(t, "things:///show", thingsURL)
 }
@@ -610,7 +610,7 @@ func TestShowBuilder_NoParams(t *testing.T) {
 // =============================================================================
 
 func TestScheme_Search(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL := scheme.SearchURL("my query")
 
 	cmd, params := parseThingsURL(t, thingsURL)
@@ -619,7 +619,7 @@ func TestScheme_Search(t *testing.T) {
 }
 
 func TestScheme_Version(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL := scheme.Version()
 	assert.Equal(t, "things:///version", thingsURL)
 }
@@ -629,13 +629,13 @@ func TestScheme_Version(t *testing.T) {
 // =============================================================================
 
 func TestAuthScheme_WithToken(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	assert.NotNil(t, auth)
 }
 
 func TestAuthScheme_EmptyToken(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("")
 	_, err := auth.UpdateTodo("uuid").Completed(true).Build()
 	assert.ErrorIs(t, err, ErrEmptyToken)
@@ -646,7 +646,7 @@ func TestAuthScheme_EmptyToken(t *testing.T) {
 // =============================================================================
 
 func TestUpdateTodoBuilder_Completed(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid-123").Completed(true).Build()
 	require.NoError(t, err)
@@ -659,14 +659,14 @@ func TestUpdateTodoBuilder_Completed(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_NoID(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	_, err := auth.UpdateTodo("").Completed(true).Build()
 	assert.ErrorIs(t, err, ErrIDRequired)
 }
 
 func TestUpdateTodoBuilder_Title(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").Title("New Title").Build()
 	require.NoError(t, err)
@@ -679,7 +679,7 @@ func TestUpdateTodoBuilder_Title(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_PrependNotes(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").PrependNotes("Prefix: ").Build()
 	require.NoError(t, err)
@@ -690,7 +690,7 @@ func TestUpdateTodoBuilder_PrependNotes(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_AppendNotes(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").AppendNotes(" - Suffix").Build()
 	require.NoError(t, err)
@@ -701,7 +701,7 @@ func TestUpdateTodoBuilder_AppendNotes(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_AddTags(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").AddTags("new-tag").Build()
 	require.NoError(t, err)
@@ -712,7 +712,7 @@ func TestUpdateTodoBuilder_AddTags(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_ClearDeadline(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").ClearDeadline().Build()
 	require.NoError(t, err)
@@ -723,7 +723,7 @@ func TestUpdateTodoBuilder_ClearDeadline(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_Duplicate(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").Duplicate(true).Build()
 	require.NoError(t, err)
@@ -734,7 +734,7 @@ func TestUpdateTodoBuilder_Duplicate(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_Notes(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").Notes("New description").Build()
 	require.NoError(t, err)
@@ -745,7 +745,7 @@ func TestUpdateTodoBuilder_Notes(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_When(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").When(time.Date(2025, time.January, 15, 0, 0, 0, 0, time.Local)).Build()
 	require.NoError(t, err)
@@ -756,7 +756,7 @@ func TestUpdateTodoBuilder_When(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_WhenAnytime(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").WhenAnytime().Build()
 	require.NoError(t, err)
@@ -767,7 +767,7 @@ func TestUpdateTodoBuilder_WhenAnytime(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_Deadline(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").Deadline(time.Date(2025, time.January, 31, 0, 0, 0, 0, time.Local)).Build()
 	require.NoError(t, err)
@@ -778,7 +778,7 @@ func TestUpdateTodoBuilder_Deadline(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_Tags(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").Tags("new-tag-1", "new-tag-2").Build()
 	require.NoError(t, err)
@@ -789,7 +789,7 @@ func TestUpdateTodoBuilder_Tags(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_ChecklistItems(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").ChecklistItems("Step A", "Step B").Build()
 	require.NoError(t, err)
@@ -800,7 +800,7 @@ func TestUpdateTodoBuilder_ChecklistItems(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_PrependChecklistItems(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").PrependChecklistItems("First step").Build()
 	require.NoError(t, err)
@@ -811,7 +811,7 @@ func TestUpdateTodoBuilder_PrependChecklistItems(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_AppendChecklistItems(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").AppendChecklistItems("Final step").Build()
 	require.NoError(t, err)
@@ -822,7 +822,7 @@ func TestUpdateTodoBuilder_AppendChecklistItems(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_List(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").List("New Project").Build()
 	require.NoError(t, err)
@@ -833,7 +833,7 @@ func TestUpdateTodoBuilder_List(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_ListID(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").ListID("project-uuid").Build()
 	require.NoError(t, err)
@@ -844,7 +844,7 @@ func TestUpdateTodoBuilder_ListID(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_Heading(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").Heading("Phase 2").Build()
 	require.NoError(t, err)
@@ -855,7 +855,7 @@ func TestUpdateTodoBuilder_Heading(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_HeadingID(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").HeadingID("heading-uuid").Build()
 	require.NoError(t, err)
@@ -866,7 +866,7 @@ func TestUpdateTodoBuilder_HeadingID(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_Canceled(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").Canceled(true).Build()
 	require.NoError(t, err)
@@ -877,7 +877,7 @@ func TestUpdateTodoBuilder_Canceled(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_Reveal(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid").Reveal(true).Build()
 	require.NoError(t, err)
@@ -888,7 +888,7 @@ func TestUpdateTodoBuilder_Reveal(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_CreationDate(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	created := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
 	thingsURL, err := auth.UpdateTodo("uuid").CreationDate(created).Build()
@@ -900,7 +900,7 @@ func TestUpdateTodoBuilder_CreationDate(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_CompletionDate(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	completed := time.Date(2024, time.December, 31, 23, 59, 0, 0, time.UTC)
 	thingsURL, err := auth.UpdateTodo("uuid").Completed(true).CompletionDate(completed).Build()
@@ -913,7 +913,7 @@ func TestUpdateTodoBuilder_CompletionDate(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_ValidationError(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	longTitle := strings.Repeat("a", 4001)
 	_, err := auth.UpdateTodo("uuid").Title(longTitle).Build()
@@ -925,7 +925,7 @@ func TestUpdateTodoBuilder_ValidationError(t *testing.T) {
 // =============================================================================
 
 func TestUpdateProjectBuilder_Title(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateProject("uuid").Title("New Project Title").Build()
 	require.NoError(t, err)
@@ -938,7 +938,7 @@ func TestUpdateProjectBuilder_Title(t *testing.T) {
 }
 
 func TestUpdateProjectBuilder_Completed(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateProject("uuid").Completed(true).Build()
 	require.NoError(t, err)
@@ -949,7 +949,7 @@ func TestUpdateProjectBuilder_Completed(t *testing.T) {
 }
 
 func TestUpdateProjectBuilder_Canceled(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateProject("uuid").Canceled(true).Build()
 	require.NoError(t, err)
@@ -960,7 +960,7 @@ func TestUpdateProjectBuilder_Canceled(t *testing.T) {
 }
 
 func TestUpdateProjectBuilder_Notes(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateProject("uuid").Notes("Updated project description").Build()
 	require.NoError(t, err)
@@ -971,7 +971,7 @@ func TestUpdateProjectBuilder_Notes(t *testing.T) {
 }
 
 func TestUpdateProjectBuilder_PrependNotes(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateProject("uuid").PrependNotes("[UPDATE] ").Build()
 	require.NoError(t, err)
@@ -982,7 +982,7 @@ func TestUpdateProjectBuilder_PrependNotes(t *testing.T) {
 }
 
 func TestUpdateProjectBuilder_AppendNotes(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateProject("uuid").AppendNotes("\n- Added new requirement").Build()
 	require.NoError(t, err)
@@ -993,7 +993,7 @@ func TestUpdateProjectBuilder_AppendNotes(t *testing.T) {
 }
 
 func TestUpdateProjectBuilder_WhenAnytime(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateProject("uuid").WhenAnytime().Build()
 	require.NoError(t, err)
@@ -1004,7 +1004,7 @@ func TestUpdateProjectBuilder_WhenAnytime(t *testing.T) {
 }
 
 func TestUpdateProjectBuilder_When(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateProject("uuid").When(time.Date(2025, time.April, 1, 0, 0, 0, 0, time.Local)).Build()
 	require.NoError(t, err)
@@ -1015,7 +1015,7 @@ func TestUpdateProjectBuilder_When(t *testing.T) {
 }
 
 func TestUpdateProjectBuilder_Deadline(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateProject("uuid").Deadline(time.Date(2025, time.December, 31, 0, 0, 0, 0, time.Local)).Build()
 	require.NoError(t, err)
@@ -1026,7 +1026,7 @@ func TestUpdateProjectBuilder_Deadline(t *testing.T) {
 }
 
 func TestUpdateProjectBuilder_ClearDeadline(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateProject("uuid").ClearDeadline().Build()
 	require.NoError(t, err)
@@ -1037,7 +1037,7 @@ func TestUpdateProjectBuilder_ClearDeadline(t *testing.T) {
 }
 
 func TestUpdateProjectBuilder_Tags(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateProject("uuid").Tags("priority", "q1").Build()
 	require.NoError(t, err)
@@ -1048,7 +1048,7 @@ func TestUpdateProjectBuilder_Tags(t *testing.T) {
 }
 
 func TestUpdateProjectBuilder_AddTags(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateProject("uuid").AddTags("reviewed").Build()
 	require.NoError(t, err)
@@ -1059,7 +1059,7 @@ func TestUpdateProjectBuilder_AddTags(t *testing.T) {
 }
 
 func TestUpdateProjectBuilder_Area(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateProject("uuid").Area("Personal").Build()
 	require.NoError(t, err)
@@ -1070,7 +1070,7 @@ func TestUpdateProjectBuilder_Area(t *testing.T) {
 }
 
 func TestUpdateProjectBuilder_AreaID(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateProject("uuid").AreaID("area-uuid").Build()
 	require.NoError(t, err)
@@ -1081,7 +1081,7 @@ func TestUpdateProjectBuilder_AreaID(t *testing.T) {
 }
 
 func TestUpdateProjectBuilder_Reveal(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateProject("uuid").Reveal(true).Build()
 	require.NoError(t, err)
@@ -1092,14 +1092,14 @@ func TestUpdateProjectBuilder_Reveal(t *testing.T) {
 }
 
 func TestUpdateProjectBuilder_NoID(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	_, err := auth.UpdateProject("").Completed(true).Build()
 	assert.ErrorIs(t, err, ErrIDRequired)
 }
 
 func TestUpdateProjectBuilder_ValidationError(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	longTitle := strings.Repeat("a", 4001)
 	_, err := auth.UpdateProject("uuid").Title(longTitle).Build()
@@ -1111,9 +1111,9 @@ func TestUpdateProjectBuilder_ValidationError(t *testing.T) {
 // =============================================================================
 
 func TestBatchBuilder_AddTodo(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test Todo")
 		}).
 		Build()
@@ -1131,9 +1131,9 @@ func TestBatchBuilder_AddTodo(t *testing.T) {
 }
 
 func TestBatchBuilder_AddProject(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddProject(func(project *BatchProjectBuilder) {
+		AddProject(func(project BatchProjectConfigurator) {
 			project.Title("Test Project")
 		}).
 		Build()
@@ -1150,9 +1150,9 @@ func TestBatchBuilder_AddProject(t *testing.T) {
 }
 
 func TestBatchBuilder_Reveal(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test")
 		}).
 		Reveal(true).
@@ -1166,18 +1166,18 @@ func TestBatchBuilder_Reveal(t *testing.T) {
 }
 
 func TestBatchBuilder_NoItems(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	_, err := scheme.Batch().Build()
 	assert.ErrorIs(t, err, ErrNoJSONItems)
 }
 
 func TestBatchBuilder_Multiple(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Todo 1")
 		}).
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Todo 2")
 		}).
 		Build()
@@ -1197,10 +1197,10 @@ func TestBatchBuilder_Multiple(t *testing.T) {
 // =============================================================================
 
 func TestAuthBatchBuilder_UpdateTodo(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.Batch().
-		UpdateTodo("uuid-123", func(todo *BatchTodoBuilder) {
+		UpdateTodo("uuid-123", func(todo BatchTodoConfigurator) {
 			todo.Completed(true)
 		}).
 		Build()
@@ -1220,10 +1220,10 @@ func TestAuthBatchBuilder_UpdateTodo(t *testing.T) {
 }
 
 func TestAuthBatchBuilder_UpdateProject(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.Batch().
-		UpdateProject("uuid-123", func(project *BatchProjectBuilder) {
+		UpdateProject("uuid-123", func(project BatchProjectConfigurator) {
 			project.Completed(true)
 		}).
 		Build()
@@ -1243,13 +1243,13 @@ func TestAuthBatchBuilder_UpdateProject(t *testing.T) {
 }
 
 func TestAuthBatchBuilder_Mixed(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("New Todo")
 		}).
-		UpdateTodo("uuid-123", func(todo *BatchTodoBuilder) {
+		UpdateTodo("uuid-123", func(todo BatchTodoConfigurator) {
 			todo.Completed(true)
 		}).
 		Build()
@@ -1266,10 +1266,10 @@ func TestAuthBatchBuilder_Mixed(t *testing.T) {
 }
 
 func TestAuthBatchBuilder_EmptyToken(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("")
 	_, err := auth.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test")
 		}).
 		Build()
@@ -1277,20 +1277,20 @@ func TestAuthBatchBuilder_EmptyToken(t *testing.T) {
 }
 
 func TestAuthBatchBuilder_NoItems(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	_, err := auth.Batch().Build()
 	assert.ErrorIs(t, err, ErrNoJSONItems)
 }
 
 // =============================================================================
-// BatchTodoBuilder Tests
+// batchTodoBuilder Tests
 // =============================================================================
 
-func TestBatchTodoBuilder_When(t *testing.T) {
-	scheme := NewScheme()
+func Test_batchTodoBuilder_When(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test").When(time.Date(2025, time.January, 15, 0, 0, 0, 0, time.Local))
 		}).
 		Build()
@@ -1302,10 +1302,10 @@ func TestBatchTodoBuilder_When(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-func TestBatchTodoBuilder_Tags(t *testing.T) {
-	scheme := NewScheme()
+func Test_batchTodoBuilder_Tags(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test").Tags("Risk", "Golang")
 		}).
 		Build()
@@ -1317,22 +1317,22 @@ func TestBatchTodoBuilder_Tags(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-func TestBatchTodoBuilder_TitleTooLong(t *testing.T) {
-	scheme := NewScheme()
+func Test_batchTodoBuilder_TitleTooLong(t *testing.T) {
+	scheme := newScheme()
 	longTitle := strings.Repeat("a", 4001)
 	_, err := scheme.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title(longTitle)
 		}).
 		Build()
 	assert.ErrorIs(t, err, ErrTitleTooLong)
 }
 
-// TestBatchTodoBuilder_Notes tests adding notes to a JSON todo
-func TestBatchTodoBuilder_Notes(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchTodoBuilder_Notes tests adding notes to a JSON todo
+func Test_batchTodoBuilder_Notes(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test").Notes("Detailed description")
 		}).
 		Build()
@@ -1344,11 +1344,11 @@ func TestBatchTodoBuilder_Notes(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchTodoBuilder_WhenDate tests scheduling to a specific date
-func TestBatchTodoBuilder_WhenDate(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchTodoBuilder_WhenDate tests scheduling to a specific date
+func Test_batchTodoBuilder_WhenDate(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test").When(time.Date(2025, time.March, 15, 0, 0, 0, 0, time.Local))
 		}).
 		Build()
@@ -1360,11 +1360,11 @@ func TestBatchTodoBuilder_WhenDate(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchTodoBuilder_Deadline tests setting a deadline
-func TestBatchTodoBuilder_Deadline(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchTodoBuilder_Deadline tests setting a deadline
+func Test_batchTodoBuilder_Deadline(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test").Deadline(time.Date(2025, time.June, 30, 0, 0, 0, 0, time.Local))
 		}).
 		Build()
@@ -1376,11 +1376,11 @@ func TestBatchTodoBuilder_Deadline(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchTodoBuilder_ChecklistItems tests adding a checklist
-func TestBatchTodoBuilder_ChecklistItems(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchTodoBuilder_ChecklistItems tests adding a checklist
+func Test_batchTodoBuilder_ChecklistItems(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test").ChecklistItems("Step 1", "Step 2", "Step 3")
 		}).
 		Build()
@@ -1399,26 +1399,26 @@ func TestBatchTodoBuilder_ChecklistItems(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchTodoBuilder_ChecklistItemsTooMany tests the checklist limit
-func TestBatchTodoBuilder_ChecklistItemsTooMany(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchTodoBuilder_ChecklistItemsTooMany tests the checklist limit
+func Test_batchTodoBuilder_ChecklistItemsTooMany(t *testing.T) {
+	scheme := newScheme()
 	items := make([]string, 101)
 	for i := range items {
 		items[i] = "json checklist entry"
 	}
 	_, err := scheme.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test").ChecklistItems(items...)
 		}).
 		Build()
 	assert.ErrorIs(t, err, ErrTooManyChecklistItems)
 }
 
-// TestBatchTodoBuilder_List tests placing todo in a project by name
-func TestBatchTodoBuilder_List(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchTodoBuilder_List tests placing todo in a project by name
+func Test_batchTodoBuilder_List(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test").List("My Project")
 		}).
 		Build()
@@ -1430,11 +1430,11 @@ func TestBatchTodoBuilder_List(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchTodoBuilder_ListID tests placing todo in a project by UUID
-func TestBatchTodoBuilder_ListID(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchTodoBuilder_ListID tests placing todo in a project by UUID
+func Test_batchTodoBuilder_ListID(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test").ListID("project-uuid-123")
 		}).
 		Build()
@@ -1446,11 +1446,11 @@ func TestBatchTodoBuilder_ListID(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchTodoBuilder_Heading tests placing todo under a heading
-func TestBatchTodoBuilder_Heading(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchTodoBuilder_Heading tests placing todo under a heading
+func Test_batchTodoBuilder_Heading(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test").List("Project").Heading("Phase 1")
 		}).
 		Build()
@@ -1462,11 +1462,11 @@ func TestBatchTodoBuilder_Heading(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchTodoBuilder_Completed tests marking as completed
-func TestBatchTodoBuilder_Completed(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchTodoBuilder_Completed tests marking as completed
+func Test_batchTodoBuilder_Completed(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test").Completed(true)
 		}).
 		Build()
@@ -1478,11 +1478,11 @@ func TestBatchTodoBuilder_Completed(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchTodoBuilder_Canceled tests marking as canceled
-func TestBatchTodoBuilder_Canceled(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchTodoBuilder_Canceled tests marking as canceled
+func Test_batchTodoBuilder_Canceled(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test").Canceled(true)
 		}).
 		Build()
@@ -1494,12 +1494,12 @@ func TestBatchTodoBuilder_Canceled(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchTodoBuilder_CreationDate tests backdating creation
-func TestBatchTodoBuilder_CreationDate(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchTodoBuilder_CreationDate tests backdating creation
+func Test_batchTodoBuilder_CreationDate(t *testing.T) {
+	scheme := newScheme()
 	pastDate := time.Date(2024, time.June, 1, 10, 0, 0, 0, time.UTC)
 	thingsURL, err := scheme.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test").CreationDate(pastDate)
 		}).
 		Build()
@@ -1514,11 +1514,11 @@ func TestBatchTodoBuilder_CreationDate(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchTodoBuilder_CompletionDate tests setting completion timestamp
-func TestBatchTodoBuilder_CompletionDate(t *testing.T) {
+// TestbatchTodoBuilder_CompletionDate tests setting completion timestamp
+func Test_batchTodoBuilder_CompletionDate(t *testing.T) {
 	completedDate := time.Date(2024, time.December, 15, 14, 30, 0, 0, time.UTC)
-	thingsURL, err := NewScheme().Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+	thingsURL, err := newScheme().Batch().
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test").Completed(true).CompletionDate(completedDate)
 		}).
 		Build()
@@ -1534,11 +1534,11 @@ func TestBatchTodoBuilder_CompletionDate(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchTodoBuilder_UpdatePrependNotes tests prepending notes in update
-func TestBatchTodoBuilder_UpdatePrependNotes(t *testing.T) {
-	auth := NewScheme().WithToken("test-token")
+// TestbatchTodoBuilder_UpdatePrependNotes tests prepending notes in update
+func Test_batchTodoBuilder_UpdatePrependNotes(t *testing.T) {
+	auth := newScheme().WithToken("test-token")
 	thingsURL, err := auth.Batch().
-		UpdateTodo("uuid", func(todo *BatchTodoBuilder) {
+		UpdateTodo("uuid", func(todo BatchTodoConfigurator) {
 			todo.PrependNotes("Important: ")
 		}).
 		Build()
@@ -1552,12 +1552,12 @@ func TestBatchTodoBuilder_UpdatePrependNotes(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchTodoBuilder_UpdateAppendNotes tests appending notes in update
-func TestBatchTodoBuilder_UpdateAppendNotes(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchTodoBuilder_UpdateAppendNotes tests appending notes in update
+func Test_batchTodoBuilder_UpdateAppendNotes(t *testing.T) {
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.Batch().
-		UpdateTodo("uuid", func(todo *BatchTodoBuilder) {
+		UpdateTodo("uuid", func(todo BatchTodoConfigurator) {
 			todo.AppendNotes(" - Updated")
 		}).
 		Build()
@@ -1571,12 +1571,12 @@ func TestBatchTodoBuilder_UpdateAppendNotes(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchTodoBuilder_UpdateAddTags tests adding tags without replacing
-func TestBatchTodoBuilder_UpdateAddTags(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchTodoBuilder_UpdateAddTags tests adding tags without replacing
+func Test_batchTodoBuilder_UpdateAddTags(t *testing.T) {
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.Batch().
-		UpdateTodo("uuid", func(todo *BatchTodoBuilder) {
+		UpdateTodo("uuid", func(todo BatchTodoConfigurator) {
 			todo.AddTags("new-tag", "another-tag")
 		}).
 		Build()
@@ -1591,13 +1591,13 @@ func TestBatchTodoBuilder_UpdateAddTags(t *testing.T) {
 }
 
 // =============================================================================
-// BatchProjectBuilder Tests
+// batchProjectBuilder Tests
 // =============================================================================
 
-func TestBatchProjectBuilder_Area(t *testing.T) {
-	scheme := NewScheme()
+func Test_batchProjectBuilder_Area(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddProject(func(project *BatchProjectBuilder) {
+		AddProject(func(project BatchProjectConfigurator) {
 			project.Title("Test").Area("Work")
 		}).
 		Build()
@@ -1609,13 +1609,13 @@ func TestBatchProjectBuilder_Area(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-func TestBatchProjectBuilder_Todos(t *testing.T) {
-	scheme := NewScheme()
+func Test_batchProjectBuilder_Todos(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddProject(func(project *BatchProjectBuilder) {
+		AddProject(func(project BatchProjectConfigurator) {
 			project.Title("Test Project").Todos(
-				NewTodo().Title("Task 1"),
-				NewTodo().Title("Task 2"),
+				func(todo BatchTodoConfigurator) { todo.Title("Task 1") },
+				func(todo BatchTodoConfigurator) { todo.Title("Task 2") },
 			)
 		}).
 		Build()
@@ -1633,11 +1633,11 @@ func TestBatchProjectBuilder_Todos(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchProjectBuilder_Notes tests adding project notes
-func TestBatchProjectBuilder_Notes(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchProjectBuilder_Notes tests adding project notes
+func Test_batchProjectBuilder_Notes(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddProject(func(project *BatchProjectBuilder) {
+		AddProject(func(project BatchProjectConfigurator) {
 			project.Title("Test").Notes("Project description")
 		}).
 		Build()
@@ -1649,11 +1649,11 @@ func TestBatchProjectBuilder_Notes(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchProjectBuilder_WhenSomeday tests scheduling project for someday
-func TestBatchProjectBuilder_WhenSomeday(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchProjectBuilder_WhenSomeday tests scheduling project for someday
+func Test_batchProjectBuilder_WhenSomeday(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddProject(func(project *BatchProjectBuilder) {
+		AddProject(func(project BatchProjectConfigurator) {
 			project.Title("Test").WhenSomeday()
 		}).
 		Build()
@@ -1665,11 +1665,11 @@ func TestBatchProjectBuilder_WhenSomeday(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchProjectBuilder_When tests scheduling to specific date
-func TestBatchProjectBuilder_When(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchProjectBuilder_When tests scheduling to specific date
+func Test_batchProjectBuilder_When(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddProject(func(project *BatchProjectBuilder) {
+		AddProject(func(project BatchProjectConfigurator) {
 			project.Title("Test").When(time.Date(2025, time.July, 1, 0, 0, 0, 0, time.Local))
 		}).
 		Build()
@@ -1681,11 +1681,11 @@ func TestBatchProjectBuilder_When(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchProjectBuilder_Deadline tests setting project deadline
-func TestBatchProjectBuilder_Deadline(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchProjectBuilder_Deadline tests setting project deadline
+func Test_batchProjectBuilder_Deadline(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddProject(func(project *BatchProjectBuilder) {
+		AddProject(func(project BatchProjectConfigurator) {
 			project.Title("Test").Deadline(time.Date(2025, time.December, 31, 0, 0, 0, 0, time.Local))
 		}).
 		Build()
@@ -1697,11 +1697,11 @@ func TestBatchProjectBuilder_Deadline(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchProjectBuilder_Tags tests setting project tags
-func TestBatchProjectBuilder_Tags(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchProjectBuilder_Tags tests setting project tags
+func Test_batchProjectBuilder_Tags(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddProject(func(project *BatchProjectBuilder) {
+		AddProject(func(project BatchProjectConfigurator) {
 			project.Title("Test").Tags("priority", "q1")
 		}).
 		Build()
@@ -1713,11 +1713,11 @@ func TestBatchProjectBuilder_Tags(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchProjectBuilder_AreaID tests placing project in area by UUID
-func TestBatchProjectBuilder_AreaID(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchProjectBuilder_AreaID tests placing project in area by UUID
+func Test_batchProjectBuilder_AreaID(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddProject(func(project *BatchProjectBuilder) {
+		AddProject(func(project BatchProjectConfigurator) {
 			project.Title("Test").AreaID("area-uuid-456")
 		}).
 		Build()
@@ -1729,11 +1729,11 @@ func TestBatchProjectBuilder_AreaID(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchProjectBuilder_Completed tests marking project completed
-func TestBatchProjectBuilder_Completed(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchProjectBuilder_Completed tests marking project completed
+func Test_batchProjectBuilder_Completed(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddProject(func(project *BatchProjectBuilder) {
+		AddProject(func(project BatchProjectConfigurator) {
 			project.Title("Test").Completed(true)
 		}).
 		Build()
@@ -1745,11 +1745,11 @@ func TestBatchProjectBuilder_Completed(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchProjectBuilder_Canceled tests marking project canceled
-func TestBatchProjectBuilder_Canceled(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchProjectBuilder_Canceled tests marking project canceled
+func Test_batchProjectBuilder_Canceled(t *testing.T) {
+	scheme := newScheme()
 	thingsURL, err := scheme.Batch().
-		AddProject(func(project *BatchProjectBuilder) {
+		AddProject(func(project BatchProjectConfigurator) {
 			project.Title("Test").Canceled(true)
 		}).
 		Build()
@@ -1761,12 +1761,12 @@ func TestBatchProjectBuilder_Canceled(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchProjectBuilder_CreationDate tests backdating project creation
-func TestBatchProjectBuilder_CreationDate(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchProjectBuilder_CreationDate tests backdating project creation
+func Test_batchProjectBuilder_CreationDate(t *testing.T) {
+	scheme := newScheme()
 	pastDate := time.Date(2024, time.January, 1, 9, 0, 0, 0, time.UTC)
 	thingsURL, err := scheme.Batch().
-		AddProject(func(project *BatchProjectBuilder) {
+		AddProject(func(project BatchProjectConfigurator) {
 			project.Title("Test").CreationDate(pastDate)
 		}).
 		Build()
@@ -1781,12 +1781,12 @@ func TestBatchProjectBuilder_CreationDate(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchProjectBuilder_CompletionDate tests setting completion timestamp
-func TestBatchProjectBuilder_CompletionDate(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchProjectBuilder_CompletionDate tests setting completion timestamp
+func Test_batchProjectBuilder_CompletionDate(t *testing.T) {
+	scheme := newScheme()
 	completedDate := time.Date(2024, time.November, 30, 17, 0, 0, 0, time.UTC)
 	thingsURL, err := scheme.Batch().
-		AddProject(func(project *BatchProjectBuilder) {
+		AddProject(func(project BatchProjectConfigurator) {
 			project.Title("Test").Completed(true).CompletionDate(completedDate)
 		}).
 		Build()
@@ -1802,12 +1802,12 @@ func TestBatchProjectBuilder_CompletionDate(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchProjectBuilder_UpdatePrependNotes tests prepending notes in update
-func TestBatchProjectBuilder_UpdatePrependNotes(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchProjectBuilder_UpdatePrependNotes tests prepending notes in update
+func Test_batchProjectBuilder_UpdatePrependNotes(t *testing.T) {
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.Batch().
-		UpdateProject("uuid", func(project *BatchProjectBuilder) {
+		UpdateProject("uuid", func(project BatchProjectConfigurator) {
 			project.PrependNotes("Update: ")
 		}).
 		Build()
@@ -1821,12 +1821,12 @@ func TestBatchProjectBuilder_UpdatePrependNotes(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchProjectBuilder_UpdateAppendNotes tests appending notes in update
-func TestBatchProjectBuilder_UpdateAppendNotes(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchProjectBuilder_UpdateAppendNotes tests appending notes in update
+func Test_batchProjectBuilder_UpdateAppendNotes(t *testing.T) {
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.Batch().
-		UpdateProject("uuid", func(project *BatchProjectBuilder) {
+		UpdateProject("uuid", func(project BatchProjectConfigurator) {
 			project.AppendNotes(" - Reviewed")
 		}).
 		Build()
@@ -1840,12 +1840,12 @@ func TestBatchProjectBuilder_UpdateAppendNotes(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchProjectBuilder_UpdateAddTags tests adding tags without replacing
-func TestBatchProjectBuilder_UpdateAddTags(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchProjectBuilder_UpdateAddTags tests adding tags without replacing
+func Test_batchProjectBuilder_UpdateAddTags(t *testing.T) {
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.Batch().
-		UpdateProject("uuid", func(project *BatchProjectBuilder) {
+		UpdateProject("uuid", func(project BatchProjectConfigurator) {
 			project.AddTags("reviewed", "approved")
 		}).
 		Build()
@@ -1859,14 +1859,14 @@ func TestBatchProjectBuilder_UpdateAddTags(t *testing.T) {
 	}}, parseJSONItems(t, thingsURL))
 }
 
-// TestBatchProjectBuilder_TodosWithError tests error propagation from child todos
-func TestBatchProjectBuilder_TodosWithError(t *testing.T) {
-	scheme := NewScheme()
+// TestbatchProjectBuilder_TodosWithError tests error propagation from child todos
+func Test_batchProjectBuilder_TodosWithError(t *testing.T) {
+	scheme := newScheme()
 	longTitle := strings.Repeat("a", 4001)
 	_, err := scheme.Batch().
-		AddProject(func(project *BatchProjectBuilder) {
+		AddProject(func(project BatchProjectConfigurator) {
 			project.Title("Test").Todos(
-				NewTodo().Title(longTitle),
+				func(todo BatchTodoConfigurator) { todo.Title(longTitle) },
 			)
 		}).
 		Build()
@@ -1875,10 +1875,10 @@ func TestBatchProjectBuilder_TodosWithError(t *testing.T) {
 
 // TestAuthBatchBuilder_AddProject tests creating project via auth builder
 func TestAuthBatchBuilder_AddProject(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.Batch().
-		AddProject(func(project *BatchProjectBuilder) {
+		AddProject(func(project BatchProjectConfigurator) {
 			project.Title("New Project").Area("Work")
 		}).
 		Build()
@@ -1895,10 +1895,10 @@ func TestAuthBatchBuilder_AddProject(t *testing.T) {
 
 // TestAuthBatchBuilder_Reveal tests reveal option
 func TestAuthBatchBuilder_Reveal(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test")
 		}).
 		Reveal(true).
@@ -1912,10 +1912,10 @@ func TestAuthBatchBuilder_Reveal(t *testing.T) {
 
 // TestAuthBatchBuilder_CreateOnly tests create-only operations don't need auth token
 func TestAuthBatchBuilder_CreateOnly(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.Batch().
-		AddTodo(func(todo *BatchTodoBuilder) {
+		AddTodo(func(todo BatchTodoConfigurator) {
 			todo.Title("Test")
 		}).
 		Build()
@@ -1945,7 +1945,7 @@ func TestCommand_String(t *testing.T) {
 // TestWhen_Values verifies internal when constants format correctly.
 // Note: When type is now private, so we test via builder methods.
 func TestWhen_Values(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 
 	// Test WhenEvening
 	url1, err := scheme.AddTodo().Title("Test").WhenEvening().Build()
@@ -1994,37 +1994,37 @@ func TestURLEncoding_SpacesAsPercent20(t *testing.T) {
 		{
 			name: "AddTodoBuilder with space in title",
 			buildURL: func() (string, error) {
-				return NewScheme().AddTodo().Title("Buy groceries").Build()
+				return newScheme().AddTodo().Title("Buy groceries").Build()
 			},
 		},
 		{
 			name: "AddProjectBuilder with space in title",
 			buildURL: func() (string, error) {
-				return NewScheme().AddProject().Title("My Project").Build()
+				return newScheme().AddProject().Title("My Project").Build()
 			},
 		},
 		{
 			name: "ShowBuilder with space in query",
 			buildURL: func() (string, error) {
-				return NewScheme().ShowBuilder().Query("My Project").Build(), nil
+				return newScheme().ShowBuilder().Query("My Project").Build(), nil
 			},
 		},
 		{
 			name: "UpdateTodoBuilder with space in title",
 			buildURL: func() (string, error) {
-				return NewScheme().WithToken("token").UpdateTodo("uuid").Title("New Title").Build()
+				return newScheme().WithToken("token").UpdateTodo("uuid").Title("New Title").Build()
 			},
 		},
 		{
 			name: "UpdateProjectBuilder with space in title",
 			buildURL: func() (string, error) {
-				return NewScheme().WithToken("token").UpdateProject("uuid").Title("New Project").Build()
+				return newScheme().WithToken("token").UpdateProject("uuid").Title("New Project").Build()
 			},
 		},
 		{
 			name: "BatchBuilder with space in title",
 			buildURL: func() (string, error) {
-				return NewScheme().Batch().AddTodo(func(todo *BatchTodoBuilder) {
+				return newScheme().Batch().AddTodo(func(todo BatchTodoConfigurator) {
 					todo.Title("Buy milk")
 				}).Build()
 			},
@@ -2032,7 +2032,7 @@ func TestURLEncoding_SpacesAsPercent20(t *testing.T) {
 		{
 			name: "AuthBatchBuilder with space in title",
 			buildURL: func() (string, error) {
-				return NewScheme().WithToken("token").Batch().UpdateTodo("uuid", func(todo *BatchTodoBuilder) {
+				return newScheme().WithToken("token").Batch().UpdateTodo("uuid", func(todo BatchTodoConfigurator) {
 					todo.Title("New Title")
 				}).Build()
 			},
@@ -2061,25 +2061,25 @@ func TestURLEncoding_PlusCharacterPreserved(t *testing.T) {
 		{
 			name: "AddTodoBuilder with plus in title",
 			buildURL: func() (string, error) {
-				return NewScheme().AddTodo().Title("Learn C++").Build()
+				return newScheme().AddTodo().Title("Learn C++").Build()
 			},
 		},
 		{
 			name: "AddTodoBuilder with plus in notes",
 			buildURL: func() (string, error) {
-				return NewScheme().AddTodo().Title("Test").Notes("1+1=2").Build()
+				return newScheme().AddTodo().Title("Test").Notes("1+1=2").Build()
 			},
 		},
 		{
 			name: "AddProjectBuilder with plus in title",
 			buildURL: func() (string, error) {
-				return NewScheme().AddProject().Title("C++ Project").Build()
+				return newScheme().AddProject().Title("C++ Project").Build()
 			},
 		},
 		{
 			name: "Search with plus sign",
 			buildURL: func() (string, error) {
-				return NewScheme().SearchURL("C++"), nil
+				return newScheme().SearchURL("C++"), nil
 			},
 		},
 	}
@@ -2114,7 +2114,7 @@ func TestURLEncoding_PlusCharacterPreserved(t *testing.T) {
 // TestURLEncoding_SpaceAndPlusCombined verifies correct encoding when both
 // spaces and + characters are present in the same string.
 func TestURLEncoding_SpaceAndPlusCombined(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().Title("Learn C++ basics").Build()
 	require.NoError(t, err)
 
@@ -2190,7 +2190,7 @@ func TestEncodeQuery_DirectTest(t *testing.T) {
 // =============================================================================
 
 func TestAddTodoBuilder_Reminder_WithWhen(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().
 		Title("Meeting").
 		When(time.Date(2025, time.January, 2, 0, 0, 0, 0, time.Local)).
@@ -2205,7 +2205,7 @@ func TestAddTodoBuilder_Reminder_WithWhen(t *testing.T) {
 }
 
 func TestAddTodoBuilder_Reminder_WithWhenTime(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().
 		Title("Appointment").
 		When(time.Date(2025, time.March, 15, 0, 0, 0, 0, time.Local)).
@@ -2220,7 +2220,7 @@ func TestAddTodoBuilder_Reminder_WithWhenTime(t *testing.T) {
 }
 
 func TestAddTodoBuilder_Reminder_DefaultsToToday(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().
 		Title("Call").
 		Reminder(15, 0).
@@ -2234,7 +2234,7 @@ func TestAddTodoBuilder_Reminder_DefaultsToToday(t *testing.T) {
 }
 
 func TestAddTodoBuilder_Reminder_WithEvening(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddTodo().
 		Title("Dry cleaning").
 		WhenEvening().
@@ -2249,7 +2249,7 @@ func TestAddTodoBuilder_Reminder_WithEvening(t *testing.T) {
 }
 
 func TestAddTodoBuilder_Reminder_InvalidHour(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	_, err := scheme.AddTodo().
 		Title("Test").
 		Reminder(24, 0).
@@ -2264,7 +2264,7 @@ func TestAddTodoBuilder_Reminder_InvalidHour(t *testing.T) {
 }
 
 func TestAddTodoBuilder_Reminder_InvalidMinute(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	_, err := scheme.AddTodo().
 		Title("Test").
 		Reminder(10, 60).
@@ -2279,7 +2279,7 @@ func TestAddTodoBuilder_Reminder_InvalidMinute(t *testing.T) {
 }
 
 func TestAddProjectBuilder_Reminder(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddProject().
 		Title("Project").
 		When(time.Date(2025, time.June, 1, 0, 0, 0, 0, time.Local)).
@@ -2294,7 +2294,7 @@ func TestAddProjectBuilder_Reminder(t *testing.T) {
 }
 
 func TestAddProjectBuilder_Reminder_DefaultsToToday(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	thingsURL, err := scheme.AddProject().
 		Title("Project").
 		Reminder(8, 30).
@@ -2308,7 +2308,7 @@ func TestAddProjectBuilder_Reminder_DefaultsToToday(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_Reminder(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid-123").
 		When(time.Date(2025, time.January, 1, 0, 0, 0, 0, time.Local)).
@@ -2324,7 +2324,7 @@ func TestUpdateTodoBuilder_Reminder(t *testing.T) {
 }
 
 func TestUpdateTodoBuilder_Reminder_DefaultsToToday(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateTodo("uuid-123").
 		Reminder(12, 0).
@@ -2338,7 +2338,7 @@ func TestUpdateTodoBuilder_Reminder_DefaultsToToday(t *testing.T) {
 }
 
 func TestUpdateProjectBuilder_Reminder(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	auth := scheme.WithToken("test-token")
 	thingsURL, err := auth.UpdateProject("project-uuid").
 		When(time.Date(2025, time.July, 4, 0, 0, 0, 0, time.Local)).

@@ -7,39 +7,39 @@ import (
 	"strings"
 )
 
-// ShowBuilder builds URLs for navigating to items or lists via the show command.
-type ShowBuilder struct {
-	scheme *Scheme
+// showBuilder builds URLs for navigating to items or lists via the show command.
+type showBuilder struct {
+	scheme *scheme
 	params map[string]string
 }
 
 // ID sets the target item UUID or built-in list ID.
-func (b *ShowBuilder) ID(id string) *ShowBuilder {
+func (b *showBuilder) ID(id string) ShowNavigator {
 	b.params[keyID] = id
 	return b
 }
 
 // List sets the target to a built-in Things list.
-func (b *ShowBuilder) List(list ListID) *ShowBuilder {
+func (b *showBuilder) List(list ListID) ShowNavigator {
 	b.params[keyID] = string(list)
 	return b
 }
 
 // Query searches for an area, project, or tag by name.
 // Note: Tasks cannot be shown using query; use ID instead.
-func (b *ShowBuilder) Query(query string) *ShowBuilder {
+func (b *showBuilder) Query(query string) ShowNavigator {
 	b.params[keyQuery] = query
 	return b
 }
 
 // Filter filters the displayed items by tags.
-func (b *ShowBuilder) Filter(tags ...string) *ShowBuilder {
+func (b *showBuilder) Filter(tags ...string) ShowNavigator {
 	b.params[keyFilter] = strings.Join(tags, ",")
 	return b
 }
 
 // Build returns the Things URL for the show command.
-func (b *ShowBuilder) Build() string {
+func (b *showBuilder) Build() string {
 	query := url.Values{}
 	for k, v := range b.params {
 		query.Set(k, v)
@@ -54,7 +54,7 @@ func (b *ShowBuilder) Build() string {
 // Execute builds and executes the show URL.
 // By default, brings Things to foreground since the user wants to view content.
 // Use WithBackground() option to run in background without stealing focus.
-func (b *ShowBuilder) Execute(ctx context.Context) error {
+func (b *showBuilder) Execute(ctx context.Context) error {
 	uri := b.Build()
 	return b.scheme.executeNavigation(ctx, uri)
 }

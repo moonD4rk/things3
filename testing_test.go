@@ -75,22 +75,22 @@ const (
 	testUUIDTaskCount       = "5pUx6PESj3ctFYbgth1PXY"
 )
 
-// newTestDB creates a new DB connected to the test database.
-func newTestDB(t *testing.T) *DB {
+// newTestDB creates a new db connected to the test database.
+func newTestDB(t *testing.T) *db {
 	t.Helper()
 	initTestPaths()
-	db, err := NewDB(WithDBPath(testDatabasePath))
+	database, err := newDB(withDBPath(testDatabasePath))
 	if err != nil {
 		t.Fatalf("failed to create test db: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
-	return db
+	t.Cleanup(func() { database.Close() })
+	return database
 }
 
-// newTestDBOld creates a new DB connected to the old version test database.
+// newTestDBOld creates a new db connected to the old version test database.
 // This should fail with ErrDatabaseVersionTooOld.
-func newTestDBOld(t *testing.T) (*DB, error) {
+func newTestDBOld(t *testing.T) (*db, error) {
 	t.Helper()
 	initTestPaths()
-	return NewDB(WithDBPath(testDatabasePathOld))
+	return newDB(withDBPath(testDatabasePathOld))
 }

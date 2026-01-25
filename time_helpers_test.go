@@ -57,7 +57,7 @@ func TestYearsAgo(t *testing.T) {
 }
 
 func TestApplyWhen(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 
 	// Get expected dates for today/tomorrow
 	todayStr := Today().Format(time.DateOnly)
@@ -98,7 +98,7 @@ func TestApplyWhen(t *testing.T) {
 }
 
 func TestApplyWhenWithDifferentBuilders(t *testing.T) {
-	scheme := NewScheme()
+	scheme := newScheme()
 	todayStr := Today().Format(time.DateOnly)
 	tomorrowStr := Tomorrow().Format(time.DateOnly)
 

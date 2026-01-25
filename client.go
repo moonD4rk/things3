@@ -35,8 +35,8 @@ import (
 //
 //	client.Show(ctx, uuid)
 type Client struct {
-	db     *DB
-	scheme *Scheme
+	database *db
+	scheme   *scheme
 
 	// Token management
 	tokenOnce  sync.Once
@@ -69,41 +69,41 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 	}
 
 	// Build DB options
-	var dbOpts []DBOption
+	var dbOpts []dbOption
 	if options.databasePath != "" {
-		dbOpts = append(dbOpts, WithDBPath(options.databasePath))
+		dbOpts = append(dbOpts, withDBPath(options.databasePath))
 	}
 	if options.printSQL {
-		dbOpts = append(dbOpts, WithDBPrintSQL(options.printSQL))
+		dbOpts = append(dbOpts, withDBPrintSQL(options.printSQL))
 	}
 
 	// Build Scheme options
-	var schemeOpts []SchemeOption
+	var schemeOpts []schemeOption
 	if options.foreground {
-		schemeOpts = append(schemeOpts, WithForeground())
+		schemeOpts = append(schemeOpts, withForeground())
 	}
 	if options.background {
-		schemeOpts = append(schemeOpts, WithBackground())
+		schemeOpts = append(schemeOpts, withBackground())
 	}
 
 	// Create DB connection
-	db, err := NewDB(dbOpts...)
+	database, err := newDB(dbOpts...)
 	if err != nil {
 		return nil, err
 	}
 
 	// Create Scheme
-	scheme := NewScheme(schemeOpts...)
+	s := newScheme(schemeOpts...)
 
 	client := &Client{
-		db:     db,
-		scheme: scheme,
+		database: database,
+		scheme:   s,
 	}
 
 	// Preload token if requested
 	if options.preloadToken {
 		if _, err := client.Token(context.Background()); err != nil {
-			db.Close()
+			database.Close()
 			return nil, err
 		}
 	}
@@ -113,8 +113,8 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 
 // Close closes the database connection.
 func (c *Client) Close() error {
-	if c.db != nil {
-		return c.db.Close()
+	if c.database != nil {
+		return c.database.Close()
 	}
 	return nil
 }
@@ -127,7 +127,7 @@ func (c *Client) Close() error {
 // Uses sync.Once for thread-safe lazy initialization.
 func (c *Client) ensureToken(ctx context.Context) (string, error) {
 	c.tokenOnce.Do(func() {
-		c.tokenCache, c.tokenErr = c.db.Token(ctx)
+		c.tokenCache, c.tokenErr = c.database.Token(ctx)
 	})
 	return c.tokenCache, c.tokenErr
 }
@@ -144,86 +144,86 @@ func (c *Client) Token(ctx context.Context) (string, error) {
 
 // Inbox returns all tasks in the Inbox.
 func (c *Client) Inbox(ctx context.Context) ([]Task, error) {
-	return c.db.Inbox(ctx)
+	return c.database.Inbox(ctx)
 }
 
 // Today returns tasks that would appear in Today view.
 func (c *Client) Today(ctx context.Context) ([]Task, error) {
-	return c.db.Today(ctx)
+	return c.database.Today(ctx)
 }
 
 // Todos returns all incomplete to-do items.
 func (c *Client) Todos(ctx context.Context) ([]Task, error) {
-	return c.db.Todos(ctx)
+	return c.database.Todos(ctx)
 }
 
 // Projects returns all incomplete projects.
 func (c *Client) Projects(ctx context.Context) ([]Task, error) {
-	return c.db.Projects(ctx)
+	return c.database.Projects(ctx)
 }
 
 // Upcoming returns tasks scheduled for future dates.
 func (c *Client) Upcoming(ctx context.Context) ([]Task, error) {
-	return c.db.Upcoming(ctx)
+	return c.database.Upcoming(ctx)
 }
 
 // Anytime returns tasks in the Anytime list.
 func (c *Client) Anytime(ctx context.Context) ([]Task, error) {
-	return c.db.Anytime(ctx)
+	return c.database.Anytime(ctx)
 }
 
 // Someday returns tasks in the Someday list.
 func (c *Client) Someday(ctx context.Context) ([]Task, error) {
-	return c.db.Someday(ctx)
+	return c.database.Someday(ctx)
 }
 
 // Logbook returns completed and canceled tasks.
 func (c *Client) Logbook(ctx context.Context) ([]Task, error) {
-	return c.db.Logbook(ctx)
+	return c.database.Logbook(ctx)
 }
 
 // Trash returns trashed tasks.
 func (c *Client) Trash(ctx context.Context) ([]Task, error) {
-	return c.db.Trash(ctx)
+	return c.database.Trash(ctx)
 }
 
 // Completed returns completed tasks.
 func (c *Client) Completed(ctx context.Context) ([]Task, error) {
-	return c.db.Completed(ctx)
+	return c.database.Completed(ctx)
 }
 
 // Canceled returns canceled tasks.
 func (c *Client) Canceled(ctx context.Context) ([]Task, error) {
-	return c.db.Canceled(ctx)
+	return c.database.Canceled(ctx)
 }
 
 // Deadlines returns tasks with deadlines, sorted by deadline.
 func (c *Client) Deadlines(ctx context.Context) ([]Task, error) {
-	return c.db.Deadlines(ctx)
+	return c.database.Deadlines(ctx)
 }
 
 // CreatedWithin returns tasks created after the specified time.
 func (c *Client) CreatedWithin(ctx context.Context, since time.Time) ([]Task, error) {
-	return c.db.CreatedWithin(ctx, since)
+	return c.database.CreatedWithin(ctx, since)
 }
 
 // ============================================================================
 // Query Operations - Query Builders
 // ============================================================================
 
-// Tasks creates a new TaskQuery for querying tasks.
-func (c *Client) Tasks() *TaskQuery {
-	return c.db.Tasks()
+// Tasks creates a new TaskQueryBuilder for querying tasks.
+func (c *Client) Tasks() TaskQueryBuilder {
+	return c.database.Tasks()
 }
 
-// Areas creates a new AreaQuery for querying areas.
-func (c *Client) Areas() *AreaQuery {
-	return c.db.Areas()
+// Areas creates a new AreaQueryBuilder for querying areas.
+func (c *Client) Areas() AreaQueryBuilder {
+	return c.database.Areas()
 }
 
-// Tags creates a new TagQuery for querying tags.
-func (c *Client) Tags() *TagQuery {
-	return c.db.Tags()
+// Tags creates a new TagQueryBuilder for querying tags.
+func (c *Client) Tags() TagQueryBuilder {
+	return c.database.Tags()
 }
 
 // ============================================================================
@@ -234,24 +234,24 @@ func (c *Client) Tags() *TagQuery {
 // Returns a Task, Area, or Tag depending on what is found.
 // Returns nil if not found.
 func (c *Client) Get(ctx context.Context, uuid string) (any, error) {
-	return c.db.Get(ctx, uuid)
+	return c.database.Get(ctx, uuid)
 }
 
 // Search searches for tasks matching the query.
 func (c *Client) Search(ctx context.Context, query string) ([]Task, error) {
-	return c.db.Search(ctx, query)
+	return c.database.Search(ctx, query)
 }
 
 // ChecklistItems returns the checklist items for a to-do.
 func (c *Client) ChecklistItems(ctx context.Context, todoUUID string) ([]ChecklistItem, error) {
-	return c.db.ChecklistItems(ctx, todoUUID)
+	return c.database.ChecklistItems(ctx, todoUUID)
 }
 
 // ============================================================================
 // Add Operations
 // ============================================================================
 
-// AddTodo returns an AddTodoBuilder for creating a new to-do.
+// AddTodo returns a TodoAdder for creating a new to-do.
 //
 // Example:
 //
@@ -260,11 +260,11 @@ func (c *Client) ChecklistItems(ctx context.Context, todoUUID string) ([]Checkli
 //	    Notes("From the grocery store").
 //	    When(things3.Today()).
 //	    Execute(ctx)
-func (c *Client) AddTodo() *AddTodoBuilder {
+func (c *Client) AddTodo() TodoAdder {
 	return c.scheme.AddTodo()
 }
 
-// AddProject returns an AddProjectBuilder for creating a new project.
+// AddProject returns a ProjectAdder for creating a new project.
 //
 // Example:
 //
@@ -272,23 +272,23 @@ func (c *Client) AddTodo() *AddTodoBuilder {
 //	    Title("Home Renovation").
 //	    Notes("Kitchen and bathroom").
 //	    Execute(ctx)
-func (c *Client) AddProject() *AddProjectBuilder {
+func (c *Client) AddProject() ProjectAdder {
 	return c.scheme.AddProject()
 }
 
-// Batch returns a BatchBuilder for batch create operations.
+// Batch returns a BatchCreator for batch create operations.
 //
 // Example:
 //
 //	client.Batch().
-//	    AddTodo(func(b *BatchTodoBuilder) {
+//	    AddTodo(func(b BatchTodoConfigurator) {
 //	        b.Title("Task 1")
 //	    }).
-//	    AddTodo(func(b *BatchTodoBuilder) {
+//	    AddTodo(func(b BatchTodoConfigurator) {
 //	        b.Title("Task 2")
 //	    }).
 //	    Execute(ctx)
-func (c *Client) Batch() *BatchBuilder {
+func (c *Client) Batch() BatchCreator {
 	return c.scheme.Batch()
 }
 
@@ -296,7 +296,7 @@ func (c *Client) Batch() *BatchBuilder {
 // Update Operations
 // ============================================================================
 
-// UpdateTodo returns an UpdateTodoBuilder for modifying an existing to-do.
+// UpdateTodo returns a TodoUpdater for modifying an existing to-do.
 // The authentication token is fetched automatically on first use.
 //
 // Example:
@@ -304,8 +304,8 @@ func (c *Client) Batch() *BatchBuilder {
 //	client.UpdateTodo(uuid).
 //	    Completed(true).
 //	    Execute(ctx)
-func (c *Client) UpdateTodo(id string) *UpdateTodoBuilder {
-	return &UpdateTodoBuilder{
+func (c *Client) UpdateTodo(id string) TodoUpdater {
+	return &updateTodoBuilder{
 		scheme:    c.scheme,
 		tokenFunc: c.ensureToken,
 		id:        id,
@@ -313,7 +313,7 @@ func (c *Client) UpdateTodo(id string) *UpdateTodoBuilder {
 	}
 }
 
-// UpdateProject returns an UpdateProjectBuilder for modifying an existing project.
+// UpdateProject returns a ProjectUpdater for modifying an existing project.
 // The authentication token is fetched automatically on first use.
 //
 // Example:
@@ -321,8 +321,8 @@ func (c *Client) UpdateTodo(id string) *UpdateTodoBuilder {
 //	client.UpdateProject(uuid).
 //	    Title("Renamed Project").
 //	    Execute(ctx)
-func (c *Client) UpdateProject(id string) *UpdateProjectBuilder {
-	return &UpdateProjectBuilder{
+func (c *Client) UpdateProject(id string) ProjectUpdater {
+	return &updateProjectBuilder{
 		scheme:    c.scheme,
 		tokenFunc: c.ensureToken,
 		id:        id,
@@ -358,7 +358,7 @@ func (c *Client) ShowSearch(ctx context.Context, query string) error {
 	return c.scheme.Search(ctx, query)
 }
 
-// ShowBuilder returns a ShowBuilder for complex navigation operations.
-func (c *Client) ShowBuilder() *ShowBuilder {
+// ShowBuilder returns a ShowNavigator for complex navigation operations.
+func (c *Client) ShowBuilder() ShowNavigator {
 	return c.scheme.ShowBuilder()
 }

@@ -70,7 +70,7 @@ func TestExpandPath_Tilde(t *testing.T) {
 func TestGetDatabaseVersion_IntegerFormat(t *testing.T) {
 	db := newTestDB(t)
 
-	version, err := getDatabaseVersion(db.db)
+	version, err := getDatabaseVersion(db.sqlDB)
 	require.NoError(t, err)
 	assert.Equal(t, testDatabaseVersion, version)
 }
@@ -78,7 +78,7 @@ func TestGetDatabaseVersion_IntegerFormat(t *testing.T) {
 func TestValidateDatabaseVersion_Valid(t *testing.T) {
 	db := newTestDB(t)
 
-	err := validateDatabaseVersion(db.db)
+	err := validateDatabaseVersion(db.sqlDB)
 	assert.NoError(t, err)
 }
 
@@ -112,43 +112,43 @@ func TestOpenDatabase_InvalidPath(t *testing.T) {
 func TestNewDB_WithValidPath(t *testing.T) {
 	initTestPaths()
 
-	db, err := NewDB(WithDBPath(testDatabasePath))
+	database, err := newDB(withDBPath(testDatabasePath))
 	require.NoError(t, err)
-	require.NotNil(t, db)
-	defer db.Close()
+	require.NotNil(t, database)
+	defer database.Close()
 
-	assert.Equal(t, testDatabasePath, db.Filepath())
+	assert.Equal(t, testDatabasePath, database.Filepath())
 }
 
 func TestNewDB_WithInvalidPath(t *testing.T) {
-	db, err := NewDB(WithDBPath("/nonexistent/path.sqlite"))
+	database, err := newDB(withDBPath("/nonexistent/path.sqlite"))
 	require.ErrorIs(t, err, ErrDatabaseNotFound)
-	assert.Nil(t, db)
+	assert.Nil(t, database)
 }
 
 func TestNewDB_Close(t *testing.T) {
 	initTestPaths()
 
-	db, err := NewDB(WithDBPath(testDatabasePath))
+	database, err := newDB(withDBPath(testDatabasePath))
 	require.NoError(t, err)
-	require.NotNil(t, db)
+	require.NotNil(t, database)
 
 	// Close should not error
-	err = db.Close()
+	err = database.Close()
 	require.NoError(t, err)
 
 	// Double close should not panic (SQLite handles this)
-	err = db.Close()
+	err = database.Close()
 	require.NoError(t, err)
 }
 
 func TestDB_Filepath(t *testing.T) {
 	initTestPaths()
 
-	db, err := NewDB(WithDBPath(testDatabasePath))
+	database, err := newDB(withDBPath(testDatabasePath))
 	require.NoError(t, err)
-	defer db.Close()
+	defer database.Close()
 
-	dbPath := db.Filepath()
+	dbPath := database.Filepath()
 	assert.Equal(t, testDatabasePath, dbPath)
 }

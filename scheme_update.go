@@ -175,7 +175,18 @@ func (b *updateTodoBuilder) validate() error {
 }
 
 // Build returns the Things URL for updating the to-do.
+// If token is not set but tokenFunc is provided, it will fetch the token using context.Background().
+// For explicit context control, use Execute() instead.
 func (b *updateTodoBuilder) Build() (string, error) {
+	// Lazy load token if needed
+	if b.token == "" && b.tokenFunc != nil {
+		token, err := b.tokenFunc(context.Background())
+		if err != nil {
+			return "", err
+		}
+		b.token = token
+	}
+
 	if err := b.validate(); err != nil {
 		return "", err
 	}
@@ -342,7 +353,18 @@ func (b *updateProjectBuilder) validate() error {
 }
 
 // Build returns the Things URL for updating the project.
+// If token is not set but tokenFunc is provided, it will fetch the token using context.Background().
+// For explicit context control, use Execute() instead.
 func (b *updateProjectBuilder) Build() (string, error) {
+	// Lazy load token if needed
+	if b.token == "" && b.tokenFunc != nil {
+		token, err := b.tokenFunc(context.Background())
+		if err != nil {
+			return "", err
+		}
+		b.token = token
+	}
+
 	if err := b.validate(); err != nil {
 		return "", err
 	}

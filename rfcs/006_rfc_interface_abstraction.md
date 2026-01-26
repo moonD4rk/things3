@@ -1,6 +1,6 @@
 # RFC 006: Interface Abstraction
 
-Status: Draft
+Status: Implemented
 Author: @moond4rk
 
 ## Summary
@@ -42,14 +42,14 @@ Client
   |   Inbox(ctx), Today(ctx), Todos(ctx), Projects(ctx), ...
   |
   +-- [Query - Builders]
-  |   Tasks()   -> TaskQuerier
-  |   Areas()   -> AreaQuerier
-  |   Tags()    -> TagQuerier
+  |   Tasks()   -> TaskQueryBuilder
+  |   Areas()   -> AreaQueryBuilder
+  |   Tags()    -> TagQueryBuilder
   |
   +-- [Add Operations]
   |   AddTodo()    -> TodoAdder
   |   AddProject() -> ProjectAdder
-  |   Batch()      -> BatchAdder
+  |   Batch()      -> BatchCreator
   |
   +-- [Update Operations]
   |   UpdateTodo(id)    -> TodoUpdater
@@ -57,7 +57,7 @@ Client
   |
   +-- [Show Operations]
   |   Show(ctx, uuid), ShowList(ctx, list), ShowSearch(ctx, query)
-  |   ShowBuilder() -> Navigator
+  |   ShowBuilder() -> ShowNavigator
   |
   +-- [Utilities]
       Get(ctx, uuid), Search(ctx, query), ChecklistItems(ctx, uuid)
@@ -72,213 +72,85 @@ Internal (Unexported)
 
 ### Interface Definitions
 
+The interface design follows Go's philosophy of "small interfaces, composition over inheritance". See `interfaces.go` for the complete 6-layer interface hierarchy:
+
+1. **Layer 1 - Reusable Small Interfaces**: Terminal operations (`TaskQueryExecutor`, `AreaQueryExecutor`, `TagQueryExecutor`, `URLBuilder`)
+2. **Layer 2 - Sub-builder Interfaces**: Filter builders (`TypeFilterBuilder`, `StatusFilterBuilder`, `StartFilterBuilder`, `DateFilterBuilder`)
+3. **Layer 3 - Functional Group Interfaces**: Composed filters (`TaskRelationFilter`, `TaskStateFilter`, `TaskTimeFilter`)
+4. **Layer 4 - Composed Query Builders**: Full query interfaces (`TaskQueryBuilder`, `AreaQueryBuilder`, `TagQueryBuilder`)
+5. **Layer 5 - URL Scheme Builders**: Create/update/show operations (`TodoAdder`, `ProjectAdder`, `TodoUpdater`, `ProjectUpdater`, `ShowNavigator`)
+6. **Layer 6 - Batch Operations**: Batch create/update interfaces (`BatchCreator`, `AuthBatchCreator`, `BatchTodoConfigurator`, `BatchProjectConfigurator`)
+
 #### Query Interfaces
 
 ```go
-// TaskQuerier provides methods for querying tasks.
-type TaskQuerier interface {
-    // Filters
-    WithUUID(uuid string) TaskQuerier
-    WithUUIDs(uuids ...string) TaskQuerier
-    Type() TaskTypeFilter
-    Status() StatusFilter
-    StartBucket() StartBucketFilter
-    Trashed(trashed bool) TaskQuerier
-    InProject(uuid string) TaskQuerier
-    InArea(uuid string) TaskQuerier
-    HasDeadline(has bool) TaskQuerier
-    HasTag(tag string) TaskQuerier
-
-    // Terminal operations
+// TaskQueryExecutor executes task queries and returns results.
+type TaskQueryExecutor interface {
     All(ctx context.Context) ([]Task, error)
     First(ctx context.Context) (*Task, error)
     Count(ctx context.Context) (int, error)
 }
 
-// TaskTypeFilter provides task type filtering.
-type TaskTypeFilter interface {
-    Todo() TaskQuerier
-    Project() TaskQuerier
-    Heading() TaskQuerier
-}
+// TaskQueryBuilder provides a fluent interface for building task queries.
+// Composed of: TaskQueryExecutor + TaskRelationFilter + TaskStateFilter + TaskTimeFilter
+type TaskQueryBuilder interface {
+    TaskQueryExecutor
+    TaskRelationFilter
+    TaskStateFilter
+    TaskTimeFilter
 
-// StatusFilter provides status filtering.
-type StatusFilter interface {
-    Incomplete() TaskQuerier
-    Completed() TaskQuerier
-    Canceled() TaskQuerier
-}
-
-// StartBucketFilter provides start bucket filtering.
-type StartBucketFilter interface {
-    Inbox() TaskQuerier
-    Anytime() TaskQuerier
-    Someday() TaskQuerier
-}
-
-// AreaQuerier provides methods for querying areas.
-type AreaQuerier interface {
-    WithUUID(uuid string) AreaQuerier
-    All(ctx context.Context) ([]Area, error)
-    First(ctx context.Context) (*Area, error)
-    Count(ctx context.Context) (int, error)
-}
-
-// TagQuerier provides methods for querying tags.
-type TagQuerier interface {
-    WithUUID(uuid string) TagQuerier
-    WithTitle(title string) TagQuerier
-    All(ctx context.Context) ([]Tag, error)
-    First(ctx context.Context) (*Tag, error)
-    Count(ctx context.Context) (int, error)
+    WithUUID(uuid string) TaskQueryBuilder
+    WithDeadlineSuppressed(suppressed bool) TaskQueryBuilder
+    Search(query string) TaskQueryBuilder
+    OrderByTodayIndex() TaskQueryBuilder
+    IncludeItems(include bool) TaskQueryBuilder
 }
 ```
 
 #### Add Interfaces
 
 ```go
-// TodoAdder provides methods for creating a new to-do.
+// TodoAdder builds URLs for creating new to-dos.
 type TodoAdder interface {
+    URLBuilder
+
     Title(title string) TodoAdder
     Notes(notes string) TodoAdder
-    When(when string) TodoAdder
-    Deadline(deadline time.Time) TodoAdder
-    DeadlineString(deadline string) TodoAdder
+    When(t time.Time) TodoAdder
+    WhenEvening() TodoAdder
+    WhenAnytime() TodoAdder
+    WhenSomeday() TodoAdder
+    Deadline(t time.Time) TodoAdder
     Tags(tags ...string) TodoAdder
-    ChecklistItems(items ...string) TodoAdder
-    ListID(listID string) TodoAdder
-    List(list string) TodoAdder
-    Heading(heading string) TodoAdder
-    Completed(completed bool) TodoAdder
-    Canceled(canceled bool) TodoAdder
-    Reveal(reveal bool) TodoAdder
-
-    // Terminal operations
-    Build() (string, error)
-    Execute(ctx context.Context) error
-}
-
-// ProjectAdder provides methods for creating a new project.
-type ProjectAdder interface {
-    Title(title string) ProjectAdder
-    Notes(notes string) ProjectAdder
-    When(when string) ProjectAdder
-    Deadline(deadline time.Time) ProjectAdder
-    DeadlineString(deadline string) ProjectAdder
-    Tags(tags ...string) ProjectAdder
-    AreaID(areaID string) ProjectAdder
-    Area(area string) ProjectAdder
-    Todos(todos ...string) ProjectAdder
-    Completed(completed bool) ProjectAdder
-    Canceled(canceled bool) ProjectAdder
-    Reveal(reveal bool) ProjectAdder
-
-    // Terminal operations
-    Build() (string, error)
-    Execute(ctx context.Context) error
-}
-
-// BatchAdder provides methods for batch create operations.
-type BatchAdder interface {
-    AddTodo(fn func(TodoItemBuilder)) BatchAdder
-    AddProject(fn func(ProjectItemBuilder)) BatchAdder
-    Reveal(reveal bool) BatchAdder
-
-    // Terminal operations
-    Build() (string, error)
-    Execute(ctx context.Context) error
-}
-
-// TodoItemBuilder provides methods for building a to-do in batch operations.
-type TodoItemBuilder interface {
-    Title(title string) TodoItemBuilder
-    Notes(notes string) TodoItemBuilder
-    When(when string) TodoItemBuilder
-    Deadline(deadline time.Time) TodoItemBuilder
-    Tags(tags ...string) TodoItemBuilder
-    ChecklistItems(items ...string) TodoItemBuilder
-    Completed(completed bool) TodoItemBuilder
-    Canceled(canceled bool) TodoItemBuilder
-}
-
-// ProjectItemBuilder provides methods for building a project in batch operations.
-type ProjectItemBuilder interface {
-    Title(title string) ProjectItemBuilder
-    Notes(notes string) ProjectItemBuilder
-    When(when string) ProjectItemBuilder
-    Deadline(deadline time.Time) ProjectItemBuilder
-    Tags(tags ...string) ProjectItemBuilder
-    AreaID(areaID string) ProjectItemBuilder
-    Area(area string) ProjectItemBuilder
-    Items(items ...ProjectItem) ProjectItemBuilder
-    Completed(completed bool) ProjectItemBuilder
-    Canceled(canceled bool) ProjectItemBuilder
+    // ... (see interfaces.go for complete definition)
 }
 ```
 
 #### Update Interfaces
 
 ```go
-// TodoUpdater provides methods for updating an existing to-do.
+// TodoUpdater builds URLs for updating existing to-dos.
 type TodoUpdater interface {
+    URLBuilder
+
     Title(title string) TodoUpdater
     Notes(notes string) TodoUpdater
-    Prepend(notes string) TodoUpdater
-    Append(notes string) TodoUpdater
-    When(when string) TodoUpdater
-    Deadline(deadline time.Time) TodoUpdater
-    DeadlineString(deadline string) TodoUpdater
-    Tags(tags ...string) TodoUpdater
-    AddTags(tags ...string) TodoUpdater
-    ChecklistItems(items ...string) TodoUpdater
-    AddChecklistItems(items ...string) TodoUpdater
-    ListID(listID string) TodoUpdater
-    List(list string) TodoUpdater
-    Heading(heading string) TodoUpdater
-    Completed(completed bool) TodoUpdater
-    Canceled(canceled bool) TodoUpdater
-    Reveal(reveal bool) TodoUpdater
-    DuplicateID() TodoUpdater
-
-    // Terminal operations
-    Build() (string, error)
-    Execute(ctx context.Context) error
-}
-
-// ProjectUpdater provides methods for updating an existing project.
-type ProjectUpdater interface {
-    Title(title string) ProjectUpdater
-    Notes(notes string) ProjectUpdater
-    Prepend(notes string) ProjectUpdater
-    Append(notes string) ProjectUpdater
-    When(when string) ProjectUpdater
-    Deadline(deadline time.Time) ProjectUpdater
-    DeadlineString(deadline string) ProjectUpdater
-    Tags(tags ...string) ProjectUpdater
-    AddTags(tags ...string) ProjectUpdater
-    AreaID(areaID string) ProjectUpdater
-    Area(area string) ProjectUpdater
-    Completed(completed bool) ProjectUpdater
-    Canceled(canceled bool) ProjectUpdater
-    Reveal(reveal bool) ProjectUpdater
-
-    // Terminal operations
-    Build() (string, error)
-    Execute(ctx context.Context) error
+    PrependNotes(notes string) TodoUpdater
+    AppendNotes(notes string) TodoUpdater
+    // ... (see interfaces.go for complete definition)
 }
 ```
 
 #### Navigation Interface
 
 ```go
-// Navigator provides methods for navigating to items or lists in Things.
-type Navigator interface {
-    ID(uuid string) Navigator
-    List(list ListID) Navigator
-    Query(query string) Navigator
-    FilterByTag(tags ...string) Navigator
+// ShowNavigator builds URLs for navigating to items or lists.
+type ShowNavigator interface {
+    ID(id string) ShowNavigator
+    List(list ListID) ShowNavigator
+    Query(query string) ShowNavigator
+    Filter(tags ...string) ShowNavigator
 
-    // Terminal operations
     Build() string
     Execute(ctx context.Context) error
 }
@@ -291,9 +163,10 @@ type Navigator interface {
 // This is the only public entry point to the library.
 type Client struct {
     // unexported fields only
-    db     *db
-    scheme *scheme
-    // ...
+    database *db
+    scheme   *scheme
+    tokenMu  sync.Mutex
+    tokenCache string
 }
 
 // NewClient creates a new Things 3 client.
@@ -321,9 +194,9 @@ func (c *Client) Deadlines(ctx context.Context) ([]Task, error)
 func (c *Client) CreatedWithin(ctx context.Context, since time.Time) ([]Task, error)
 
 // Query Operations - Builders (return interfaces)
-func (c *Client) Tasks() TaskQuerier
-func (c *Client) Areas() AreaQuerier
-func (c *Client) Tags() TagQuerier
+func (c *Client) Tasks() TaskQueryBuilder
+func (c *Client) Areas() AreaQueryBuilder
+func (c *Client) Tags() TagQueryBuilder
 
 // Query Operations - Utilities
 func (c *Client) Get(ctx context.Context, uuid string) (any, error)
@@ -333,7 +206,7 @@ func (c *Client) ChecklistItems(ctx context.Context, todoUUID string) ([]Checkli
 // Add Operations (return interfaces)
 func (c *Client) AddTodo() TodoAdder
 func (c *Client) AddProject() ProjectAdder
-func (c *Client) Batch() BatchAdder
+func (c *Client) Batch() BatchCreator
 
 // Update Operations (return interfaces)
 func (c *Client) UpdateTodo(id string) TodoUpdater
@@ -343,7 +216,7 @@ func (c *Client) UpdateProject(id string) ProjectUpdater
 func (c *Client) Show(ctx context.Context, uuid string) error
 func (c *Client) ShowList(ctx context.Context, list ListID) error
 func (c *Client) ShowSearch(ctx context.Context, query string) error
-func (c *Client) ShowBuilder() Navigator
+func (c *Client) ShowBuilder() ShowNavigator
 ```
 
 ### Implementation Strategy
@@ -356,8 +229,8 @@ Create `interfaces.go` with all interface definitions:
 // interfaces.go
 package things3
 
-// All interface definitions here
-type TaskQuerier interface { ... }
+// All interface definitions here (see interfaces.go for complete definitions)
+type TaskQueryBuilder interface { ... }
 type TodoAdder interface { ... }
 // ...
 ```
@@ -389,7 +262,7 @@ Change return types from concrete to interface:
 func (c *Client) Tasks() *TaskQuery
 
 // After
-func (c *Client) Tasks() TaskQuerier
+func (c *Client) Tasks() TaskQueryBuilder
 ```
 
 #### Step 4: Remove Public Constructors
@@ -409,13 +282,13 @@ things3/
 +-- db_options.go       # dbOptions (internal)
 +-- scheme.go           # scheme type (unexported), newScheme()
 +-- scheme_options.go   # schemeOptions (internal)
-+-- query.go            # taskQuery implements TaskQuerier
-+-- query_area.go       # areaQuery implements AreaQuerier
-+-- query_tag.go        # tagQuery implements TagQuerier
++-- query.go            # taskQuery implements TaskQueryBuilder
++-- query_area.go       # areaQuery implements AreaQueryBuilder
++-- query_tag.go        # tagQuery implements TagQueryBuilder
 +-- scheme_builder.go   # addTodoBuilder, addProjectBuilder
 +-- scheme_update.go    # updateTodoBuilder, updateProjectBuilder
-+-- scheme_show.go      # showBuilder implements Navigator
-+-- scheme_json.go      # batchBuilder implements BatchAdder
++-- scheme_show.go      # showBuilder implements ShowNavigator
++-- scheme_json.go      # batchBuilder implements BatchCreator
 +-- models.go           # Task, Area, Tag, ChecklistItem (unchanged)
 +-- types.go            # TaskType, Status, ListID, etc. (unchanged)
 ```
@@ -431,16 +304,16 @@ if err != nil {
 }
 defer client.Close()
 
-// Query with interface - IDE shows only TaskQuerier methods
+// Query with interface - IDE shows only TaskQueryBuilder methods
 tasks, _ := client.Tasks().
     Status().Incomplete().
-    HasDeadline(true).
+    Deadline().Exists(true).
     All(ctx)
 
 // Add with interface - IDE shows only TodoAdder methods
 client.AddTodo().
     Title("Buy milk").
-    When("today").
+    When(things3.Today()).
     Execute(ctx)
 
 // Update with interface - IDE shows only TodoUpdater methods
@@ -458,7 +331,7 @@ client.Tasks().  // Shows: db, printSQL, conditions, joins, orderBy, ...
 
 After (interfaces):
 ```
-client.Tasks().  // Shows: WithUUID, Type, Status, All, First, Count
+client.Tasks().  // Shows: WithUUID, Type, Status, StartDate, Deadline, All, First, Count
 ```
 
 ## Design Principles

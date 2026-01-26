@@ -38,10 +38,9 @@ type Client struct {
 	database *db
 	scheme   *scheme
 
-	// Token management
-	tokenOnce  sync.Once
+	// Token management with mutex (not sync.Once to allow retry on transient failures)
+	tokenMu    sync.Mutex
 	tokenCache string
-	tokenErr   error
 }
 
 // NewClient creates a new unified Things 3 client.
@@ -124,12 +123,26 @@ func (c *Client) Close() error {
 // ============================================================================
 
 // ensureToken ensures the authentication token is loaded.
-// Uses sync.Once for thread-safe lazy initialization.
+// Uses mutex for thread-safe lazy initialization.
+// Unlike sync.Once, this allows retry on transient failures.
 func (c *Client) ensureToken(ctx context.Context) (string, error) {
-	c.tokenOnce.Do(func() {
-		c.tokenCache, c.tokenErr = c.database.Token(ctx)
-	})
-	return c.tokenCache, c.tokenErr
+	c.tokenMu.Lock()
+	defer c.tokenMu.Unlock()
+
+	// Return cached token if available
+	if c.tokenCache != "" {
+		return c.tokenCache, nil
+	}
+
+	// Fetch token from database
+	token, err := c.database.Token(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	// Cache successful result
+	c.tokenCache = token
+	return token, nil
 }
 
 // Token returns the cached authentication token, fetching it if needed.

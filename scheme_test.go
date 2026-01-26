@@ -15,7 +15,7 @@ func Test_newScheme(t *testing.T) {
 	assert.NotNil(t, scheme)
 }
 
-func TestSchemewithForeground(t *testing.T) {
+func TestSchemeWithForeground(t *testing.T) {
 	scheme := newScheme(withForeground())
 	assert.True(t, scheme.foreground, "withForeground() should set foreground to true")
 

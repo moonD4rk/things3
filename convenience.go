@@ -8,7 +8,7 @@ import (
 )
 
 // Todos returns all incomplete to-do items.
-func (d *DB) Todos(ctx context.Context) ([]Task, error) {
+func (d *db) Todos(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
 		Type().Todo().
 		Status().Incomplete().
@@ -17,7 +17,7 @@ func (d *DB) Todos(ctx context.Context) ([]Task, error) {
 }
 
 // Projects returns all incomplete projects.
-func (d *DB) Projects(ctx context.Context) ([]Task, error) {
+func (d *db) Projects(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
 		Type().Project().
 		Status().Incomplete().
@@ -26,7 +26,7 @@ func (d *DB) Projects(ctx context.Context) ([]Task, error) {
 }
 
 // Inbox returns all tasks in the Inbox.
-func (d *DB) Inbox(ctx context.Context) ([]Task, error) {
+func (d *db) Inbox(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
 		Start().Inbox().
 		Status().Incomplete().
@@ -39,7 +39,7 @@ func (d *DB) Inbox(ctx context.Context) ([]Task, error) {
 // - Tasks with a start date set to today or earlier and in Anytime
 // - Scheduled tasks from Someday with past start dates (yellow dot tasks)
 // - Overdue tasks with deadlines that haven't been suppressed
-func (d *DB) Today(ctx context.Context) ([]Task, error) {
+func (d *db) Today(ctx context.Context) ([]Task, error) {
 	// Regular Today tasks
 	regularTasks, err := d.Tasks().
 		StartDate().Exists(true).
@@ -94,7 +94,7 @@ func (d *DB) Today(ctx context.Context) ([]Task, error) {
 }
 
 // Upcoming returns tasks scheduled for future dates.
-func (d *DB) Upcoming(ctx context.Context) ([]Task, error) {
+func (d *db) Upcoming(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
 		StartDate().Future().
 		Start().Someday().
@@ -104,7 +104,7 @@ func (d *DB) Upcoming(ctx context.Context) ([]Task, error) {
 }
 
 // Anytime returns tasks in the Anytime list.
-func (d *DB) Anytime(ctx context.Context) ([]Task, error) {
+func (d *db) Anytime(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
 		Start().Anytime().
 		Status().Incomplete().
@@ -113,7 +113,7 @@ func (d *DB) Anytime(ctx context.Context) ([]Task, error) {
 }
 
 // Someday returns tasks in the Someday list (without a start date).
-func (d *DB) Someday(ctx context.Context) ([]Task, error) {
+func (d *db) Someday(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
 		StartDate().Exists(false).
 		Start().Someday().
@@ -123,7 +123,7 @@ func (d *DB) Someday(ctx context.Context) ([]Task, error) {
 }
 
 // Logbook returns completed and canceled tasks, sorted by stop date.
-func (d *DB) Logbook(ctx context.Context) ([]Task, error) {
+func (d *db) Logbook(ctx context.Context) ([]Task, error) {
 	completed, err := d.Completed(ctx)
 	if err != nil {
 		return nil, err
@@ -147,7 +147,7 @@ func (d *DB) Logbook(ctx context.Context) ([]Task, error) {
 }
 
 // Trash returns trashed tasks.
-func (d *DB) Trash(ctx context.Context) ([]Task, error) {
+func (d *db) Trash(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
 		Trashed(true).
 		Status().Any().
@@ -155,7 +155,7 @@ func (d *DB) Trash(ctx context.Context) ([]Task, error) {
 }
 
 // Completed returns completed tasks.
-func (d *DB) Completed(ctx context.Context) ([]Task, error) {
+func (d *db) Completed(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
 		Status().Completed().
 		ContextTrashed(false).
@@ -163,7 +163,7 @@ func (d *DB) Completed(ctx context.Context) ([]Task, error) {
 }
 
 // Canceled returns canceled tasks.
-func (d *DB) Canceled(ctx context.Context) ([]Task, error) {
+func (d *db) Canceled(ctx context.Context) ([]Task, error) {
 	return d.Tasks().
 		Status().Canceled().
 		ContextTrashed(false).
@@ -171,7 +171,7 @@ func (d *DB) Canceled(ctx context.Context) ([]Task, error) {
 }
 
 // Deadlines returns tasks with deadlines, sorted by deadline.
-func (d *DB) Deadlines(ctx context.Context) ([]Task, error) {
+func (d *db) Deadlines(ctx context.Context) ([]Task, error) {
 	tasks, err := d.Tasks().
 		Deadline().Exists(true).
 		Status().Incomplete().
@@ -191,7 +191,7 @@ func (d *DB) Deadlines(ctx context.Context) ([]Task, error) {
 
 // CreatedWithin returns tasks created after the specified time.
 // Example: db.CreatedWithin(ctx, things3.DaysAgo(7))
-func (d *DB) CreatedWithin(ctx context.Context, since time.Time) ([]Task, error) {
+func (d *db) CreatedWithin(ctx context.Context, since time.Time) ([]Task, error) {
 	if since.IsZero() {
 		return nil, ErrInvalidParameter
 	}
@@ -215,7 +215,7 @@ func (d *DB) CreatedWithin(ctx context.Context, since time.Time) ([]Task, error)
 
 // Search searches for tasks matching the query.
 // Searches in task title, notes, and area title.
-func (d *DB) Search(ctx context.Context, query string) ([]Task, error) {
+func (d *db) Search(ctx context.Context, query string) ([]Task, error) {
 	return d.Tasks().
 		Search(query).
 		Status().Incomplete().
@@ -226,7 +226,7 @@ func (d *DB) Search(ctx context.Context, query string) ([]Task, error) {
 // Get retrieves an object by UUID.
 // Returns a Task, Area, or Tag depending on what is found.
 // Returns nil if not found.
-func (d *DB) Get(ctx context.Context, uuid string) (any, error) {
+func (d *db) Get(ctx context.Context, uuid string) (any, error) {
 	// Try to find as task
 	task, err := d.Tasks().WithUUID(uuid).First(ctx)
 	if err == nil {
@@ -260,256 +260,6 @@ func (d *DB) Get(ctx context.Context, uuid string) (any, error) {
 }
 
 // ChecklistItems returns the checklist items for a to-do.
-func (d *DB) ChecklistItems(ctx context.Context, todoUUID string) ([]ChecklistItem, error) {
+func (d *db) ChecklistItems(ctx context.Context, todoUUID string) ([]ChecklistItem, error) {
 	return d.getChecklistItems(ctx, todoUUID)
-}
-
-// AreaQuery provides a fluent interface for building area queries.
-type AreaQuery struct {
-	db *DB
-
-	uuid         *string
-	title        *string
-	visible      *bool
-	tagTitle     any // string, bool, or nil
-	includeItems bool
-}
-
-// Areas creates a new AreaQuery for querying areas.
-func (d *DB) Areas() *AreaQuery {
-	return &AreaQuery{
-		db: d,
-	}
-}
-
-// WithUUID filters areas by UUID.
-func (q *AreaQuery) WithUUID(uuid string) *AreaQuery {
-	q.uuid = &uuid
-	return q
-}
-
-// WithTitle filters areas by title.
-func (q *AreaQuery) WithTitle(title string) *AreaQuery {
-	q.title = &title
-	return q
-}
-
-// Visible filters areas by visibility status.
-// Pass true to include only visible areas.
-// Pass false to include only hidden areas.
-func (q *AreaQuery) Visible(visible bool) *AreaQuery {
-	q.visible = &visible
-	return q
-}
-
-// InTag filters areas by tag.
-func (q *AreaQuery) InTag(tag any) *AreaQuery {
-	q.tagTitle = tag
-	return q
-}
-
-// IncludeItems includes tasks in each area.
-func (q *AreaQuery) IncludeItems(include bool) *AreaQuery {
-	q.includeItems = include
-	return q
-}
-
-// buildWhere builds the WHERE clause for the area query using filterBuilder.
-func (q *AreaQuery) buildWhere() string {
-	fb := newFilterBuilder()
-
-	if q.uuid != nil {
-		fb.addEqual("AREA.uuid", *q.uuid)
-	}
-	if q.title != nil {
-		fb.addEqual("AREA.title", *q.title)
-	}
-	if q.visible != nil {
-		fb.addTruthy("AREA.visible", q.visible)
-	}
-	fb.addEqual("TAG.title", q.tagTitle)
-
-	return fb.sql()
-}
-
-// All executes the query and returns all matching areas.
-func (q *AreaQuery) All(ctx context.Context) ([]Area, error) {
-	sql := buildAreasSQL(q.buildWhere())
-	rows, err := q.db.executeQuery(ctx, sql)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var areas []Area
-	for rows.Next() {
-		area, err := scanArea(rows)
-		if err != nil {
-			return nil, err
-		}
-
-		// Load tags if present
-		if area.Tags != nil {
-			tags, err := q.db.getTagsOfArea(ctx, area.UUID)
-			if err != nil {
-				return nil, err
-			}
-			area.Tags = tags
-		}
-
-		// Load items if requested
-		if q.includeItems {
-			items, err := q.db.Tasks().
-				InArea(area.UUID).
-				ContextTrashed(false).
-				IncludeItems(true).
-				All(ctx)
-			if err != nil {
-				return nil, err
-			}
-			area.Items = items
-		}
-
-		areas = append(areas, *area)
-	}
-
-	return areas, rows.Err()
-}
-
-// First executes the query and returns the first matching area.
-func (q *AreaQuery) First(ctx context.Context) (*Area, error) {
-	areas, err := q.All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if len(areas) == 0 {
-		return nil, ErrAreaNotFound
-	}
-	return &areas[0], nil
-}
-
-// Count executes the query and returns the count of matching areas.
-func (q *AreaQuery) Count(ctx context.Context) (int, error) {
-	areaSQL := buildAreasSQL(q.buildWhere())
-	countSQL := buildCountSQL(areaSQL)
-
-	var count int
-	if err := q.db.executeQueryRow(ctx, countSQL).Scan(&count); err != nil {
-		return 0, err
-	}
-	return count, nil
-}
-
-// TagQuery provides a fluent interface for building tag queries.
-type TagQuery struct {
-	db *DB
-
-	uuid         *string
-	title        *string
-	parentUUID   *string
-	includeItems bool
-}
-
-// Tags creates a new TagQuery for querying tags.
-func (d *DB) Tags() *TagQuery {
-	return &TagQuery{
-		db: d,
-	}
-}
-
-// WithUUID filters tags by UUID.
-func (q *TagQuery) WithUUID(uuid string) *TagQuery {
-	q.uuid = &uuid
-	return q
-}
-
-// WithTitle filters tags by title.
-func (q *TagQuery) WithTitle(title string) *TagQuery {
-	q.title = &title
-	return q
-}
-
-// WithParent filters tags by parent tag UUID.
-// Use this to find child tags of a specific parent tag.
-func (q *TagQuery) WithParent(parentUUID string) *TagQuery {
-	q.parentUUID = &parentUUID
-	return q
-}
-
-// IncludeItems includes areas and tasks for each tag.
-func (q *TagQuery) IncludeItems(include bool) *TagQuery {
-	q.includeItems = include
-	return q
-}
-
-// buildWhere builds the WHERE clause for the tag query using filterBuilder.
-func (q *TagQuery) buildWhere() string {
-	fb := newFilterBuilder()
-
-	if q.uuid != nil {
-		fb.addEqual("uuid", *q.uuid)
-	}
-	if q.title != nil {
-		fb.addEqual("title", *q.title)
-	}
-	if q.parentUUID != nil {
-		fb.addEqual("parent", *q.parentUUID)
-	}
-
-	return fb.sql()
-}
-
-// All executes the query and returns all matching tags.
-func (q *TagQuery) All(ctx context.Context) ([]Tag, error) {
-	sql := buildTagsSQL(q.buildWhere())
-	rows, err := q.db.executeQuery(ctx, sql)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var tags []Tag
-	for rows.Next() {
-		tag, err := scanTag(rows)
-		if err != nil {
-			return nil, err
-		}
-
-		// Load items if requested
-		if q.includeItems {
-			areas, err := q.db.Areas().InTag(tag.Title).All(ctx)
-			if err != nil {
-				return nil, err
-			}
-			tasks, err := q.db.Tasks().InTag(tag.Title).ContextTrashed(false).All(ctx)
-			if err != nil {
-				return nil, err
-			}
-
-			items := make([]any, 0, len(areas)+len(tasks))
-			for i := range areas {
-				items = append(items, &areas[i])
-			}
-			for i := range tasks {
-				items = append(items, &tasks[i])
-			}
-			tag.Items = items
-		}
-
-		tags = append(tags, *tag)
-	}
-
-	return tags, rows.Err()
-}
-
-// First executes the query and returns the first matching tag.
-func (q *TagQuery) First(ctx context.Context) (*Tag, error) {
-	tags, err := q.All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if len(tags) == 0 {
-		return nil, ErrTagNotFound
-	}
-	return &tags[0], nil
 }

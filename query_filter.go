@@ -25,140 +25,131 @@ const (
 )
 
 // =============================================================================
-// StatusFilter - Type-safe status filtering
+// statusFilter - Type-safe status filtering
 // =============================================================================
 
-// StatusFilter provides type-safe status filtering for TaskQuery.
-// Use the terminal methods (Incomplete, Completed, Canceled) to set the filter
-// and return to the parent TaskQuery for continued chaining.
-type StatusFilter struct {
-	query *TaskQuery
+// statusFilter provides type-safe status filtering for taskQuery.
+type statusFilter struct {
+	query *taskQuery
 }
 
 // Incomplete filters for tasks with incomplete status.
-func (f *StatusFilter) Incomplete() *TaskQuery {
+func (f *statusFilter) Incomplete() TaskQueryBuilder {
 	s := StatusIncomplete
 	f.query.status = &s
 	return f.query
 }
 
 // Completed filters for tasks with completed status.
-func (f *StatusFilter) Completed() *TaskQuery {
+func (f *statusFilter) Completed() TaskQueryBuilder {
 	s := StatusCompleted
 	f.query.status = &s
 	return f.query
 }
 
 // Canceled filters for tasks with canceled status.
-func (f *StatusFilter) Canceled() *TaskQuery {
+func (f *statusFilter) Canceled() TaskQueryBuilder {
 	s := StatusCanceled
 	f.query.status = &s
 	return f.query
 }
 
 // Any clears the status filter to include tasks of any status.
-// This is useful when you want to query tasks regardless of their completion state.
-func (f *StatusFilter) Any() *TaskQuery {
+func (f *statusFilter) Any() TaskQueryBuilder {
 	f.query.status = nil
 	return f.query
 }
 
 // =============================================================================
-// StartFilter - Type-safe start bucket filtering
+// startFilter - Type-safe start bucket filtering
 // =============================================================================
 
-// StartFilter provides type-safe start bucket filtering for TaskQuery.
-// Use the terminal methods (Inbox, Anytime, Someday) to set the filter
-// and return to the parent TaskQuery for continued chaining.
-type StartFilter struct {
-	query *TaskQuery
+// startFilter provides type-safe start bucket filtering for taskQuery.
+type startFilter struct {
+	query *taskQuery
 }
 
 // Inbox filters for tasks in the Inbox.
-func (f *StartFilter) Inbox() *TaskQuery {
+func (f *startFilter) Inbox() TaskQueryBuilder {
 	s := StartInbox
 	f.query.start = &s
 	return f.query
 }
 
 // Anytime filters for tasks scheduled as Anytime.
-func (f *StartFilter) Anytime() *TaskQuery {
+func (f *startFilter) Anytime() TaskQueryBuilder {
 	s := StartAnytime
 	f.query.start = &s
 	return f.query
 }
 
 // Someday filters for tasks scheduled as Someday.
-func (f *StartFilter) Someday() *TaskQuery {
+func (f *startFilter) Someday() TaskQueryBuilder {
 	s := StartSomeday
 	f.query.start = &s
 	return f.query
 }
 
 // =============================================================================
-// DateFilter - Type-safe date filtering
+// dateFilter - Type-safe date filtering
 // =============================================================================
 
-// DateFilter provides type-safe date filtering for TaskQuery.
-// It is used for startDate, stopDate, and deadline fields.
-// Use the terminal methods to set the filter and return to the parent TaskQuery.
-type DateFilter struct {
-	query *TaskQuery
+// dateFilter provides type-safe date filtering for taskQuery.
+type dateFilter struct {
+	query *taskQuery
 	field dateField
 }
 
 // Exists filters by whether the date exists (is not null).
-// Pass true to include only items with this date set.
-// Pass false to include only items without this date set.
-func (f *DateFilter) Exists(has bool) *TaskQuery {
+func (f *dateFilter) Exists(has bool) TaskQueryBuilder {
 	f.setFilter(&dateFilterValue{hasDate: &has})
 	return f.query
 }
 
 // Future filters for dates in the future (after today).
-func (f *DateFilter) Future() *TaskQuery {
+func (f *dateFilter) Future() TaskQueryBuilder {
 	f.setFilter(&dateFilterValue{relative: dateFuture})
 	return f.query
 }
 
 // Past filters for dates in the past (today or earlier).
-func (f *DateFilter) Past() *TaskQuery {
+func (f *dateFilter) Past() TaskQueryBuilder {
 	f.setFilter(&dateFilterValue{relative: datePast})
 	return f.query
 }
 
 // On filters for a specific date (equals).
-func (f *DateFilter) On(date time.Time) *TaskQuery {
+func (f *dateFilter) On(date time.Time) TaskQueryBuilder {
 	f.setFilter(&dateFilterValue{operator: "=", date: &date})
 	return f.query
 }
 
 // Before filters for dates before the given date (exclusive).
-func (f *DateFilter) Before(date time.Time) *TaskQuery {
+func (f *dateFilter) Before(date time.Time) TaskQueryBuilder {
 	f.setFilter(&dateFilterValue{operator: "<", date: &date})
 	return f.query
 }
 
 // OnOrBefore filters for dates on or before the given date (inclusive).
-func (f *DateFilter) OnOrBefore(date time.Time) *TaskQuery {
+func (f *dateFilter) OnOrBefore(date time.Time) TaskQueryBuilder {
 	f.setFilter(&dateFilterValue{operator: "<=", date: &date})
 	return f.query
 }
 
 // After filters for dates after the given date (exclusive).
-func (f *DateFilter) After(date time.Time) *TaskQuery {
+func (f *dateFilter) After(date time.Time) TaskQueryBuilder {
 	f.setFilter(&dateFilterValue{operator: ">", date: &date})
 	return f.query
 }
 
 // OnOrAfter filters for dates on or after the given date (inclusive).
-func (f *DateFilter) OnOrAfter(date time.Time) *TaskQuery {
+func (f *dateFilter) OnOrAfter(date time.Time) TaskQueryBuilder {
 	f.setFilter(&dateFilterValue{operator: ">=", date: &date})
 	return f.query
 }
 
 // setFilter sets the filter value on the appropriate field in the parent query.
-func (f *DateFilter) setFilter(v *dateFilterValue) {
+func (f *dateFilter) setFilter(v *dateFilterValue) {
 	switch f.field {
 	case dateFieldStartDate:
 		f.query.startDateFilter = v
@@ -170,32 +161,30 @@ func (f *DateFilter) setFilter(v *dateFilterValue) {
 }
 
 // =============================================================================
-// TypeFilter - Type-safe task type filtering
+// typeFilter - Type-safe task type filtering
 // =============================================================================
 
-// TypeFilter provides type-safe task type filtering for TaskQuery.
-// Use the terminal methods (Todo, Project, Heading) to set the filter
-// and return to the parent TaskQuery for continued chaining.
-type TypeFilter struct {
-	query *TaskQuery
+// typeFilter provides type-safe task type filtering for taskQuery.
+type typeFilter struct {
+	query *taskQuery
 }
 
 // Todo filters for to-do items only.
-func (f *TypeFilter) Todo() *TaskQuery {
+func (f *typeFilter) Todo() TaskQueryBuilder {
 	t := TaskTypeTodo
 	f.query.taskType = &t
 	return f.query
 }
 
 // Project filters for projects only.
-func (f *TypeFilter) Project() *TaskQuery {
+func (f *typeFilter) Project() TaskQueryBuilder {
 	t := TaskTypeProject
 	f.query.taskType = &t
 	return f.query
 }
 
 // Heading filters for headings only.
-func (f *TypeFilter) Heading() *TaskQuery {
+func (f *typeFilter) Heading() TaskQueryBuilder {
 	t := TaskTypeHeading
 	f.query.taskType = &t
 	return f.query

@@ -409,7 +409,7 @@ func TestDatabaseVersion(t *testing.T) {
 	db := newTestDB(t)
 
 	// Access internal db to get version
-	version, err := getDatabaseVersion(db.db)
+	version, err := getDatabaseVersion(db.sqlDB)
 	require.NoError(t, err)
 	assert.Equal(t, testDatabaseVersion, version)
 }

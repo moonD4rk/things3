@@ -23,11 +23,9 @@ This RFC defines the unified Client API that combines database read operations w
 - Automatic token management with lazy loading
 - Consistent naming conventions across all APIs
 - Clear method names that express intent
-- Backward compatibility with existing `NewDB()` and `NewScheme()`
 
 ### Non-Goals
 
-- Deprecating `NewDB()` or `NewScheme()` (they remain for advanced use cases)
 - Changing the underlying URL scheme format
 
 ## Design
@@ -349,20 +347,6 @@ client.Batch().
     Execute(ctx)
 ```
 
-### Using Scheme Directly
-
-For advanced use cases, `NewScheme()` and `NewDB()` remain available:
-
-```go
-// URL building only (no database)
-scheme := things3.NewScheme()
-url, _ := scheme.AddTodo().Title("Task").Build()
-
-// Database access only (no URL scheme)
-db, _ := things3.NewDB()
-tasks, _ := db.Inbox(ctx)
-```
-
 ## File Organization
 
 ```text
@@ -377,34 +361,6 @@ things3/
 +-- scheme_update.go    # UpdateTodoBuilder, UpdateProjectBuilder (tokenFunc added)
 +-- scheme_show.go      # ShowBuilder (unchanged)
 +-- scheme_json.go      # BatchBuilder, BatchTodoBuilder, etc. (renamed)
-```
-
-## Migration Guide
-
-### For Scheme Users
-
-```go
-// Before
-scheme.Todo().Title("Task").Build()
-scheme.Project().Title("Project").Build()
-scheme.JSON().AddTodo(...).Build()
-
-// After
-scheme.AddTodo().Title("Task").Build()
-scheme.AddProject().Title("Project").Build()
-scheme.Batch().AddTodo(...).Build()
-```
-
-### For Direct Type Usage
-
-```go
-// Before
-var builder *things3.TodoBuilder
-var jsonBuilder *things3.JSONBuilder
-
-// After
-var builder *things3.AddTodoBuilder
-var batchBuilder *things3.BatchBuilder
 ```
 
 ## Design Principles

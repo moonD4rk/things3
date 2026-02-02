@@ -7,17 +7,17 @@ import (
 	"fmt"
 )
 
-// DB provides read-only access to the Things 3 database.
-type DB struct {
-	db         *sql.DB
+// db provides read-only access to the Things 3 database.
+type db struct {
+	sqlDB      *sql.DB
 	filepath   string
 	printSQL   bool
 	queryCount int
 }
 
-// NewDB creates a new Things 3 database connection.
+// newDB creates a new Things 3 database connection.
 // Options can be provided to configure the database behavior.
-func NewDB(opts ...DBOption) (*DB, error) {
+func newDB(opts ...dbOption) (*db, error) {
 	options := &dbOptions{}
 	for _, opt := range opts {
 		opt(options)
@@ -30,39 +30,39 @@ func NewDB(opts ...DBOption) (*DB, error) {
 	}
 
 	// Open database connection
-	db, err := openDatabase(filepath)
+	sqlDB, err := openDatabase(filepath)
 	if err != nil {
 		return nil, err
 	}
 
 	// Validate database version
-	if err := validateDatabaseVersion(db); err != nil {
-		db.Close()
+	if err := validateDatabaseVersion(sqlDB); err != nil {
+		sqlDB.Close()
 		return nil, err
 	}
 
-	return &DB{
-		db:       db,
+	return &db{
+		sqlDB:    sqlDB,
 		filepath: filepath,
 		printSQL: options.printSQL,
 	}, nil
 }
 
 // Close closes the database connection.
-func (d *DB) Close() error {
-	if d.db != nil {
-		return d.db.Close()
+func (d *db) Close() error {
+	if d.sqlDB != nil {
+		return d.sqlDB.Close()
 	}
 	return nil
 }
 
 // Filepath returns the path to the Things database file.
-func (d *DB) Filepath() string {
+func (d *db) Filepath() string {
 	return d.filepath
 }
 
 // executeQuery executes a SQL query and returns the results.
-func (d *DB) executeQuery(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+func (d *db) executeQuery(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	if d.printSQL {
 		d.queryCount++
 		fmt.Printf("/* Query %d */\n", d.queryCount)
@@ -74,11 +74,11 @@ func (d *DB) executeQuery(ctx context.Context, query string, args ...any) (*sql.
 		fmt.Println()
 	}
 
-	return d.db.QueryContext(ctx, query, args...)
+	return d.sqlDB.QueryContext(ctx, query, args...)
 }
 
 // executeQueryRow executes a SQL query that returns a single row.
-func (d *DB) executeQueryRow(ctx context.Context, query string, args ...any) *sql.Row {
+func (d *db) executeQueryRow(ctx context.Context, query string, args ...any) *sql.Row {
 	if d.printSQL {
 		d.queryCount++
 		fmt.Printf("/* Query %d */\n", d.queryCount)
@@ -90,7 +90,7 @@ func (d *DB) executeQueryRow(ctx context.Context, query string, args ...any) *sq
 		fmt.Println()
 	}
 
-	return d.db.QueryRowContext(ctx, query, args...)
+	return d.sqlDB.QueryRowContext(ctx, query, args...)
 }
 
 // scanTask scans a row into a Task struct.
@@ -267,7 +267,7 @@ func scanChecklistItem(rows *sql.Rows) (*ChecklistItem, error) {
 }
 
 // getTagsOfTask returns the tag titles for a task.
-func (d *DB) getTagsOfTask(ctx context.Context, taskUUID string) ([]string, error) {
+func (d *db) getTagsOfTask(ctx context.Context, taskUUID string) ([]string, error) {
 	query := buildTagsOfTaskSQL()
 	rows, err := d.executeQuery(ctx, query, taskUUID)
 	if err != nil {
@@ -288,7 +288,7 @@ func (d *DB) getTagsOfTask(ctx context.Context, taskUUID string) ([]string, erro
 }
 
 // getTagsOfArea returns the tag titles for an area.
-func (d *DB) getTagsOfArea(ctx context.Context, areaUUID string) ([]string, error) {
+func (d *db) getTagsOfArea(ctx context.Context, areaUUID string) ([]string, error) {
 	query := buildTagsOfAreaSQL()
 	rows, err := d.executeQuery(ctx, query, areaUUID)
 	if err != nil {
@@ -309,7 +309,7 @@ func (d *DB) getTagsOfArea(ctx context.Context, areaUUID string) ([]string, erro
 }
 
 // getChecklistItems returns the checklist items for a to-do.
-func (d *DB) getChecklistItems(ctx context.Context, todoUUID string) ([]ChecklistItem, error) {
+func (d *db) getChecklistItems(ctx context.Context, todoUUID string) ([]ChecklistItem, error) {
 	query := buildChecklistItemsSQL()
 	rows, err := d.executeQuery(ctx, query, todoUUID)
 	if err != nil {
@@ -330,7 +330,7 @@ func (d *DB) getChecklistItems(ctx context.Context, todoUUID string) ([]Checklis
 }
 
 // Token returns the Things URL scheme authentication token.
-func (d *DB) Token(ctx context.Context) (string, error) {
+func (d *db) Token(ctx context.Context) (string, error) {
 	query := buildAuthTokenSQL()
 	var token sql.NullString
 	if err := d.executeQueryRow(ctx, query).Scan(&token); err != nil {

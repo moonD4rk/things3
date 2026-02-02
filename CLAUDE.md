@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **No Emoji**: Never use emoji in any file (code, docs, comments, commits)
 - **No Local Paths**: Never expose local machine paths in code, tests, or documentation
 - **Design Focus**: RFC documents focus on design decisions, avoid large code blocks
+- **No Backward Compatibility**: Breaking changes are acceptable. Prioritize optimal design and elegant code over backward compatibility. Do not deprecate, just remove or redesign
 
 ## Project Overview
 
@@ -27,26 +28,73 @@ go build ./...                             # Build
 
 ## Architecture
 
+### Design Philosophy
+
+- **Single Entry Point**: `NewClient()` is the only public constructor
+- **Interface-Based API**: Methods return interfaces, not concrete types
+- **Go Idioms**: Small interfaces, composition over inheritance
+
 ### Design Patterns
 
-- **DB Configuration**: Functional Options pattern (DBOption)
-- **Scheme Configuration**: Functional Options pattern (SchemeOption)
-- **Query Building**: Builder pattern with chainable methods
+- **Client Configuration**: Functional Options pattern (ClientOption)
+- **Query Building**: Builder pattern with chainable methods returning interfaces
 - **URL Building**: Builder pattern with Build() or Execute()
-- **Convenience Methods**: Direct access for common queries
+- **Convenience Methods**: Direct access for common queries (Inbox, Today, etc.)
+
+### Interface Hierarchy
+
+```
+Layer 1: Reusable Small Interfaces (Terminal Operations)
+├── TaskQueryExecutor   (All, First, Count)
+├── AreaQueryExecutor   (All, First, Count)
+├── TagQueryExecutor    (All, First)
+└── URLBuilder          (Build, Execute)
+
+Layer 2: Sub-builder Interfaces (Small, Type-Safe)
+├── TypeFilterBuilder   (Todo, Project, Heading)
+├── StatusFilterBuilder (Incomplete, Completed, Canceled, Any)
+├── StartFilterBuilder  (Inbox, Anytime, Someday)
+└── DateFilterBuilder   (Exists, Future, Past, On, Before, After, etc.)
+
+Layer 3: Functional Group Interfaces (For Composition)
+├── TaskRelationFilter  (InArea, InProject, InTag, etc.)
+├── TaskStateFilter     (Type, Status, Start, Trashed)
+└── TaskTimeFilter      (CreatedAfter, StartDate, StopDate, Deadline)
+
+Layer 4: Composed Query Builders
+├── TaskQueryBuilder = TaskQueryExecutor + TaskRelationFilter + TaskStateFilter + TaskTimeFilter
+├── AreaQueryBuilder = AreaQueryExecutor + filters
+└── TagQueryBuilder  = TagQueryExecutor + filters
+
+Layer 5: URL Scheme Builders
+├── TodoAdder, ProjectAdder     (URLBuilder + creation methods)
+├── TodoUpdater, ProjectUpdater (URLBuilder + update methods)
+└── ShowNavigator               (navigation methods)
+
+Layer 6: Batch Operations
+├── BatchCreator, AuthBatchCreator
+└── BatchTodoConfigurator, BatchProjectConfigurator
+```
 
 ### Core Components
 
 | File | Purpose |
 |------|---------|
-| `db.go` | DB type, NewDB(), Close() |
-| `db_options.go` | Functional options for DB config |
-| `scheme.go` | Scheme type, NewScheme(), URL building and execution |
-| `scheme_options.go` | SchemeOption, WithForeground() |
-| `scheme_update.go` | UpdateTodoBuilder, UpdateProjectBuilder with Execute() |
-| `query.go` | TaskQuery builder with filter methods |
-| `query_area.go` | AreaQuery builder |
-| `query_tag.go` | TagQuery builder |
+| `client.go` | Client type, NewClient(), unified API entry point |
+| `client_options.go` | ClientOption functional options |
+| `interfaces.go` | All public interface definitions (6 layers) |
+| `db.go` | Internal db type, database operations |
+| `db_options.go` | Internal dbOption functional options |
+| `scheme.go` | Internal scheme type, URL building and execution |
+| `scheme_options.go` | Internal schemeOption |
+| `scheme_builder.go` | AddTodoBuilder, AddProjectBuilder |
+| `scheme_update.go` | UpdateTodoBuilder, UpdateProjectBuilder |
+| `scheme_show.go` | ShowBuilder for navigation |
+| `scheme_json.go` | BatchBuilder for batch operations |
+| `query.go` | taskQuery builder with filter methods |
+| `query_filter.go` | typeFilter, statusFilter, startFilter, dateFilter |
+| `query_area.go` | areaQuery builder |
+| `query_tag.go` | tagQuery builder |
 | `convenience.go` | Inbox(), Today(), Todos(), etc. |
 | `models.go` | Task, Area, Tag, ChecklistItem structs |
 | `types.go` | TaskType, Status, StartBucket enums |
@@ -71,6 +119,28 @@ Things uses custom binary date formats:
 
 ## API Design
 
+### Unified Client Pattern
+
+All operations go through a single Client:
+
+```go
+client, _ := things3.NewClient()
+defer client.Close()
+
+// Query operations
+tasks, _ := client.Today(ctx)
+tasks, _ := client.Tasks().Status().Incomplete().All(ctx)
+
+// Add operations
+client.AddTodo().Title("Buy milk").Execute(ctx)
+
+// Update operations (auto-manages auth token)
+client.UpdateTodo(uuid).Completed(true).Execute(ctx)
+
+// Show operations
+client.Show(ctx, uuid)
+```
+
 ### Query Builder Pattern
 
 Filter methods are chainable, terminal methods execute the query:
@@ -82,18 +152,19 @@ Filter methods are chainable, terminal methods execute the query:
 
 | Python | Go |
 |--------|-----|
-| `tasks(uuid=X)` | `db.Tasks().WithUUID(X).First(ctx)` |
-| `tasks(**kwargs)` | `db.Tasks().<filters>.All(ctx)` |
-| `todos()` | `db.Todos(ctx)` |
-| `inbox()` | `db.Inbox(ctx)` |
-| `today()` | `db.Today(ctx)` |
+| `tasks(uuid=X)` | `client.Tasks().WithUUID(X).First(ctx)` |
+| `tasks(**kwargs)` | `client.Tasks().<filters>.All(ctx)` |
+| `todos()` | `client.Todos(ctx)` |
+| `inbox()` | `client.Inbox(ctx)` |
+| `today()` | `client.Today(ctx)` |
 
 ## Code Quality Standards
 
 ### Naming Conventions
 
-- Exported types: PascalCase (TaskQuery, ChecklistItem)
-- Private functions: camelCase (buildWhereClause)
+- Exported types: PascalCase (Client, Task, TaskQueryBuilder)
+- Internal types: camelCase (db, scheme, taskQuery)
+- Interfaces: Verb+er or descriptive (TaskQueryBuilder, URLBuilder)
 - Enums: Type prefix (TaskTypeTodo, StatusCompleted)
 - Query methods: With* for filters, In* for relationships
 
@@ -129,14 +200,6 @@ Detailed design decisions with rationale.
 ## Implementation Notes
 Key implementation details and considerations.
 ```
-
-### Planned RFCs
-
-- 001_rfc_project_overview.md - Project goals, non-goals, core decisions
-- 002_rfc_api_design.md - API patterns and public interface
-- 003_rfc_database_schema.md - Things 3 database structure
-- 004_rfc_types_and_models.md - Type system design
-- 005_rfc_error_handling.md - Error handling strategy
 
 ## Dependencies
 

@@ -1,29 +1,23 @@
 package things3
 
-// dbOptions holds the configuration options for the DB.
+// dbOptions holds the configuration options for the db.
 type dbOptions struct {
 	databasePath string
 	printSQL     bool
 }
 
-// DBOption is a functional option for configuring the DB.
-type DBOption func(*dbOptions)
+// dbOption is a functional option for configuring the db.
+type dbOption func(*dbOptions)
 
-// WithDBPath sets a custom path to the Things database.
-// If not set, the database path is discovered automatically.
-func WithDBPath(path string) DBOption {
+// withDBPath sets a custom path to the Things database.
+func withDBPath(path string) dbOption {
 	return func(opts *dbOptions) {
 		opts.databasePath = path
 	}
 }
 
-// WithDBPrintSQL enables SQL query logging to stdout.
-// Useful for debugging and understanding the queries being executed.
-//
-// Example:
-//
-//	db, err := things3.NewDB(things3.WithDBPrintSQL(true))
-func WithDBPrintSQL(enabled bool) DBOption {
+// withDBPrintSQL enables SQL query logging to stdout.
+func withDBPrintSQL(enabled bool) dbOption {
 	return func(opts *dbOptions) {
 		opts.printSQL = enabled
 	}

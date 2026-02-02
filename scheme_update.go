@@ -7,6 +7,42 @@ import (
 	"time"
 )
 
+// buildUpdateURL is a shared helper for building update URLs.
+// It handles lazy token loading, validation, and URL construction.
+func buildUpdateURL(
+	token *string,
+	tokenFunc func(context.Context) (string, error),
+	id string,
+	attrs *urlAttrs,
+	command Command,
+	validateFn func() error,
+) (string, error) {
+	// Lazy load token if needed
+	if *token == "" && tokenFunc != nil {
+		t, err := tokenFunc(context.Background())
+		if err != nil {
+			return "", err
+		}
+		*token = t
+	}
+
+	if err := validateFn(); err != nil {
+		return "", err
+	}
+
+	// Finalize when parameter with reminder time if set
+	attrs.FinalizeWhen()
+
+	query := url.Values{}
+	query.Set(keyID, id)
+	query.Set(keyAuthToken, *token)
+	for k, v := range attrs.params {
+		query.Set(k, v)
+	}
+
+	return fmt.Sprintf("things:///%s?%s", command, encodeQuery(query)), nil
+}
+
 // updateTodoBuilder builds URLs for updating existing to-dos via the update command.
 // Requires authentication token (obtained via authScheme or Client).
 type updateTodoBuilder struct {
@@ -178,30 +214,7 @@ func (b *updateTodoBuilder) validate() error {
 // If token is not set but tokenFunc is provided, it will fetch the token using context.Background().
 // For explicit context control, use Execute() instead.
 func (b *updateTodoBuilder) Build() (string, error) {
-	// Lazy load token if needed
-	if b.token == "" && b.tokenFunc != nil {
-		token, err := b.tokenFunc(context.Background())
-		if err != nil {
-			return "", err
-		}
-		b.token = token
-	}
-
-	if err := b.validate(); err != nil {
-		return "", err
-	}
-
-	// Finalize when parameter with reminder time if set
-	b.attrs.FinalizeWhen()
-
-	query := url.Values{}
-	query.Set(keyID, b.id)
-	query.Set(keyAuthToken, b.token)
-	for k, v := range b.attrs.params {
-		query.Set(k, v)
-	}
-
-	return fmt.Sprintf("things:///%s?%s", CommandUpdate, encodeQuery(query)), nil
+	return buildUpdateURL(&b.token, b.tokenFunc, b.id, &b.attrs, CommandUpdate, b.validate)
 }
 
 // Execute builds and executes the update URL.
@@ -356,30 +369,7 @@ func (b *updateProjectBuilder) validate() error {
 // If token is not set but tokenFunc is provided, it will fetch the token using context.Background().
 // For explicit context control, use Execute() instead.
 func (b *updateProjectBuilder) Build() (string, error) {
-	// Lazy load token if needed
-	if b.token == "" && b.tokenFunc != nil {
-		token, err := b.tokenFunc(context.Background())
-		if err != nil {
-			return "", err
-		}
-		b.token = token
-	}
-
-	if err := b.validate(); err != nil {
-		return "", err
-	}
-
-	// Finalize when parameter with reminder time if set
-	b.attrs.FinalizeWhen()
-
-	query := url.Values{}
-	query.Set(keyID, b.id)
-	query.Set(keyAuthToken, b.token)
-	for k, v := range b.attrs.params {
-		query.Set(k, v)
-	}
-
-	return fmt.Sprintf("things:///%s?%s", CommandUpdateProject, encodeQuery(query)), nil
+	return buildUpdateURL(&b.token, b.tokenFunc, b.id, &b.attrs, CommandUpdateProject, b.validate)
 }
 
 // Execute builds and executes the update URL.

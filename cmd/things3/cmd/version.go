@@ -12,16 +12,15 @@ var (
 	buildDate = "unknown"
 )
 
-var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Print version information",
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("things3 %s\n", version)
-		fmt.Printf("  commit: %s\n", commit)
-		fmt.Printf("  built:  %s\n", buildDate)
-	},
-}
-
-func init() {
-	rootCmd.AddCommand(versionCmd)
+// NewVersionCmd creates the version command.
+func NewVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print version information",
+		Run: func(cmd *cobra.Command, _ []string) {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "things3 %s\n", version)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  commit: %s\n", commit)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  built:  %s\n", buildDate)
+		},
+	}
 }

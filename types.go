@@ -1,5 +1,7 @@
 package things3
 
+import "encoding/json"
+
 // String constant for unknown enum values.
 const unknownString = "unknown"
 
@@ -30,6 +32,16 @@ func (t TaskType) String() string {
 	}
 }
 
+// MarshalJSON implements json.Marshaler for TaskType.
+func (t TaskType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(t.String())
+}
+
+// MarshalYAML implements yaml.Marshaler for TaskType.
+func (t TaskType) MarshalYAML() (any, error) {
+	return t.String(), nil
+}
+
 // Status represents the completion status of a task.
 type Status int
 
@@ -54,6 +66,16 @@ func (s Status) String() string {
 	default:
 		return unknownString
 	}
+}
+
+// MarshalJSON implements json.Marshaler for Status.
+func (s Status) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
+}
+
+// MarshalYAML implements yaml.Marshaler for Status.
+func (s Status) MarshalYAML() (any, error) {
+	return s.String(), nil
 }
 
 // IsOpen returns true if the status indicates an open (incomplete) task.

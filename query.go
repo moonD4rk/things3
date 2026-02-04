@@ -12,6 +12,7 @@ type taskQuery struct {
 
 	// Filters
 	uuid               *string
+	uuidPrefix         *string
 	taskType           *TaskType
 	status             *Status
 	start              *StartBucket
@@ -47,9 +48,15 @@ func (d *db) Tasks() *taskQuery {
 	}
 }
 
-// WithUUID filters tasks by UUID.
+// WithUUID filters tasks by UUID (exact match).
 func (q *taskQuery) WithUUID(uuid string) TaskQueryBuilder {
 	q.uuid = &uuid
+	return q
+}
+
+// WithUUIDPrefix filters tasks by UUID prefix (partial match).
+func (q *taskQuery) WithUUIDPrefix(prefix string) TaskQueryBuilder {
+	q.uuidPrefix = &prefix
 	return q
 }
 
@@ -236,6 +243,9 @@ func (q *taskQuery) buildWhere() string {
 	// UUID filter
 	if q.uuid != nil {
 		fb.addEqual("TASK.uuid", *q.uuid)
+	}
+	if q.uuidPrefix != nil {
+		fb.addLike("TASK.uuid", *q.uuidPrefix+"%")
 	}
 
 	// Area filter: specific UUID or has/no area

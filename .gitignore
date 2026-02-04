@@ -230,8 +230,9 @@ results/
 !.github/*.yml
 !.codecov.yml
 
-# Things3 binary data
-things3
+# Things3 binary
+/things3
+cmd/things3/things3
 
 # Whitelist test data JSON files
 # This rule ensures that any .json file inside any directory named 'testdata'
@@ -245,4 +246,9 @@ things3
 !testdata/*.sqlite
 !testdata/db2022/*.sqlite
 
-cmd/**/**
+# Go module files (override global gitignore)
+!go.mod
+!go.sum
+!cmd/**/go.mod
+!cmd/**/go.sum
+

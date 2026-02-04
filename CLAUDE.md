@@ -201,6 +201,17 @@ Detailed design decisions with rationale.
 Key implementation details and considerations.
 ```
 
+## CLI Development (cmd/things3)
+
+CLI uses Cobra with factory function pattern (no `init()`).
+
+### Key Rules
+
+- Use `NewXxxCmd()` factory functions, avoid `init()`
+- Use `cmd.OutOrStdout()` for testability
+- Return errors, let `main()` handle `os.Exit()`
+- Register subcommands explicitly in `NewRootCmd()`
+
 ## Dependencies
 
 - `github.com/mattn/go-sqlite3` - SQLite driver (CGO, optimal for macOS-only)

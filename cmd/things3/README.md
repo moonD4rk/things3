@@ -47,19 +47,29 @@ Available views:
 | `upcoming` | Tasks scheduled for future dates |
 | `anytime` | Tasks in the Anytime list |
 | `someday` | Tasks in the Someday list |
-| `logbook` | Completed and canceled tasks |
+| `logbook` | Completed and canceled tasks (supports `--days`) |
 | `deadlines` | Tasks with deadlines |
 | `projects` | All incomplete projects |
 | `areas` | All areas |
 | `tags` | All tags |
 
+#### logbook flags
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--days` | `-d` | 30 | Limit to recent N days (0 for all) |
+
 ### search
 
-Search for tasks matching a query.
+Search for tasks by title or UUID prefix.
 
 ```bash
 things3 search <query> [flags]
 ```
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--uuid` | `-u` | Search by UUID prefix instead of title |
 
 ### version
 
@@ -86,9 +96,24 @@ List first 5 projects:
 things3 list projects -n 5
 ```
 
+List logbook from last 7 days:
+```bash
+things3 list logbook --days 7
+```
+
+List all logbook entries:
+```bash
+things3 list logbook --days 0
+```
+
 Search for tasks containing "meeting":
 ```bash
 things3 search meeting
+```
+
+Search by UUID prefix:
+```bash
+things3 search --uuid 4fthuhgF
 ```
 
 List all areas as YAML:
@@ -98,13 +123,19 @@ things3 list areas --yaml
 
 ## Output Formats
 
-### Default (Markdown-style)
+### Default (Table format)
 
 ```
-- [ ] Task title
-- [x] Completed task
-- [-] Canceled task
+STATUS   UUID      TYPE     TITLE
+[x]      4fthuhgF  project  Task title | 2024-01-15 | #tag1 #tag2
+[ ]      WZR4hDw5  todo     Another task | due:2024-02-01
+[-]      gjUph7Jz  todo     Canceled task | 2024-01-10
 ```
+
+- **STATUS**: `[ ]` incomplete, `[x]` completed, `[-]` canceled
+- **UUID**: First 8 characters (use `search --uuid` to query)
+- **TYPE**: `todo`, `project`, or `heading`
+- **TITLE**: Task title with optional date and tags
 
 ### JSON
 

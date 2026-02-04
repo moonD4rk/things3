@@ -99,6 +99,29 @@ func equal(column string, value any) filter {
 	return equalFilter{column: column, value: value}
 }
 
+// likeFilter handles LIKE pattern matching.
+type likeFilter struct {
+	column  string
+	pattern string
+}
+
+func (f likeFilter) SQL() string {
+	if f.pattern == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s LIKE '%s'", f.column, escapeString(f.pattern))
+}
+
+func (f likeFilter) IsEmpty() bool {
+	return f.pattern == ""
+}
+
+// like creates a LIKE pattern filter for a column.
+// The pattern should include wildcards (% or _) as needed.
+func like(column, pattern string) filter {
+	return likeFilter{column: column, pattern: pattern}
+}
+
 // truthyFilter handles boolean column checks with NULL handling.
 type truthyFilter struct {
 	column string
@@ -215,6 +238,11 @@ func (b *filterBuilder) addStatic(expr string) *filterBuilder {
 // addEqual adds an equality filter.
 func (b *filterBuilder) addEqual(column string, value any) *filterBuilder {
 	return b.add(equal(column, value))
+}
+
+// addLike adds a LIKE pattern filter.
+func (b *filterBuilder) addLike(column, pattern string) *filterBuilder {
+	return b.add(like(column, pattern))
 }
 
 // addTruthy adds a truthy/falsy filter.

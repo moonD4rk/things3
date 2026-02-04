@@ -69,20 +69,102 @@ func writeTasks(w io.Writer, tasks []things3.Task, format outputFormat) error {
 	case formatYAML:
 		return writeYAML(w, tasks)
 	default:
-		for i := range tasks {
-			checkbox := "[ ]"
-			switch tasks[i].Status {
-			case things3.StatusCompleted:
-				checkbox = "[x]"
-			case things3.StatusCanceled:
-				checkbox = "[-]"
+		// Print header
+		if len(tasks) > 0 {
+			if _, err := fmt.Fprintln(w, "STATUS   UUID      TYPE     TITLE"); err != nil {
+				return err
 			}
-			if _, err := fmt.Fprintf(w, "- %s %s\n", checkbox, tasks[i].Title); err != nil {
+		}
+		for i := range tasks {
+			if _, err := fmt.Fprintln(w, formatTaskLine(&tasks[i])); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
+}
+
+// formatTaskLine formats a single task as a compact one-line string.
+// Format: [x] UUID type Title | date | #tag1 #tag2
+func formatTaskLine(t *things3.Task) string {
+	// Status checkbox
+	checkbox := "[ ]"
+	switch t.Status {
+	case things3.StatusCompleted:
+		checkbox = "[x]"
+	case things3.StatusCanceled:
+		checkbox = "[-]"
+	}
+
+	// Task type
+	taskType := formatTaskType(t.Type)
+
+	// Build the line: [x] UUID type Title
+	line := fmt.Sprintf("%-8s %-9s %-8s %s", checkbox, shortUUID(t.UUID), taskType, t.Title)
+
+	// Add date (prefer stop_date > deadline > start_date)
+	if date := getRelevantDate(t); date != "" {
+		line += " | " + date
+	}
+
+	// Add tags
+	if tags := formatTags(t.Tags); tags != "" {
+		line += " | " + tags
+	}
+
+	return line
+}
+
+// shortUUID returns the first 8 characters of a UUID for display.
+func shortUUID(uuid string) string {
+	if len(uuid) > 8 {
+		return uuid[:8]
+	}
+	return uuid
+}
+
+// formatTaskType returns a short string representation of the task type.
+func formatTaskType(t things3.TaskType) string {
+	switch t {
+	case things3.TaskTypeTodo:
+		return "todo"
+	case things3.TaskTypeProject:
+		return "project"
+	case things3.TaskTypeHeading:
+		return "heading"
+	default:
+		return "unknown"
+	}
+}
+
+// getRelevantDate returns the most relevant date for display.
+func getRelevantDate(t *things3.Task) string {
+	const dateFormat = "2006-01-02"
+	if t.StopDate != nil {
+		return t.StopDate.Format(dateFormat)
+	}
+	if t.Deadline != nil {
+		return "due:" + t.Deadline.Format(dateFormat)
+	}
+	if t.StartDate != nil {
+		return t.StartDate.Format(dateFormat)
+	}
+	return ""
+}
+
+// formatTags formats tags as #tag1 #tag2.
+func formatTags(tags []string) string {
+	if len(tags) == 0 {
+		return ""
+	}
+	result := ""
+	for i, tag := range tags {
+		if i > 0 {
+			result += " "
+		}
+		result += "#" + tag
+	}
+	return result
 }
 
 // writeAreas writes areas to the writer in the specified format.

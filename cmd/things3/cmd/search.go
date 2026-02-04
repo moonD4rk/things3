@@ -8,9 +8,9 @@ import (
 
 // NewSearchCmd creates the search command.
 func NewSearchCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "search <query>",
-		Short: "Search for tasks matching the query",
+		Short: "Search for tasks by title or UUID prefix",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := things3.NewClient()
@@ -19,7 +19,20 @@ func NewSearchCmd() *cobra.Command {
 			}
 			defer client.Close()
 
-			tasks, err := client.Search(cmd.Context(), args[0])
+			query := args[0]
+			byUUID, _ := cmd.Flags().GetBool("uuid")
+
+			var tasks []things3.Task
+			if byUUID {
+				// Search by UUID prefix
+				tasks, err = client.Tasks().
+					WithUUIDPrefix(query).
+					Status().Any().
+					All(cmd.Context())
+			} else {
+				// Search by title/notes
+				tasks, err = client.Search(cmd.Context(), query)
+			}
 			if err != nil {
 				return err
 			}
@@ -27,4 +40,8 @@ func NewSearchCmd() *cobra.Command {
 			return outputTasks(cmd, tasks)
 		},
 	}
+
+	cmd.Flags().BoolP("uuid", "u", false, "search by UUID prefix instead of title")
+
+	return cmd
 }

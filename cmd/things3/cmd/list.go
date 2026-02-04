@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"time"
+
 	"github.com/spf13/cobra"
 
 	"github.com/moond4rk/things3"
@@ -131,7 +133,7 @@ func newSomedayCmd() *cobra.Command {
 }
 
 func newLogbookCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "logbook",
 		Short: "List completed and canceled tasks",
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -141,13 +143,32 @@ func newLogbookCmd() *cobra.Command {
 			}
 			defer client.Close()
 
-			tasks, err := client.Logbook(cmd.Context())
+			days, _ := cmd.Flags().GetInt("days")
+
+			var tasks []things3.Task
+			if days == 0 {
+				// No limit, get all
+				tasks, err = client.Logbook(cmd.Context())
+			} else {
+				// Filter by stop date within N days
+				since := time.Now().AddDate(0, 0, -days)
+				tasks, err = client.Tasks().
+					StopDate().After(since).
+					Status().Any().
+					ContextTrashed(false).
+					All(cmd.Context())
+			}
 			if err != nil {
 				return err
 			}
+
 			return outputTasks(cmd, tasks)
 		},
 	}
+
+	cmd.Flags().IntP("days", "d", 30, "limit to recent N days (0 for all)")
+
+	return cmd
 }
 
 func newDeadlinesCmd() *cobra.Command {

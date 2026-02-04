@@ -119,6 +119,7 @@ type TaskQueryBuilder interface {
 	TaskTimeFilter
 
 	WithUUID(uuid string) TaskQueryBuilder
+	WithUUIDPrefix(prefix string) TaskQueryBuilder
 	WithDeadlineSuppressed(suppressed bool) TaskQueryBuilder
 	Search(query string) TaskQueryBuilder
 	OrderByTodayIndex() TaskQueryBuilder

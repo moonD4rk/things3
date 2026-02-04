@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+project_name: things3
+
+builds:
+  - id: things3
+    dir: cmd/things3
+    binary: things3
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/moond4rk/things3/cmd/things3/cmd.version={{.Version}}
+      - -X github.com/moond4rk/things3/cmd/things3/cmd.commit={{.Commit}}
+      - -X github.com/moond4rk/things3/cmd/things3/cmd.buildDate={{.Date}}
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_macos_{{ if eq .Arch \"arm64\" }}m1{{ else }}intel{{ end }}"
+
+checksum:
+  disable: true
+
+changelog:
+  use: github
+  sort: asc
+
+release:
+  github:
+    owner: moonD4rk
+    name: things3
+  draft: false
+  prerelease: auto

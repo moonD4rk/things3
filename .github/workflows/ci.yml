@@ -23,7 +23,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.25.x"
+          go-version-file: 'go.mod'
           cache: true
 
       - name: Format Check
@@ -59,7 +59,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.25.x"
+          go-version-file: 'go.mod'
           cache: true
 
       # Build first to catch compile errors early

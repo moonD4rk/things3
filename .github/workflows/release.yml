@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Update CLI go.mod version
+        run: |
+          cd cmd/things3
+          go get github.com/moond4rk/things3@${{ steps.version.outputs.VERSION }}
+          go mod tidy
+
+      - name: Build CLI
+        run: |
+          cd cmd/things3
+          go build -ldflags "-X github.com/moond4rk/things3/cmd/things3/cmd.version=${{ steps.version.outputs.VERSION }}" -o things3
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: cmd/things3/things3
+          generate_release_notes: true

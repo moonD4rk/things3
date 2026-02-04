@@ -1,9 +1,12 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v0.5.0)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -12,6 +15,13 @@ jobs:
   release:
     runs-on: macos-latest
     steps:
+      - name: Validate version format
+        run: |
+          if [[ ! "${{ inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "Error: Version must be in format v0.0.0 or v0.0.0-suffix"
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v6
         with:
@@ -22,19 +32,21 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
-      - name: Get version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Update CLI go.mod version
+      - name: Update CLI dependency
         run: |
           cd cmd/things3
-          go mod edit -replace github.com/moond4rk/things3=../..
+          go mod edit -require github.com/moond4rk/things3@${{ inputs.version }}
           go mod tidy
-          # Remove replace directive for release build
-          go mod edit -dropreplace github.com/moond4rk/things3
-          go mod edit -require github.com/moond4rk/things3@${{ steps.version.outputs.VERSION }}
-          go mod tidy
+
+      - name: Commit and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add cmd/things3/go.mod cmd/things3/go.sum
+          git commit -m "chore: release ${{ inputs.version }}"
+          git tag ${{ inputs.version }}
+          git push origin HEAD:main
+          git push origin ${{ inputs.version }}
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6

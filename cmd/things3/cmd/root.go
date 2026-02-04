@@ -33,16 +33,7 @@ query tasks, projects, areas, and tags from the command line.`,
 
 	// Register subcommands
 	cmd.AddCommand(NewVersionCmd())
-	cmd.AddCommand(NewInboxCmd())
-	cmd.AddCommand(NewTodayCmd())
-	cmd.AddCommand(NewUpcomingCmd())
-	cmd.AddCommand(NewAnytimeCmd())
-	cmd.AddCommand(NewSomedayCmd())
-	cmd.AddCommand(NewLogbookCmd())
-	cmd.AddCommand(NewDeadlinesCmd())
-	cmd.AddCommand(NewProjectsCmd())
-	cmd.AddCommand(NewAreasCmd())
-	cmd.AddCommand(NewTagsCmd())
+	cmd.AddCommand(NewListCmd())
 	cmd.AddCommand(NewSearchCmd())
 
 	return cmd

@@ -229,6 +229,7 @@ results/
 !.typos.toml
 !.github/*.yml
 !.codecov.yml
+!.goreleaser.yml
 
 # Things3 binary
 /things3

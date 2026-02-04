@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
 project_name: things3
 
 builds:
@@ -19,7 +21,8 @@ builds:
       - -X github.com/moond4rk/things3/cmd/things3/cmd.buildDate={{.Date}}
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     name_template: "{{ .ProjectName }}_macos_{{ if eq .Arch \"arm64\" }}m1{{ else }}intel{{ end }}"
 
 checksum:

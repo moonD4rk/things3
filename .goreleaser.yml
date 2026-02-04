@@ -31,6 +31,9 @@ checksum:
 changelog:
   use: github
   sort: asc
+  filters:
+    exclude:
+      - "^chore: release"
 
 release:
   github:

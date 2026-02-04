@@ -5,9 +5,10 @@ builds:
   - id: things3
     dir: cmd/things3
     binary: things3
+    env:
+      - CGO_ENABLED=1
     goos:
       - darwin
-      - linux
     goarch:
       - amd64
       - arm64
@@ -19,10 +20,7 @@ builds:
 
 archives:
   - format: tar.gz
-    name_template: >-
-      {{ .ProjectName }}_
-      {{- if eq .Os "darwin" }}macOS{{else}}{{ .Os }}{{ end }}_
-      {{- if eq .Arch "amd64" }}Intel{{ else if eq .Arch "arm64" }}Apple_Silicon{{ else }}{{ .Arch }}{{ end }}
+    name_template: "{{ .ProjectName }}_macos_{{ if eq .Arch \"arm64\" }}m1{{ else }}intel{{ end }}"
 
 checksum:
   disable: true

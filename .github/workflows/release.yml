@@ -13,12 +13,12 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
 
@@ -29,7 +29,11 @@ jobs:
       - name: Update CLI go.mod version
         run: |
           cd cmd/things3
-          go get github.com/moond4rk/things3@${{ steps.version.outputs.VERSION }}
+          go mod edit -replace github.com/moond4rk/things3=../..
+          go mod tidy
+          # Remove replace directive for release build
+          go mod edit -dropreplace github.com/moond4rk/things3
+          go mod edit -require github.com/moond4rk/things3@${{ steps.version.outputs.VERSION }}
           go mod tidy
 
       - name: Run GoReleaser

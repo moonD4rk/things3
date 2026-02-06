@@ -35,12 +35,8 @@ jobs:
       - name: Update CLI dependency
         run: |
           cd cmd/things3
-          # Use local code for tidy since the tag doesn't exist yet
-          go mod edit -replace github.com/moond4rk/things3=../..
-          go mod tidy
-          # Replace with formal version for release
-          go mod edit -dropreplace github.com/moond4rk/things3
           go mod edit -require github.com/moond4rk/things3@${{ inputs.version }}
+          go mod tidy
 
       - name: Commit and tag
         run: |

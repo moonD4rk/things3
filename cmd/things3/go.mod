@@ -4,7 +4,7 @@ go 1.25.4
 
 require (
 	github.com/goccy/go-yaml v1.19.2
-	github.com/moond4rk/things3 v0.5.0-rc.1
+	github.com/moond4rk/things3 v0.5.0-rc.2
 	github.com/spf13/cobra v1.10.2
 )
 

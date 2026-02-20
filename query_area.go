@@ -11,7 +11,8 @@ type areaQuery struct {
 	uuid         *string
 	title        *string
 	visible      *bool
-	tagTitle     any // string, bool, or nil
+	tagTitle     *string // specific tag title
+	hasTag       *bool   // true: has tags, false: no tags
 	includeItems bool
 }
 
@@ -42,9 +43,15 @@ func (q *areaQuery) Visible(visible bool) AreaQueryBuilder {
 	return q
 }
 
-// InTag filters areas by tag.
-func (q *areaQuery) InTag(tag any) AreaQueryBuilder {
-	q.tagTitle = tag
+// InTag filters areas by a specific tag title.
+func (q *areaQuery) InTag(title string) AreaQueryBuilder {
+	q.tagTitle = &title
+	return q
+}
+
+// HasTag filters areas by whether they have any tags.
+func (q *areaQuery) HasTag(has bool) AreaQueryBuilder {
+	q.hasTag = &has
 	return q
 }
 
@@ -67,7 +74,13 @@ func (q *areaQuery) buildWhere() string {
 	if q.visible != nil {
 		fb.addTruthy("AREA.visible", q.visible)
 	}
-	fb.addEqual("TAG.title", q.tagTitle)
+
+	// Tag filter: specific title or has/no tags
+	if q.tagTitle != nil {
+		fb.addEqual("TAG.title", *q.tagTitle)
+	} else if q.hasTag != nil {
+		fb.addEqual("TAG.title", *q.hasTag)
+	}
 
 	return fb.sql()
 }

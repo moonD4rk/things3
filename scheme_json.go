@@ -439,11 +439,12 @@ func (b *batchBuilder) Execute(ctx context.Context) error {
 // authBatchBuilder builds URLs for batch operations including updates via the json command.
 // Requires authentication token for update operations.
 type authBatchBuilder struct {
-	scheme *scheme
-	token  string
-	items  []JSONItem
-	reveal bool
-	err    error
+	scheme    *scheme
+	token     string
+	tokenFunc func(context.Context) (string, error) // Optional lazy token loader
+	items     []JSONItem
+	reveal    bool
+	err       error
 }
 
 // AddTodo adds a to-do creation to the batch.
@@ -505,9 +506,19 @@ func (b *authBatchBuilder) Reveal(reveal bool) AuthBatchCreator {
 }
 
 // Build returns the Things URL for the JSON batch operation.
+// If token is not set but tokenFunc is provided, it will fetch the token using context.Background().
+// For explicit context control, use Execute() instead.
 func (b *authBatchBuilder) Build() (string, error) {
 	if b.err != nil {
 		return "", b.err
+	}
+	// Lazy load token if needed
+	if b.token == "" && b.tokenFunc != nil {
+		t, err := b.tokenFunc(context.Background())
+		if err != nil {
+			return "", err
+		}
+		b.token = t
 	}
 	if b.token == "" {
 		return "", ErrEmptyToken
@@ -557,7 +568,16 @@ func (b *authBatchBuilder) Build() (string, error) {
 
 // Execute builds and executes the JSON batch URL.
 // Returns an error if the URL cannot be built or executed.
+// If token is not set but tokenFunc is provided, it will fetch the token first.
 func (b *authBatchBuilder) Execute(ctx context.Context) error {
+	// Lazy load token if needed
+	if b.token == "" && b.tokenFunc != nil {
+		token, err := b.tokenFunc(ctx)
+		if err != nil {
+			return err
+		}
+		b.token = token
+	}
 	uri, err := b.Build()
 	if err != nil {
 		return err

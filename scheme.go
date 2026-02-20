@@ -129,7 +129,10 @@ func (s *scheme) executeNavigation(ctx context.Context, uri string) error {
 
 // Show opens Things and shows the item with the given UUID.
 func (s *scheme) Show(ctx context.Context, uuid string) error {
-	uri := s.ShowBuilder().ID(uuid).Build()
+	uri, err := s.ShowBuilder().ID(uuid).Build()
+	if err != nil {
+		return err
+	}
 	return s.executeNavigation(ctx, uri)
 }
 

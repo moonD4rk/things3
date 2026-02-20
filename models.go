@@ -2,6 +2,13 @@ package things3
 
 import "time"
 
+// Task type string constants.
+const (
+	taskTypeStringTodo    = "to-do"
+	taskTypeStringProject = "project"
+	taskTypeStringHeading = "heading"
+)
+
 // Status string constants for ChecklistItem.
 const (
 	statusStringIncomplete = "incomplete"

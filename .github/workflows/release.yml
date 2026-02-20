@@ -32,22 +32,52 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
-      - name: Update CLI dependency
-        run: |
-          cd cmd/things3
-          go mod edit -require github.com/moond4rk/things3@${{ inputs.version }}
-          go mod tidy
-
-      - name: Commit and tag
+      - name: Configure git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add cmd/things3/go.mod cmd/things3/go.sum
-          git commit -m "chore: release ${{ inputs.version }}"
+
+      # Step 1: Tag the library module on the current commit
+      - name: Tag library module
+        run: |
           git tag ${{ inputs.version }}
-          git push origin HEAD:main
           git push origin ${{ inputs.version }}
 
+      # Step 2: Wait for Go module proxy to index the library tag
+      - name: Wait for Go module proxy
+        run: |
+          echo "Requesting Go module proxy to index github.com/moond4rk/things3@${{ inputs.version }}..."
+          for i in $(seq 1 30); do
+            if GOPROXY=https://proxy.golang.org go list -m "github.com/moond4rk/things3@${{ inputs.version }}" 2>/dev/null; then
+              echo "Module indexed successfully on attempt $i"
+              exit 0
+            fi
+            echo "Attempt $i/30: waiting 10s for proxy to index..."
+            sleep 10
+          done
+          echo "Error: Module not indexed after 5 minutes"
+          exit 1
+
+      # Step 3: Update CLI module to reference the newly published library version
+      - name: Update CLI module dependency
+        run: |
+          cd cmd/things3
+          GOWORK=off go mod edit -require "github.com/moond4rk/things3@${{ inputs.version }}"
+          GOWORK=off go mod tidy
+
+      # Step 4: Commit the CLI module update, tag for Go module system, push
+      - name: Commit and tag CLI module
+        run: |
+          git add cmd/things3/go.mod cmd/things3/go.sum
+          git commit -m "chore: release ${{ inputs.version }}"
+          git tag "cmd/things3/${{ inputs.version }}"
+          git push origin HEAD:main
+          git push origin "cmd/things3/${{ inputs.version }}"
+
+      # Step 5: Build and publish binaries via GoReleaser
+      # GORELEASER_CURRENT_TAG overrides tag auto-detection so GoReleaser
+      # uses the library tag (v0.5.0) as the release version, even though
+      # HEAD is one commit ahead (the CLI go.mod update commit).
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -56,3 +86,4 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ inputs.version }}

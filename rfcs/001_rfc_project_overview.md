@@ -1,6 +1,6 @@
 # RFC 001: Project Overview
 
-Status: Accepted
+Status: Implemented
 Author: @moond4rk
 
 ## Summary
@@ -9,61 +9,57 @@ things3 is a Go library providing read-only access to the Things 3 macOS applica
 
 ## Architecture
 
-The library provides two independent entry points with clear separation of concerns:
+All operations go through a single unified `NewClient()` entry point:
 
 ```
 things3 library
 |
-+-- NewDB()      -> *DB      (Database operations, stateful)
-|   |
-|   +-- Connection: Close(), Filepath()
-|   +-- Convenience: Inbox(), Today(), Upcoming(), Anytime(), Someday(), Logbook(), Trash()
-|   +-- Query Builders: Todos(), Projects(), Areas(), Tags()
-|   +-- Auth Token: Token() -> for URL Scheme update operations
-|
-+-- NewScheme(opts...)  -> *Scheme  (URL building + execution)
++-- NewClient(opts...)  -> *Client  (Unified entry point)
     |
-    +-- Options: WithForeground()
+    +-- Options: WithDatabasePath(), WithPrintSQL(),
+    |            WithForeground(), WithBackground(), WithPreloadToken()
     |
-    +-- [Execution Methods]
-    |   +-- Show(ctx, uuid)      -> error
-    |   +-- Search(ctx, query)   -> error
+    +-- [Query Operations - Read from DB]
+    |   +-- Convenience: Inbox(), Today(), Upcoming(), Todos(), Projects(), ...
+    |   +-- Builders: Tasks(), Areas(), Tags()
+    |   +-- Utilities: Get(), Search(), ChecklistItems()
     |
-    +-- [URL Building - No Auth Required]
-    |   +-- Todo()        -> *TodoBuilder       -> Build() string
-    |   +-- Project()     -> *ProjectBuilder    -> Build() string
-    |   +-- ShowBuilder() -> *ShowBuilder       -> Build() string
-    |   +-- JSON()        -> *JSONBuilder       -> Build() string
-    |   +-- SearchURL(query) -> string
-    |   +-- Version()     -> string
+    +-- [Add Operations - URL Scheme, No Auth]
+    |   +-- AddTodo()    -> TodoAdder       -> Build() | Execute(ctx)
+    |   +-- AddProject() -> ProjectAdder    -> Build() | Execute(ctx)
+    |   +-- Batch()      -> BatchCreator    -> Build() | Execute(ctx)
     |
-    +-- WithToken(token)  -> *AuthScheme  (Authenticated operations)
-        +-- UpdateTodo(id)    -> *UpdateTodoBuilder    -> Build() | Execute(ctx)
-        +-- UpdateProject(id) -> *UpdateProjectBuilder -> Build() | Execute(ctx)
-        +-- JSON()            -> *AuthJSONBuilder      -> Build() string
+    +-- [Update Operations - URL Scheme, Auto Auth]
+    |   +-- UpdateTodo(id)    -> TodoUpdater    -> Build() | Execute(ctx)
+    |   +-- UpdateProject(id) -> ProjectUpdater -> Build() | Execute(ctx)
+    |   +-- AuthBatch()       -> AuthBatchCreator -> Build() | Execute(ctx)
+    |
+    +-- [Show Operations - Navigation]
+        +-- Show(ctx, uuid), ShowList(ctx, list), ShowSearch(ctx, query)
+        +-- ShowBuilder() -> ShowNavigator -> Build() | Execute(ctx)
 ```
 
 ### Design Principles
 
 | Principle | Implementation |
 |-----------|----------------|
-| Separation of Concerns | `NewDB()` for data, `NewScheme()` for URLs and execution |
-| Compile-time Safety | `WithToken()` enforces auth requirements at compile time |
-| Functional Options | `SchemeOption` for configurable behavior |
-| Background by Default | URL execution uses `osascript` to avoid stealing focus |
+| Single Entry Point | `NewClient()` for all operations |
+| Interface-Based API | Methods return interfaces, not concrete types |
+| Automatic Token Management | Lazy loading for update operations |
+| Functional Options | `ClientOption` for configurable behavior |
 | Builder Pattern | Chainable methods with terminal `.Build()` or `.Execute()` |
-| Context-First | DB queries and execution accept `context.Context` |
+| Context-First | All queries and execution accept `context.Context` |
 
 ## RFC Index
 
 | RFC | Title | Status | Description |
 |-----|-------|--------|-------------|
-| 001 | Project Overview | Accepted | Goals, architecture, dependencies (this document) |
-| 002 | Database Schema | Accepted | Things 3 SQLite schema and SQL patterns |
-| 003 | Database API | Draft | `NewDB()`, query builders, convenience methods |
-| 004 | URL Scheme | Draft | `NewScheme()`, URL builders, official reference |
-| 005 | Unified Client | Draft | `NewClient()`, single entry point, token management |
-| 006 | Interface Abstraction | Draft | Public interfaces, hide implementation details |
+| 001 | Project Overview | Implemented | Goals, architecture, dependencies (this document) |
+| 002 | Database Schema | Implemented | Things 3 SQLite schema and SQL patterns |
+| 003 | Database API | Implemented | Internal `db` type, query builders, convenience methods |
+| 004 | URL Scheme | Implemented | Internal `scheme` type, URL builders, official reference |
+| 005 | Unified Client | Implemented | `NewClient()`, single entry point, token management |
+| 006 | Interface Abstraction | Implemented | Public interfaces, hide implementation details |
 
 ### RFC Dependencies
 
@@ -108,20 +104,21 @@ things3 library
 - Most widely used and battle-tested Go SQLite driver
 - Appropriate choice since Things 3 is macOS-only
 
-**Entry Points**:
-- `NewDB()` - Database operations (stateful, requires connection)
-- `NewScheme(opts...)` - URL building and execution (configurable via `SchemeOption`)
+**Entry Point**: `NewClient(opts...)` - Unified access to all operations
+- Combines internal `db` and `scheme` types behind a single API
+- All database queries and URL scheme operations through one entry point
+- Functional options: `WithDatabasePath()`, `WithPrintSQL()`, `WithForeground()`, `WithBackground()`, `WithPreloadToken()`
 
-**Token Handling**: `WithToken()` pattern
-- Token required upfront for update operations
-- Compile-time enforcement via separate `AuthScheme` type
-- IDE autocomplete shows only valid methods
+**Token Handling**: Automatic lazy loading
+- Client fetches auth token from database on first update operation
+- Cached with `sync.Mutex` for thread safety (allows retry on transient failures)
+- Optional eager loading via `WithPreloadToken()`
 
 ## Database Compatibility
 
 The library reads from the Things 3 SQLite database located at:
 - Default: `~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/Things Database.thingsdatabase/main.sqlite`
-- Override via `THINGSDB` environment variable or `WithDBPath()` option
+- Override via `THINGSDB` environment variable or `WithDatabasePath()` option
 
 ## Type System
 

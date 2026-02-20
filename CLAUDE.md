@@ -201,6 +201,28 @@ Detailed design decisions with rationale.
 Key implementation details and considerations.
 ```
 
+## Release Note Template
+
+Release notes use this format with Library and CLI sections:
+
+```
+# things3 vX.Y.Z - Short Title
+
+One-line summary.
+
+## Breaking Changes (if any)
+Brief description of what changed and migration path.
+
+## Library
+- **Feature name** (#PR): One-line description
+- **Bug fix**: Description (#PR)
+
+## CLI
+- **Feature name** (#PR): One-line description
+
+**Full Changelog**: https://github.com/moonD4rk/things3/compare/vPREV...vX.Y.Z
+```
+
 ## CLI Development (cmd/things3)
 
 CLI uses Cobra with factory function pattern (no `init()`).

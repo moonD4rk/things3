@@ -1,11 +1,11 @@
 # RFC 004: URL Scheme
 
-Status: Draft
+Status: Implemented
 Author: @moond4rk
 
 ## Summary
 
-This RFC defines the URL Scheme API layer of the things3 Go library. The `NewScheme()` entry point provides type-safe URL building and execution for Things 3 URL Scheme commands with compile-time enforcement of authentication requirements.
+This RFC defines the URL Scheme API layer of the things3 Go library. The internal `scheme` type provides type-safe URL building and execution for Things 3 URL Scheme commands. Users access URL scheme operations through the unified `NewClient()` entry point (see RFC 005), which returns public interfaces (see RFC 006) instead of concrete types.
 
 ## Motivation
 
@@ -786,49 +786,6 @@ func TestWithToken_EmptyToken(t *testing.T) {
 
     require.ErrorIs(t, err, things3.ErrEmptyToken)
 }
-```
-
-## Backward Compatibility
-
-### Deprecated Methods (to be removed in v2.0)
-
-The following methods on `Client` are deprecated in favor of `NewScheme()`:
-
-```go
-// Deprecated: Use things3.NewScheme().AddTodo().Build() instead
-func (c *Client) AddTodoURL(params map[string]string) string
-
-// Deprecated: Use things3.NewScheme().WithToken(token).UpdateTodo(id).Build()
-func (c *Client) URL(ctx context.Context, cmd URLCommand, params map[string]string) (string, error)
-```
-
-### Migration Examples
-
-```go
-// Before (deprecated)
-client, _ := things3.New()
-url := client.AddTodoURL(map[string]string{"title": "Task"})
-
-// After (recommended)
-scheme := things3.NewScheme()
-url, _ := scheme.AddTodo().Title("Task").Build()
-```
-
-```go
-// Before (deprecated)
-client, _ := things3.New()
-url, _ := client.URL(ctx, things3.URLCommandUpdate, map[string]string{
-    "id": "uuid",
-    "completed": "true",
-})
-
-// After (recommended) - token required upfront via WithToken
-db, _ := things3.NewDB()
-token, _ := db.Token(ctx)
-
-scheme := things3.NewScheme()
-auth := scheme.WithToken(token)
-url, _ := auth.UpdateTodo("uuid").Completed(true).Build()
 ```
 
 ## Design Principles

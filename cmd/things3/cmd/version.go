@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"runtime/debug"
 
 	"github.com/spf13/cobra"
 )
@@ -11,6 +12,33 @@ var (
 	commit    = "none"
 	buildDate = "unknown"
 )
+
+func init() {
+	if version != "dev" {
+		return
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return
+	}
+	if info.Main.Version != "" && info.Main.Version != "(devel)" {
+		version = info.Main.Version
+	}
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			if len(s.Value) > 8 {
+				commit = s.Value[:8]
+			} else if s.Value != "" {
+				commit = s.Value
+			}
+		case "vcs.time":
+			if s.Value != "" {
+				buildDate = s.Value
+			}
+		}
+	}
+}
 
 // NewVersionCmd creates the version command.
 func NewVersionCmd() *cobra.Command {

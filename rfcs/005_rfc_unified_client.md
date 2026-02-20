@@ -1,6 +1,6 @@
 # RFC 005: Unified Client API
 
-Status: Draft
+Status: Implemented
 Author: @moond4rk
 
 ## Summary
@@ -36,26 +36,27 @@ This RFC defines the unified Client API that combines database read operations w
 NewClient(opts...)  -> *Client  (Unified entry point)
     |
     +-- Options: WithDatabasePath(), WithPrintSQL(),
-    |            WithForegroundExecution(), WithBackgroundNavigation(),
+    |            WithForeground(), WithBackground(),
     |            WithPreloadToken()
     |
     +-- [Query Operations - Read from DB]
-    |   +-- Inbox(ctx), Today(ctx), Todos(ctx), Projects(ctx), ...
-    |   +-- Tasks() -> *TaskQuery, Areas() -> *AreaQuery, Tags() -> *TagQuery
-    |   +-- Get(ctx, uuid), Search(ctx, query), ChecklistItems(ctx, uuid)
+    |   +-- Convenience: Inbox(), Today(), Upcoming(), Todos(), Projects(), ...
+    |   +-- Builders: Tasks(), Areas(), Tags()
+    |   +-- Utilities: Get(), Search(), ChecklistItems()
     |
     +-- [Add Operations - URL Scheme, No Auth]
-    |   +-- AddTodo()    -> *AddTodoBuilder    -> Build() | Execute(ctx)
-    |   +-- AddProject() -> *AddProjectBuilder -> Build() | Execute(ctx)
-    |   +-- Batch()      -> *BatchBuilder      -> Build() | Execute(ctx)
+    |   +-- AddTodo()    -> TodoAdder       -> Build() | Execute(ctx)
+    |   +-- AddProject() -> ProjectAdder    -> Build() | Execute(ctx)
+    |   +-- Batch()      -> BatchCreator    -> Build() | Execute(ctx)
     |
     +-- [Update Operations - URL Scheme, Auto Auth]
-    |   +-- UpdateTodo(id)    -> *UpdateTodoBuilder    -> Build() | Execute(ctx)
-    |   +-- UpdateProject(id) -> *UpdateProjectBuilder -> Build() | Execute(ctx)
+    |   +-- UpdateTodo(id)    -> TodoUpdater    -> Build() | Execute(ctx)
+    |   +-- UpdateProject(id) -> ProjectUpdater -> Build() | Execute(ctx)
+    |   +-- AuthBatch()       -> AuthBatchCreator -> Build() | Execute(ctx)
     |
     +-- [Show Operations - Navigation]
         +-- Show(ctx, uuid), ShowList(ctx, list), ShowSearch(ctx, query)
-        +-- ShowBuilder() -> *ShowBuilder -> Build()
+        +-- ShowBuilder() -> ShowNavigator -> Build() | Execute(ctx)
 ```
 
 ### Entry Point
@@ -63,13 +64,12 @@ NewClient(opts...)  -> *Client  (Unified entry point)
 ```go
 // Client provides unified access to Things 3 database and URL scheme operations.
 type Client struct {
-    db     *DB
-    scheme *Scheme
+    database *db
+    scheme   *scheme
 
-    // Token management with lazy loading
-    tokenOnce  sync.Once
+    // Token management with mutex (allows retry on transient failures)
+    tokenMu    sync.Mutex
     tokenCache string
-    tokenErr   error
 }
 
 // NewClient creates a new unified Things 3 client.
@@ -92,8 +92,8 @@ func WithDatabasePath(path string) ClientOption
 func WithPrintSQL(enabled bool) ClientOption
 
 // Scheme options
-func WithForegroundExecution() ClientOption   // Bring Things to foreground for create/update
-func WithBackgroundNavigation() ClientOption  // Keep Things in background for show operations
+func WithForeground() ClientOption  // Bring Things to foreground for create/update
+func WithBackground() ClientOption  // Keep Things in background for show operations
 
 // Token options
 func WithPreloadToken() ClientOption  // Fetch token immediately during NewClient()
@@ -208,10 +208,10 @@ func (c *Client) Canceled(ctx context.Context) ([]Task, error)
 func (c *Client) Deadlines(ctx context.Context) ([]Task, error)
 func (c *Client) CreatedWithin(ctx context.Context, since time.Time) ([]Task, error)
 
-// Query builders - for complex queries
-func (c *Client) Tasks() *TaskQuery
-func (c *Client) Areas() *AreaQuery
-func (c *Client) Tags() *TagQuery
+// Query builders - for complex queries (return interfaces, see RFC 006)
+func (c *Client) Tasks() TaskQueryBuilder
+func (c *Client) Areas() AreaQueryBuilder
+func (c *Client) Tags() TagQueryBuilder
 
 // Utilities
 func (c *Client) Get(ctx context.Context, uuid string) (any, error)
@@ -222,26 +222,26 @@ func (c *Client) ChecklistItems(ctx context.Context, todoUUID string) ([]Checkli
 ### Add Operations
 
 ```go
-// AddTodo returns an AddTodoBuilder for creating a new to-do.
-func (c *Client) AddTodo() *AddTodoBuilder
+// AddTodo returns a TodoAdder for creating a new to-do.
+func (c *Client) AddTodo() TodoAdder
 
-// AddProject returns an AddProjectBuilder for creating a new project.
-func (c *Client) AddProject() *AddProjectBuilder
+// AddProject returns a ProjectAdder for creating a new project.
+func (c *Client) AddProject() ProjectAdder
 
-// Batch returns a BatchBuilder for batch create operations.
-func (c *Client) Batch() *BatchBuilder
+// Batch returns a BatchCreator for batch create operations.
+func (c *Client) Batch() BatchCreator
 ```
 
 ### Update Operations
 
 ```go
-// UpdateTodo returns an UpdateTodoBuilder for modifying an existing to-do.
+// UpdateTodo returns a TodoUpdater for modifying an existing to-do.
 // The authentication token is fetched automatically on first use.
-func (c *Client) UpdateTodo(id string) *UpdateTodoBuilder
+func (c *Client) UpdateTodo(id string) TodoUpdater
 
-// UpdateProject returns an UpdateProjectBuilder for modifying an existing project.
+// UpdateProject returns a ProjectUpdater for modifying an existing project.
 // The authentication token is fetched automatically on first use.
-func (c *Client) UpdateProject(id string) *UpdateProjectBuilder
+func (c *Client) UpdateProject(id string) ProjectUpdater
 ```
 
 ### Show Operations
@@ -256,21 +256,28 @@ func (c *Client) ShowList(ctx context.Context, list ListID) error
 // ShowSearch opens Things and performs a search for the given query.
 func (c *Client) ShowSearch(ctx context.Context, query string) error
 
-// ShowBuilder returns a ShowBuilder for complex navigation operations.
-func (c *Client) ShowBuilder() *ShowBuilder
+// ShowBuilder returns a ShowNavigator for complex navigation operations.
+func (c *Client) ShowBuilder() ShowNavigator
 ```
 
 ## Token Management
 
-The Client automatically manages authentication tokens for update operations:
+The Client automatically manages authentication tokens for update operations using `sync.Mutex` (not `sync.Once`, to allow retry on transient failures):
 
 ```go
 // Internal token management
 func (c *Client) ensureToken(ctx context.Context) (string, error) {
-    c.tokenOnce.Do(func() {
-        c.tokenCache, c.tokenErr = c.db.Token(ctx)
-    })
-    return c.tokenCache, c.tokenErr
+    c.tokenMu.Lock()
+    defer c.tokenMu.Unlock()
+    if c.tokenCache != "" {
+        return c.tokenCache, nil
+    }
+    token, err := c.database.Token(ctx)
+    if err != nil {
+        return "", err
+    }
+    c.tokenCache = token
+    return token, nil
 }
 ```
 
@@ -353,14 +360,14 @@ client.Batch().
 things3/
 +-- client.go           # Client type, NewClient(), query/add/update/show methods
 +-- client_options.go   # ClientOption, With*() functions
-+-- db.go               # DB type, NewDB() (unchanged)
-+-- db_options.go       # DBOption (unchanged)
-+-- scheme.go           # Scheme type, NewScheme(), WithToken() (method renames)
-+-- scheme_options.go   # SchemeOption (unchanged)
-+-- scheme_builder.go   # AddTodoBuilder, AddProjectBuilder (renamed)
-+-- scheme_update.go    # UpdateTodoBuilder, UpdateProjectBuilder (tokenFunc added)
-+-- scheme_show.go      # ShowBuilder (unchanged)
-+-- scheme_json.go      # BatchBuilder, BatchTodoBuilder, etc. (renamed)
++-- db.go               # Internal db type, newDB(), database operations
++-- db_options.go       # Internal dbOption
++-- scheme.go           # Internal scheme type, URL building and execution
++-- scheme_options.go   # Internal schemeOption
++-- scheme_builder.go   # addTodoBuilder, addProjectBuilder
++-- scheme_update.go    # updateTodoBuilder, updateProjectBuilder (with tokenFunc)
++-- scheme_show.go      # showBuilder
++-- scheme_json.go      # batchBuilder, authBatchBuilder
 ```
 
 ## Design Principles

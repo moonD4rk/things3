@@ -1,6 +1,6 @@
 # RFC 002: Database Schema
 
-Status: Accepted
+Status: Implemented
 Author: @moond4rk
 
 ## Summary

@@ -6,18 +6,88 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/moond4rk/things3)](https://goreportcard.com/report/github.com/moond4rk/things3)
 [![License](https://img.shields.io/github/license/moond4rk/things3)](https://github.com/moond4rk/things3/blob/main/LICENSE)
 
-Go library for [Things 3](https://culturedcode.com/things/) on macOS. Provides read-only database access and full URL Scheme support for creating and updating tasks.
+Go library and CLI for [Things 3](https://culturedcode.com/things/) on macOS. Read tasks from the Things 3 SQLite database, create and update items via [Things URL Scheme](https://culturedcode.com/things/support/articles/2803573/), and query your task list from the terminal.
 
 ## Features
 
-- Unified client API with `NewClient()` as single entry point
-- Read-only access to Things 3 SQLite database
-- Fluent query builder with type-safe filters
-- Full [Things URL Scheme](https://culturedcode.com/things/support/articles/2803573/) support
-- Create todos, projects, and batch operations via URL
-- Update existing items with automatic authentication
+- **Unified client** - Single `NewClient()` entry point for all operations
+- **Database queries** - Read-only access to the Things 3 SQLite database with fluent query builder and type-safe filters
+- **URL Scheme** - Create todos, projects, and batch operations; update existing items with automatic authentication token management
+- **CLI** - Query tasks, projects, areas, and tags from the terminal with JSON/YAML output
+- **Interface-based API** - All public methods return interfaces for clean, testable code
 
-## Installation
+## CLI
+
+A command-line tool for querying your Things 3 tasks from the terminal.
+
+### Installation
+
+Download pre-built binaries from [GitHub Releases](https://github.com/moonD4rk/things3/releases), or install with Go:
+
+```bash
+go install github.com/moond4rk/things3/cmd/things3@latest
+```
+
+> **Note**: Requires CGO enabled (uses `go-sqlite3`). macOS only.
+
+If macOS shows "Apple could not verify" when running a downloaded binary, remove the quarantine attribute:
+
+```bash
+xattr -d com.apple.quarantine /path/to/things3
+```
+
+### Commands
+
+```bash
+things3 list <view>            # List tasks from a view
+things3 search <query>         # Search tasks by title
+things3 search --uuid <prefix> # Search tasks by UUID prefix
+things3 version                # Print version information
+```
+
+**Available views**: `inbox`, `today`, `upcoming`, `anytime`, `someday`, `logbook`, `deadlines`, `projects`, `areas`, `tags`
+
+### Global Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--json` | `-j` | Output as JSON |
+| `--yaml` | `-y` | Output as YAML |
+| `--limit` | `-n` | Max items to display (0 for unlimited) |
+
+The `logbook` view also supports `--days` (`-d`) to limit results to recent N days (default: 30, 0 for all).
+
+### Examples
+
+```bash
+things3 list today              # Today's tasks
+things3 list inbox --json       # Inbox as JSON
+things3 list logbook --days 7   # Recent 7 days
+things3 search meeting          # Search by title
+things3 search --uuid 4fthuhgF  # Search by UUID prefix
+things3 list areas --yaml       # Areas as YAML
+things3 list projects -n 5      # First 5 projects
+```
+
+### Output Formats
+
+**Default (table)**:
+```
+STATUS   UUID      TYPE     TITLE
+[x]      4fthuhgF  project  Task title | 2024-01-15 | #tag1 #tag2
+[ ]      WZR4hDw5  todo     Another task | due:2024-02-01
+[-]      gjUph7Jz  todo     Canceled task | 2024-01-10
+```
+
+Status indicators: `[ ]` incomplete, `[x]` completed, `[-]` canceled.
+
+**JSON** (`--json`): Full task objects as a JSON array.
+
+**YAML** (`--yaml`): Full task objects in YAML format.
+
+## Library
+
+### Installation
 
 ```bash
 go get github.com/moond4rk/things3
@@ -25,7 +95,7 @@ go get github.com/moond4rk/things3
 
 > **Note**: Requires CGO enabled (uses `go-sqlite3`). macOS only.
 
-## Quick Start
+### Quick Start
 
 ```go
 package main
@@ -62,11 +132,11 @@ func main() {
 }
 ```
 
-## API Overview
+### API Overview
 
-### Query Operations
+#### Query Operations
 
-#### Convenience Methods
+##### Convenience Methods
 
 ```go
 client.Inbox(ctx)                      // Tasks in Inbox
@@ -83,7 +153,7 @@ client.Search(ctx, "query")            // Search tasks
 client.CreatedWithin(ctx, DaysAgo(7))  // Tasks from last 7 days
 ```
 
-#### Fluent Query Builder
+##### Fluent Query Builder
 
 ```go
 // Type-safe status filtering
@@ -109,7 +179,7 @@ task, _ := client.Tasks().WithUUID("task-uuid").First(ctx)
 count, _ := client.Tasks().Status().Completed().Count(ctx)
 ```
 
-#### Areas and Tags
+##### Areas and Tags
 
 ```go
 // Get all areas with their tasks
@@ -119,9 +189,9 @@ areas, _ := client.Areas().IncludeItems(true).All(ctx)
 tags, _ := client.Tags().All(ctx)
 ```
 
-### Add Operations
+#### Add Operations
 
-#### Create Todo
+##### Create Todo
 
 ```go
 client.AddTodo().
@@ -136,7 +206,7 @@ client.AddTodo().
     Execute(ctx)
 ```
 
-#### Create Project
+##### Create Project
 
 ```go
 client.AddProject().
@@ -149,7 +219,7 @@ client.AddProject().
     Execute(ctx)
 ```
 
-### Update Operations
+#### Update Operations
 
 Update operations automatically manage authentication tokens.
 
@@ -168,7 +238,7 @@ client.UpdateProject("project-uuid").
     Execute(ctx)
 ```
 
-### Show Operations
+#### Show Operations
 
 ```go
 client.Show(ctx, "item-uuid")                    // Show specific item
@@ -182,7 +252,7 @@ client.ShowBuilder().
     Execute(ctx)
 ```
 
-### Batch Operations
+#### Batch Operations
 
 ```go
 // Create multiple items at once
@@ -200,7 +270,7 @@ client.Batch().
     Execute(ctx)
 ```
 
-## Configuration
+### Configuration
 
 ```go
 // Use custom database path
@@ -225,14 +295,14 @@ client, _ := things3.NewClient(
 )
 ```
 
-### Database Discovery
+#### Database Discovery
 
 The database path is resolved in order:
 1. Custom path via `WithDatabasePath()`
 2. `THINGSDB` environment variable
 3. Default: `~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/Things Database.thingsdatabase/main.sqlite`
 
-## Types
+### Types
 
 ```go
 // Task types

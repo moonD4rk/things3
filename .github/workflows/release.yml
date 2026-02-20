@@ -65,13 +65,17 @@ jobs:
           GOWORK=off go mod edit -require "github.com/moond4rk/things3@${{ inputs.version }}"
           GOWORK=off go mod tidy
 
-      # Step 4: Commit the CLI module update, tag for Go module system, push
+      # Step 4: Commit the CLI module update (if changed), tag for Go module system, push
       - name: Commit and tag CLI module
         run: |
           git add cmd/things3/go.mod cmd/things3/go.sum
-          git commit -m "chore: release ${{ inputs.version }}"
+          if git diff --cached --quiet; then
+            echo "CLI module dependency already up to date, skipping commit"
+          else
+            git commit -m "chore: release ${{ inputs.version }}"
+            git push origin HEAD:main
+          fi
           git tag "cmd/things3/${{ inputs.version }}"
-          git push origin HEAD:main
           git push origin "cmd/things3/${{ inputs.version }}"
 
       # Step 5: Build and publish binaries via GoReleaser
@@ -83,7 +87,7 @@ jobs:
         with:
           distribution: goreleaser
           version: '~> v2'
-          args: release --clean
+          args: release --clean --skip=validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ inputs.version }}

@@ -543,7 +543,8 @@ func TestAddProjectBuilder_FullProject(t *testing.T) {
 
 func TestShowBuilder_ID(t *testing.T) {
 	scheme := newScheme()
-	thingsURL := scheme.ShowBuilder().ID("uuid-123").Build()
+	thingsURL, err := scheme.ShowBuilder().ID("uuid-123").Build()
+	require.NoError(t, err)
 
 	cmd, params := parseThingsURL(t, thingsURL)
 	assert.Equal(t, "show", cmd)
@@ -571,7 +572,8 @@ func TestShowBuilder_List(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(string(tt.list), func(t *testing.T) {
 			scheme := newScheme()
-			thingsURL := scheme.ShowBuilder().List(tt.list).Build()
+			thingsURL, err := scheme.ShowBuilder().List(tt.list).Build()
+			require.NoError(t, err)
 
 			cmd, params := parseThingsURL(t, thingsURL)
 			require.Equal(t, "show", cmd)
@@ -582,7 +584,8 @@ func TestShowBuilder_List(t *testing.T) {
 
 func TestShowBuilder_Query(t *testing.T) {
 	scheme := newScheme()
-	thingsURL := scheme.ShowBuilder().Query("My Project").Build()
+	thingsURL, err := scheme.ShowBuilder().Query("My Project").Build()
+	require.NoError(t, err)
 
 	cmd, params := parseThingsURL(t, thingsURL)
 	assert.Equal(t, "show", cmd)
@@ -591,7 +594,8 @@ func TestShowBuilder_Query(t *testing.T) {
 
 func TestShowBuilder_Filter(t *testing.T) {
 	scheme := newScheme()
-	thingsURL := scheme.ShowBuilder().List(ListToday).Filter("work", "urgent").Build()
+	thingsURL, err := scheme.ShowBuilder().List(ListToday).Filter("work", "urgent").Build()
+	require.NoError(t, err)
 
 	cmd, params := parseThingsURL(t, thingsURL)
 	assert.Equal(t, "show", cmd)
@@ -601,7 +605,8 @@ func TestShowBuilder_Filter(t *testing.T) {
 
 func TestShowBuilder_NoParams(t *testing.T) {
 	scheme := newScheme()
-	thingsURL := scheme.ShowBuilder().Build()
+	thingsURL, err := scheme.ShowBuilder().Build()
+	require.NoError(t, err)
 	assert.Equal(t, "things:///show", thingsURL)
 }
 
@@ -2006,7 +2011,7 @@ func TestURLEncoding_SpacesAsPercent20(t *testing.T) {
 		{
 			name: "ShowBuilder with space in query",
 			buildURL: func() (string, error) {
-				return newScheme().ShowBuilder().Query("My Project").Build(), nil
+				return newScheme().ShowBuilder().Query("My Project").Build()
 			},
 		},
 		{

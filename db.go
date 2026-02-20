@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sync/atomic"
 )
 
 // db provides read-only access to the Things 3 database.
@@ -12,7 +13,7 @@ type db struct {
 	sqlDB      *sql.DB
 	filepath   string
 	printSQL   bool
-	queryCount int
+	queryCount atomic.Int64
 }
 
 // newDB creates a new Things 3 database connection.
@@ -64,8 +65,8 @@ func (d *db) Filepath() string {
 // executeQuery executes a SQL query and returns the results.
 func (d *db) executeQuery(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	if d.printSQL {
-		d.queryCount++
-		fmt.Printf("/* Query %d */\n", d.queryCount)
+		n := d.queryCount.Add(1)
+		fmt.Printf("/* Query %d */\n", n)
 		if len(args) > 0 {
 			fmt.Printf("/* Parameters: %v */\n", args)
 		}
@@ -80,8 +81,8 @@ func (d *db) executeQuery(ctx context.Context, query string, args ...any) (*sql.
 // executeQueryRow executes a SQL query that returns a single row.
 func (d *db) executeQueryRow(ctx context.Context, query string, args ...any) *sql.Row {
 	if d.printSQL {
-		d.queryCount++
-		fmt.Printf("/* Query %d */\n", d.queryCount)
+		n := d.queryCount.Add(1)
+		fmt.Printf("/* Query %d */\n", n)
 		if len(args) > 0 {
 			fmt.Printf("/* Parameters: %v */\n", args)
 		}
@@ -136,21 +137,21 @@ func scanTask(rows *sql.Rows) (*Task, error) {
 
 	// Convert type string to TaskType
 	switch typeStr.String {
-	case "to-do":
+	case taskTypeStringTodo:
 		task.Type = TaskTypeTodo
-	case "project":
+	case taskTypeStringProject:
 		task.Type = TaskTypeProject
-	case "heading":
+	case taskTypeStringHeading:
 		task.Type = TaskTypeHeading
 	}
 
 	// Convert status string to Status
 	switch statusStr.String {
-	case "incomplete":
+	case statusStringIncomplete:
 		task.Status = StatusIncomplete
-	case "completed":
+	case statusStringCompleted:
 		task.Status = StatusCompleted
-	case "canceled":
+	case statusStringCanceled:
 		task.Status = StatusCanceled
 	}
 

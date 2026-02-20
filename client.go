@@ -305,6 +305,27 @@ func (c *Client) Batch() BatchCreator {
 	return c.scheme.Batch()
 }
 
+// AuthBatch returns an AuthBatchCreator for batch operations including updates.
+// The authentication token is fetched automatically on first use.
+//
+// Example:
+//
+//	client.AuthBatch().
+//	    AddTodo(func(b BatchTodoConfigurator) {
+//	        b.Title("New task")
+//	    }).
+//	    UpdateTodo("uuid", func(b BatchTodoConfigurator) {
+//	        b.Completed(true)
+//	    }).
+//	    Execute(ctx)
+func (c *Client) AuthBatch() AuthBatchCreator {
+	return &authBatchBuilder{
+		scheme:    c.scheme,
+		tokenFunc: c.ensureToken,
+		items:     make([]JSONItem, 0),
+	}
+}
+
 // ============================================================================
 // Update Operations
 // ============================================================================
@@ -361,7 +382,10 @@ func (c *Client) Show(ctx context.Context, uuid string) error {
 //
 //	client.ShowList(ctx, things3.ListToday)
 func (c *Client) ShowList(ctx context.Context, list ListID) error {
-	uri := c.scheme.ShowBuilder().List(list).Build()
+	uri, err := c.scheme.ShowBuilder().List(list).Build()
+	if err != nil {
+		return err
+	}
 	return c.scheme.executeNavigation(ctx, uri)
 }
 

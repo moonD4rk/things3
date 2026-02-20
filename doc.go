@@ -7,26 +7,26 @@
 //   - Read-only access to the Things 3 SQLite database for querying tasks, projects, areas, and tags
 //   - Full Things URL Scheme support for creating, updating, and navigating to items
 //
-// # Database Access
+// # Getting Started
 //
-// Create a database connection and query tasks:
+// All operations go through a single Client:
 //
-//	db, err := things3.NewDB()
+//	client, err := things3.NewClient()
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
-//	defer db.Close()
+//	defer client.Close()
 //
 //	// Convenience methods
-//	inbox, _ := db.Inbox(ctx)
-//	today, _ := db.Today(ctx)
-//	todos, _ := db.Todos(ctx)
+//	inbox, _ := client.Inbox(ctx)
+//	today, _ := client.Today(ctx)
+//	todos, _ := client.Todos(ctx)
 //
 // # Fluent Query Builder
 //
 // For complex queries, use the type-safe fluent query builder:
 //
-//	tasks, _ := db.Tasks().
+//	tasks, _ := client.Tasks().
 //	    Type().Todo().
 //	    Status().Incomplete().
 //	    StartDate().Future().
@@ -34,28 +34,24 @@
 //
 // # URL Scheme
 //
-// Create Things URLs for automation and integration:
+// Create and update items via Things URL Scheme:
 //
-//	scheme := things3.NewScheme()
-//
-//	// Create a new todo
-//	url, _ := scheme.Todo().
+//	// Create a new to-do
+//	client.AddTodo().
 //	    Title("Buy groceries").
-//	    When(things3.WhenToday).
+//	    When(things3.Today()).
 //	    Tags("shopping").
-//	    Build()
+//	    Execute(ctx)
 //
-//	// Update existing items (requires auth token)
-//	token, _ := db.Token(ctx)
-//	auth := scheme.WithToken(token)
-//	url, _ := auth.UpdateTodo("uuid").Completed(true).Build()
+//	// Update existing items (auth token managed automatically)
+//	client.UpdateTodo("uuid").Completed(true).Execute(ctx)
 //
 // # Configuration
 //
-// Configure the database with functional options:
+// Configure the client with functional options:
 //
-//	db, _ := things3.NewDB(things3.WithDatabasePath("/path/to/main.sqlite"))
-//	db, _ := things3.NewDB(things3.WithPrintSQL(true))
+//	client, _ := things3.NewClient(things3.WithDatabasePath("/path/to/main.sqlite"))
+//	client, _ := things3.NewClient(things3.WithPrintSQL(true))
 //
 // # Database Discovery
 //

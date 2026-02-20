@@ -39,22 +39,25 @@ func (b *showBuilder) Filter(tags ...string) ShowNavigator {
 }
 
 // Build returns the Things URL for the show command.
-func (b *showBuilder) Build() string {
+func (b *showBuilder) Build() (string, error) {
 	query := url.Values{}
 	for k, v := range b.params {
 		query.Set(k, v)
 	}
 
 	if len(query) == 0 {
-		return fmt.Sprintf("things:///%s", CommandShow)
+		return fmt.Sprintf("things:///%s", CommandShow), nil
 	}
-	return fmt.Sprintf("things:///%s?%s", CommandShow, encodeQuery(query))
+	return fmt.Sprintf("things:///%s?%s", CommandShow, encodeQuery(query)), nil
 }
 
 // Execute builds and executes the show URL.
 // By default, brings Things to foreground since the user wants to view content.
 // Use WithBackground() option to run in background without stealing focus.
 func (b *showBuilder) Execute(ctx context.Context) error {
-	uri := b.Build()
+	uri, err := b.Build()
+	if err != nil {
+		return err
+	}
 	return b.scheme.executeNavigation(ctx, uri)
 }

@@ -198,7 +198,7 @@ func buildChecklistItemsSQL() string {
 			CHECKLIST_ITEM.task = ?
 		ORDER BY CHECKLIST_ITEM."index"
 	`, filterIsIncomplete, filterIsCanceled, filterIsCompleted,
-		colModificationDate, colModificationDate, tableChecklistItem)
+		colCreationDate, colModificationDate, tableChecklistItem)
 }
 
 // buildTagsOfTaskSQL builds the SQL query for fetching tags of a task.

@@ -1,6 +1,9 @@
 package things3
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // String constant for unknown enum values.
 const unknownString = "unknown"
@@ -22,11 +25,11 @@ const (
 func (t TaskType) String() string {
 	switch t {
 	case TaskTypeTodo:
-		return "to-do"
+		return taskTypeStringTodo
 	case TaskTypeProject:
-		return "project"
+		return taskTypeStringProject
 	case TaskTypeHeading:
-		return "heading"
+		return taskTypeStringHeading
 	default:
 		return unknownString
 	}
@@ -40,6 +43,48 @@ func (t TaskType) MarshalJSON() ([]byte, error) {
 // MarshalYAML implements yaml.Marshaler for TaskType.
 func (t TaskType) MarshalYAML() (any, error) {
 	return t.String(), nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler for TaskType.
+func (t *TaskType) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	v, err := parseTaskType(s)
+	if err != nil {
+		return err
+	}
+	*t = v
+	return nil
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler for TaskType.
+func (t *TaskType) UnmarshalYAML(unmarshal func(any) error) error {
+	var s string
+	if err := unmarshal(&s); err != nil {
+		return err
+	}
+	v, err := parseTaskType(s)
+	if err != nil {
+		return err
+	}
+	*t = v
+	return nil
+}
+
+// parseTaskType converts a string to TaskType.
+func parseTaskType(s string) (TaskType, error) {
+	switch s {
+	case taskTypeStringTodo:
+		return TaskTypeTodo, nil
+	case taskTypeStringProject:
+		return TaskTypeProject, nil
+	case taskTypeStringHeading:
+		return TaskTypeHeading, nil
+	default:
+		return 0, fmt.Errorf("things3: unknown task type %q", s)
+	}
 }
 
 // Status represents the completion status of a task.
@@ -58,11 +103,11 @@ const (
 func (s Status) String() string {
 	switch s {
 	case StatusIncomplete:
-		return "incomplete"
+		return statusStringIncomplete
 	case StatusCanceled:
-		return "canceled"
+		return statusStringCanceled
 	case StatusCompleted:
-		return "completed"
+		return statusStringCompleted
 	default:
 		return unknownString
 	}
@@ -76,6 +121,48 @@ func (s Status) MarshalJSON() ([]byte, error) {
 // MarshalYAML implements yaml.Marshaler for Status.
 func (s Status) MarshalYAML() (any, error) {
 	return s.String(), nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler for Status.
+func (s *Status) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+	v, err := parseStatus(str)
+	if err != nil {
+		return err
+	}
+	*s = v
+	return nil
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler for Status.
+func (s *Status) UnmarshalYAML(unmarshal func(any) error) error {
+	var str string
+	if err := unmarshal(&str); err != nil {
+		return err
+	}
+	v, err := parseStatus(str)
+	if err != nil {
+		return err
+	}
+	*s = v
+	return nil
+}
+
+// parseStatus converts a string to Status.
+func parseStatus(s string) (Status, error) {
+	switch s {
+	case statusStringIncomplete:
+		return StatusIncomplete, nil
+	case statusStringCanceled:
+		return StatusCanceled, nil
+	case statusStringCompleted:
+		return StatusCompleted, nil
+	default:
+		return 0, fmt.Errorf("things3: unknown status %q", s)
+	}
 }
 
 // IsOpen returns true if the status indicates an open (incomplete) task.

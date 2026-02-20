@@ -133,7 +133,8 @@ type AreaQueryBuilder interface {
 	WithUUID(uuid string) AreaQueryBuilder
 	WithTitle(title string) AreaQueryBuilder
 	Visible(visible bool) AreaQueryBuilder
-	InTag(tag any) AreaQueryBuilder
+	InTag(title string) AreaQueryBuilder
+	HasTag(has bool) AreaQueryBuilder
 	IncludeItems(include bool) AreaQueryBuilder
 }
 
@@ -264,7 +265,7 @@ type ShowNavigator interface {
 	Query(query string) ShowNavigator
 	Filter(tags ...string) ShowNavigator
 
-	Build() string
+	Build() (string, error)
 	Execute(ctx context.Context) error
 }
 

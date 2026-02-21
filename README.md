@@ -22,7 +22,13 @@ A command-line tool for querying your Things 3 tasks from the terminal.
 
 ### Installation
 
-Download pre-built binaries from [GitHub Releases](https://github.com/moonD4rk/things3/releases), or install with Go:
+**Homebrew** (recommended):
+
+```bash
+brew install moond4rk/tap/things3
+```
+
+**Go**:
 
 ```bash
 go install github.com/moond4rk/things3/cmd/things3@latest
@@ -30,7 +36,7 @@ go install github.com/moond4rk/things3/cmd/things3@latest
 
 > **Note**: Requires CGO enabled (uses `go-sqlite3`). macOS only.
 
-If macOS shows "Apple could not verify" when running a downloaded binary, remove the quarantine attribute:
+**Manual**: Download pre-built binaries from [GitHub Releases](https://github.com/moonD4rk/things3/releases). If macOS shows "Apple could not verify", remove the quarantine attribute:
 
 ```bash
 xattr -d com.apple.quarantine /path/to/things3

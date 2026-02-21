@@ -26,7 +26,7 @@ archives:
     name_template: "{{ .ProjectName }}_macos_{{ if eq .Arch \"arm64\" }}m1{{ else }}intel{{ end }}"
 
 checksum:
-  disable: true
+  name_template: "checksums.txt"
 
 changelog:
   use: github
@@ -41,3 +41,26 @@ release:
     name: things3
   draft: false
   prerelease: auto
+
+brews:
+  - name: things3
+    homepage: "https://github.com/moonD4rk/things3"
+    description: "CLI for Things 3 task manager on macOS"
+    license: "Apache-2.0"
+    skip_upload: auto
+    repository:
+      owner: moonD4rk
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: "github-actions[bot]"
+      email: "github-actions[bot]@users.noreply.github.com"
+    commit_msg_template: "brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    install: |
+      bin.install "things3"
+    test: |
+      system "#{bin}/things3", "version"
+    caveats: |
+      things3 requires read access to the Things 3 database.
+      Make sure Things 3 is installed on your Mac.

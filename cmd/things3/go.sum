@@ -7,8 +7,8 @@ github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/mattn/go-sqlite3 v1.14.34 h1:3NtcvcUnFBPsuRcno8pUtupspG/GM+9nZ88zgJcp6Zk=
 github.com/mattn/go-sqlite3 v1.14.34/go.mod h1:Uh1q+B4BYcTPb+yiD3kU8Ct7aC0hY9fxUwlHK0RXw+Y=
-github.com/moond4rk/things3 v0.5.0 h1:r3eipC0IClhQdxWyOxNXiIYciOJIs6g3eRkoM6Q5UpE=
-github.com/moond4rk/things3 v0.5.0/go.mod h1:mJpkkC3x/TsQ+uc+m1+rSnyH0oWH97ZunVYOTNyrVSU=
+github.com/moond4rk/things3 v0.5.1 h1:+wNaxh11y7iODMwSdAOTUsrTWueNQwGrZLnClYlckd8=
+github.com/moond4rk/things3 v0.5.1/go.mod h1:mJpkkC3x/TsQ+uc+m1+rSnyH0oWH97ZunVYOTNyrVSU=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=

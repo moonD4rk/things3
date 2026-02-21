@@ -52,7 +52,7 @@ brews:
       owner: moonD4rk
       name: homebrew-tap
       branch: main
-      token: "{{ .Env.MOOND4RK_HOMEBREW_TAP_GITHUB_TOKEN }}"
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     commit_author:
       name: "github-actions[bot]"
       email: "github-actions[bot]@users.noreply.github.com"

@@ -47,6 +47,7 @@ brews:
     homepage: "https://github.com/moonD4rk/things3"
     description: "CLI for Things 3 task manager on macOS"
     license: "Apache-2.0"
+    directory: Formula
     skip_upload: auto
     repository:
       owner: moonD4rk

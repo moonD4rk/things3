@@ -10,6 +10,8 @@ moond4rk = "moond4rk"
 Webhook = "Webhook"
 # UUID fragments that look like typos
 Fof = "Fof"
+PN = "PN"
+BA = "BA"
 
 [files]
 # A list of glob patterns to ignore.

@@ -2,6 +2,7 @@ package things3
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,7 +21,7 @@ func TestTaskQueryChaining(t *testing.T) {
 		Start().Anytime().
 		All(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tasks, testTodosAnytime)
+	assert.ElementsMatch(t, testTodosAnytimeUUIDs, extractUUIDs(tasks))
 }
 
 func TestTaskQueryWithUUID(t *testing.T) {
@@ -132,13 +133,13 @@ func TestTaskQueryInArea(t *testing.T) {
 
 	// Test with specific area
 	tasks, err := db.Tasks().
-		InArea(testUUIDArea).
+		InArea(testUUIDArea3).
 		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 	for _, task := range tasks {
 		require.NotNil(t, task.AreaUUID)
-		assert.Equal(t, testUUIDArea, *task.AreaUUID)
+		assert.Equal(t, testUUIDArea3, *task.AreaUUID)
 	}
 
 	// Test with has area
@@ -168,7 +169,7 @@ func TestTaskQueryInProject(t *testing.T) {
 
 	// Test with specific project
 	tasks, err := db.Tasks().
-		InProject(testUUIDProject).
+		InProject(testUUIDProjectInArea1).
 		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
@@ -185,7 +186,8 @@ func TestTaskQueryInTag(t *testing.T) {
 		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tasks, 1)
+	require.Len(t, tasks, 1)
+	assert.Equal(t, testUUIDTodoInArea1Tags, tasks[0].UUID)
 
 	// Test with has tag
 	tasks, err = db.Tasks().
@@ -289,33 +291,52 @@ func TestTaskQueryCreatedAfter(t *testing.T) {
 	ctx := context.Background()
 
 	// Test many years ago - should return all tasks created after that time
-	tasks, err := db.Tasks().
+	allTasks, err := db.Tasks().
 		CreatedAfter(YearsAgo(100)).
 		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tasks, testTasksIncomplete, "YearsAgo(100) should include all test tasks")
+	assert.Len(t, allTasks, testTasksIncomplete, "YearsAgo(100) should include all test tasks")
 
-	// Test weeks ago
-	_, err = db.Tasks().
-		CreatedAfter(WeeksAgo(2)).
+	// Test weeks ago - test data was created years ago, so recent filters
+	// should return fewer results. Validate each task's Created time.
+	threshold := WeeksAgo(2)
+	recentTasks, err := db.Tasks().
+		CreatedAfter(threshold).
 		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
+	assert.LessOrEqual(t, len(recentTasks), len(allTasks))
+	for _, task := range recentTasks {
+		assert.True(t, task.Created.After(threshold),
+			"Created %v should be after %v", task.Created, threshold)
+	}
 
 	// Test months ago
-	_, err = db.Tasks().
-		CreatedAfter(MonthsAgo(1)).
+	threshold = MonthsAgo(1)
+	recentTasks, err = db.Tasks().
+		CreatedAfter(threshold).
 		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
+	assert.LessOrEqual(t, len(recentTasks), len(allTasks))
+	for _, task := range recentTasks {
+		assert.True(t, task.Created.After(threshold),
+			"Created %v should be after %v", task.Created, threshold)
+	}
 
 	// Test days ago
-	_, err = db.Tasks().
-		CreatedAfter(DaysAgo(7)).
+	threshold = DaysAgo(7)
+	recentTasks, err = db.Tasks().
+		CreatedAfter(threshold).
 		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
+	assert.LessOrEqual(t, len(recentTasks), len(allTasks))
+	for _, task := range recentTasks {
+		assert.True(t, task.Created.After(threshold),
+			"Created %v should be after %v", task.Created, threshold)
+	}
 }
 
 func TestTaskQueryCount(t *testing.T) {
@@ -365,7 +386,7 @@ func TestTaskQueryIncludeItems(t *testing.T) {
 
 	// Test include items on todo with checklist
 	task, err := db.Tasks().
-		WithUUID(testUUIDTodoChecklist).
+		WithUUID(testUUIDTodoInboxChecklist).
 		IncludeItems(true).
 		First(ctx)
 	require.NoError(t, err)
@@ -544,63 +565,201 @@ func TestDateFilterExists(t *testing.T) {
 func TestDateFilterRelative(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
 
-	// Test StartDate future - should return tasks (may be empty depending on test data)
-	_, err := db.Tasks().
-		StartDate().Future().
-		Status().Incomplete().
-		All(ctx)
-	require.NoError(t, err)
+	t.Run("Deadline Past", func(t *testing.T) {
+		tasks, err := db.Tasks().
+			Deadline().Past().Status().Incomplete().All(ctx)
+		require.NoError(t, err)
+		require.Len(t, tasks, testDeadlinePast)
+		for _, task := range tasks {
+			if assert.NotNil(t, task.Deadline) {
+				assert.False(t, task.Deadline.After(today),
+					"Deadline %v should not be after today %v", task.Deadline, today)
+			}
+		}
+	})
 
-	// Test StartDate past - should return tasks (may be empty depending on test data)
-	_, err = db.Tasks().
-		StartDate().Past().
-		Status().Incomplete().
-		All(ctx)
-	require.NoError(t, err)
+	t.Run("Deadline Future", func(t *testing.T) {
+		tasks, err := db.Tasks().
+			Deadline().Future().Status().Incomplete().All(ctx)
+		require.NoError(t, err)
+		require.Len(t, tasks, testDeadlineFuture)
+		for _, task := range tasks {
+			if assert.NotNil(t, task.Deadline) {
+				assert.True(t, task.Deadline.After(today),
+					"Deadline %v should be after today %v", task.Deadline, today)
+			}
+		}
+	})
 
-	// Test Deadline future
-	_, err = db.Tasks().
-		Deadline().Future().
-		Status().Incomplete().
-		All(ctx)
-	require.NoError(t, err)
+	t.Run("StartDate Past", func(t *testing.T) {
+		tasks, err := db.Tasks().
+			StartDate().Past().Status().Incomplete().All(ctx)
+		require.NoError(t, err)
+		for _, task := range tasks {
+			if assert.NotNil(t, task.StartDate) {
+				assert.False(t, task.StartDate.After(today),
+					"StartDate %v should not be after today %v", task.StartDate, today)
+			}
+		}
+	})
 
-	// Test Deadline past
-	_, err = db.Tasks().
-		Deadline().Past().
-		Status().Incomplete().
-		All(ctx)
-	require.NoError(t, err)
+	t.Run("StartDate Future", func(t *testing.T) {
+		tasks, err := db.Tasks().
+			StartDate().Future().Status().Incomplete().All(ctx)
+		require.NoError(t, err)
+		for _, task := range tasks {
+			if assert.NotNil(t, task.StartDate) {
+				assert.True(t, task.StartDate.After(today),
+					"StartDate %v should be after today %v", task.StartDate, today)
+			}
+		}
+	})
+
+	// Cross-validate: Past + Future == Exists(true) for Deadline
+	t.Run("Deadline Past and Future partition", func(t *testing.T) {
+		pastCount, err := db.Tasks().
+			Deadline().Past().Status().Incomplete().Count(ctx)
+		require.NoError(t, err)
+		futureCount, err := db.Tasks().
+			Deadline().Future().Status().Incomplete().Count(ctx)
+		require.NoError(t, err)
+		require.Equal(t, testDeadlines, pastCount+futureCount)
+	})
 }
 
 func TestDateFilterComparison(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	// Test Deadline OnOrBefore
-	deadline := time.Date(2025, 12, 31, 0, 0, 0, 0, time.Local)
-	_, err := db.Tasks().
-		Deadline().OnOrBefore(deadline).
-		Status().Incomplete().
-		Count(ctx)
-	require.NoError(t, err)
+	// Pivot date: 3 deadlines before 2025, 1 after (2040-11-04)
+	pivot := time.Date(2025, 1, 1, 0, 0, 0, 0, time.Local)
 
-	// Test Deadline After
-	afterDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.Local)
-	_, err = db.Tasks().
-		Deadline().After(afterDate).
-		Status().Incomplete().
-		Count(ctx)
-	require.NoError(t, err)
+	t.Run("Deadline Before", func(t *testing.T) {
+		tasks, err := db.Tasks().
+			Deadline().Before(pivot).
+			Status().Incomplete().
+			All(ctx)
+		require.NoError(t, err)
+		require.Len(t, tasks, testDeadlinePast)
+		for _, task := range tasks {
+			if assert.NotNil(t, task.Deadline) {
+				assert.True(t, task.Deadline.Before(pivot),
+					"Deadline %v should be before %v", task.Deadline, pivot)
+			}
+		}
+	})
 
-	// Test StartDate On
-	onDate := time.Date(2024, 6, 15, 0, 0, 0, 0, time.Local)
-	_, err = db.Tasks().
-		StartDate().On(onDate).
-		Status().Incomplete().
-		Count(ctx)
-	require.NoError(t, err)
+	t.Run("Deadline OnOrAfter", func(t *testing.T) {
+		tasks, err := db.Tasks().
+			Deadline().OnOrAfter(pivot).
+			Status().Incomplete().
+			All(ctx)
+		require.NoError(t, err)
+		require.Len(t, tasks, testDeadlineFuture)
+		for _, task := range tasks {
+			if assert.NotNil(t, task.Deadline) {
+				assert.False(t, task.Deadline.Before(pivot),
+					"Deadline %v should be on or after %v", task.Deadline, pivot)
+			}
+		}
+	})
+
+	// Cross-validate: Before + OnOrAfter == Exists(true)
+	t.Run("Before and OnOrAfter partition", func(t *testing.T) {
+		beforeCount, err := db.Tasks().
+			Deadline().Before(pivot).Status().Incomplete().Count(ctx)
+		require.NoError(t, err)
+		onOrAfterCount, err := db.Tasks().
+			Deadline().OnOrAfter(pivot).Status().Incomplete().Count(ctx)
+		require.NoError(t, err)
+		totalCount, err := db.Tasks().
+			Deadline().Exists(true).Status().Incomplete().Count(ctx)
+		require.NoError(t, err)
+		require.Equal(t, totalCount, beforeCount+onOrAfterCount)
+	})
+
+	t.Run("Deadline OnOrBefore", func(t *testing.T) {
+		deadline := time.Date(2025, 12, 31, 0, 0, 0, 0, time.Local)
+		tasks, err := db.Tasks().
+			Deadline().OnOrBefore(deadline).
+			Status().Incomplete().
+			All(ctx)
+		require.NoError(t, err)
+		require.Len(t, tasks, testDeadlinePast)
+		for _, task := range tasks {
+			if assert.NotNil(t, task.Deadline) {
+				assert.False(t, task.Deadline.After(deadline),
+					"Deadline %v should be on or before %v", task.Deadline, deadline)
+			}
+		}
+	})
+
+	t.Run("Deadline After", func(t *testing.T) {
+		afterDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.Local)
+		tasks, err := db.Tasks().
+			Deadline().After(afterDate).
+			Status().Incomplete().
+			All(ctx)
+		require.NoError(t, err)
+		require.Len(t, tasks, testDeadlineFuture)
+		for _, task := range tasks {
+			if assert.NotNil(t, task.Deadline) {
+				assert.True(t, task.Deadline.After(afterDate),
+					"Deadline %v should be after %v", task.Deadline, afterDate)
+			}
+		}
+	})
+
+	t.Run("StartDate On", func(t *testing.T) {
+		// 2021-03-28: "To-Do in Today" has this start date
+		onDate := time.Date(2021, 3, 28, 0, 0, 0, 0, time.Local)
+		tasks, err := db.Tasks().
+			StartDate().On(onDate).
+			Status().Incomplete().
+			All(ctx)
+		require.NoError(t, err)
+		require.NotEmpty(t, tasks)
+		for _, task := range tasks {
+			if assert.NotNil(t, task.StartDate) {
+				assert.Equal(t, onDate.Year(), task.StartDate.Year())
+				assert.Equal(t, onDate.Month(), task.StartDate.Month())
+				assert.Equal(t, onDate.Day(), task.StartDate.Day())
+			}
+		}
+	})
+
+	t.Run("StartDate OnOrAfter", func(t *testing.T) {
+		threshold := time.Date(2024, 1, 1, 0, 0, 0, 0, time.Local)
+		tasks, err := db.Tasks().
+			StartDate().OnOrAfter(threshold).
+			Status().Incomplete().
+			All(ctx)
+		require.NoError(t, err)
+		for _, task := range tasks {
+			if assert.NotNil(t, task.StartDate) {
+				assert.False(t, task.StartDate.Before(threshold),
+					"StartDate %v should be on or after %v", task.StartDate, threshold)
+			}
+		}
+	})
+
+	// Cross-validate StartDate: Before + OnOrAfter == Exists(true)
+	t.Run("StartDate Before and OnOrAfter partition", func(t *testing.T) {
+		startPivot := time.Date(2023, 1, 1, 0, 0, 0, 0, time.Local)
+		beforeCount, err := db.Tasks().
+			StartDate().Before(startPivot).Status().Incomplete().Count(ctx)
+		require.NoError(t, err)
+		onOrAfterCount, err := db.Tasks().
+			StartDate().OnOrAfter(startPivot).Status().Incomplete().Count(ctx)
+		require.NoError(t, err)
+		totalCount, err := db.Tasks().
+			StartDate().Exists(true).Status().Incomplete().Count(ctx)
+		require.NoError(t, err)
+		require.Equal(t, totalCount, beforeCount+onOrAfterCount)
+	})
 }
 
 func TestSubBuilderChaining(t *testing.T) {
@@ -614,7 +773,7 @@ func TestSubBuilderChaining(t *testing.T) {
 		Start().Anytime().
 		All(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tasks, testTodosAnytime)
+	assert.ElementsMatch(t, testTodosAnytimeUUIDs, extractUUIDs(tasks))
 
 	// Test chaining with date filters
 	count, err := db.Tasks().
@@ -638,9 +797,6 @@ func TestSubBuilderChaining(t *testing.T) {
 // Context Trashed Filter Tests
 // =============================================================================
 
-// testUUIDContextTrashedTask is a task where task.trashed=0 but project.trashed=1.
-const testUUIDContextTrashedTask = "NoQLFamrMMooAELuBznao8"
-
 func TestContextTrashedFilter(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
@@ -656,7 +812,7 @@ func TestContextTrashedFilter(t *testing.T) {
 	// Find the context-trashed task in results
 	foundWithoutFilter := false
 	for _, task := range tasksWithoutFilter {
-		if task.UUID == testUUIDContextTrashedTask {
+		if task.UUID == testUUIDTodoInDeletedProject {
 			foundWithoutFilter = true
 			break
 		}
@@ -676,7 +832,7 @@ func TestContextTrashedFilter(t *testing.T) {
 	// Verify context-trashed task is NOT in results
 	foundWithFilter := false
 	for _, task := range tasksWithFilter {
-		if task.UUID == testUUIDContextTrashedTask {
+		if task.UUID == testUUIDTodoInDeletedProject {
 			foundWithFilter = true
 			break
 		}
@@ -697,7 +853,7 @@ func TestContextTrashedTaskDetails(t *testing.T) {
 
 	// Verify the test task exists and has expected properties
 	task, err := db.Tasks().
-		WithUUID(testUUIDContextTrashedTask).
+		WithUUID(testUUIDTodoInDeletedProject).
 		First(ctx)
 	require.NoError(t, err)
 
@@ -710,4 +866,180 @@ func TestContextTrashedTaskDetails(t *testing.T) {
 
 	// The task itself is not trashed (task.trashed = 0)
 	assert.False(t, task.Trashed, "Task itself should not be trashed")
+}
+
+// =============================================================================
+// 0% Coverage Query Method Tests
+// =============================================================================
+
+func TestWithUUIDPrefix(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	// testUUIDTodoInbox = "DfYoiXcNLQssk9DkSoJV3Y" starts with "DfYo"
+	tasks, err := db.Tasks().
+		WithUUIDPrefix("DfYo").
+		All(ctx)
+	require.NoError(t, err)
+	require.NotEmpty(t, tasks)
+
+	found := false
+	for _, task := range tasks {
+		if task.UUID == testUUIDTodoInbox {
+			found = true
+		}
+		assert.True(t, strings.HasPrefix(task.UUID, "DfYo"),
+			"WithUUIDPrefix returned task with non-matching UUID: %s", task.UUID)
+	}
+	assert.True(t, found, "WithUUIDPrefix should find testUUIDTodoInbox")
+
+	// Non-matching prefix
+	tasks, err = db.Tasks().
+		WithUUIDPrefix("ZZZZZ").
+		All(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, tasks)
+}
+
+func TestStopDateFilter(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	// Completed tasks should have stop dates
+	tasks, err := db.Tasks().
+		StopDate().Exists(true).
+		Status().Completed().
+		All(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, tasks, "Completed tasks should have stop dates")
+	for _, task := range tasks {
+		assert.NotNil(t, task.StopDate, "StopDate().Exists(true) returned task without stop date")
+	}
+
+	// Incomplete tasks should not have stop dates
+	tasks, err = db.Tasks().
+		StopDate().Exists(false).
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+	for _, task := range tasks {
+		assert.Nil(t, task.StopDate, "StopDate().Exists(false) returned task with stop date")
+	}
+}
+
+func TestHasProject(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	// Tasks with a project
+	tasksWithProject, err := db.Tasks().
+		HasProject(true).
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+	for _, task := range tasksWithProject {
+		hasProject := task.ProjectUUID != nil || task.HeadingUUID != nil
+		assert.True(t, hasProject,
+			"HasProject(true) returned task %q without project or heading context", task.UUID)
+	}
+
+	// Tasks without a project
+	tasksWithoutProject, err := db.Tasks().
+		HasProject(false).
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, tasksWithoutProject)
+}
+
+func TestHasHeading(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	// Tasks in a heading
+	tasksInHeading, err := db.Tasks().
+		HasHeading(true).
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+	for _, task := range tasksInHeading {
+		assert.NotNil(t, task.HeadingUUID,
+			"HasHeading(true) returned task %q without heading", task.UUID)
+	}
+
+	// Tasks not in a heading
+	tasksNotInHeading, err := db.Tasks().
+		HasHeading(false).
+		Status().Incomplete().
+		All(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, tasksNotInHeading)
+	for _, task := range tasksNotInHeading {
+		assert.Nil(t, task.HeadingUUID,
+			"HasHeading(false) returned task %q with heading", task.UUID)
+	}
+}
+
+func TestAreaWithTitle(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	area, err := db.Areas().WithTitle("Area 1").First(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "Area 1", area.Title)
+	assert.Equal(t, testUUIDArea1, area.UUID)
+
+	// Non-matching title
+	_, err = db.Areas().WithTitle("Nonexistent Area").First(ctx)
+	require.ErrorIs(t, err, ErrAreaNotFound)
+}
+
+func TestAreaVisible(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	visibleAreas, err := db.Areas().Visible(true).All(ctx)
+	require.NoError(t, err)
+
+	hiddenAreas, err := db.Areas().Visible(false).All(ctx)
+	require.NoError(t, err)
+
+	// Visible + hidden should partition all areas
+	allAreas, err := db.Areas().All(ctx)
+	require.NoError(t, err)
+	require.Equal(t, len(allAreas), len(visibleAreas)+len(hiddenAreas))
+}
+
+func TestAreaHasTag(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	areasWithTag, err := db.Areas().HasTag(true).All(ctx)
+	require.NoError(t, err)
+
+	areasWithoutTag, err := db.Areas().HasTag(false).All(ctx)
+	require.NoError(t, err)
+
+	// Total should account for all areas
+	assert.Equal(t, testAreas, len(areasWithTag)+len(areasWithoutTag))
+}
+
+func TestTagWithUUID(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	tag, err := db.Tags().WithUUID(testUUIDTagOffice).First(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, testUUIDTagOffice, tag.UUID)
+	assert.Equal(t, "Office", tag.Title)
+}
+
+func TestTagWithParent(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	// No nested tags in test data, so result should be empty
+	tags, err := db.Tags().WithParent("nonexistent").All(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, tags)
 }

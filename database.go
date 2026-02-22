@@ -37,7 +37,7 @@ func discoverDatabasePath(customPath string) (string, error) {
 	// 2. Check environment variable
 	if envPath := os.Getenv(envDatabasePath); envPath != "" {
 		expanded := expandPath(envPath)
-		if _, err := os.Stat(expanded); err != nil {
+		if _, err := os.Stat(expanded); err != nil { //nolint:gosec // user-provided database path via env var is intentional
 			return "", fmt.Errorf("%w: %s", ErrDatabaseNotFound, expanded)
 		}
 		return expanded, nil

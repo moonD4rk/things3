@@ -15,7 +15,7 @@ func TestInbox(t *testing.T) {
 
 	tasks, err := db.Inbox(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tasks, testInbox)
+	assert.ElementsMatch(t, testInboxUUIDs, extractUUIDs(tasks))
 }
 
 func TestToday(t *testing.T) {
@@ -58,7 +58,7 @@ func TestUpcoming(t *testing.T) {
 
 	tasks, err := db.Upcoming(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tasks, testUpcoming)
+	assert.ElementsMatch(t, testUpcomingUUIDs, extractUUIDs(tasks))
 }
 
 func TestAnytime(t *testing.T) {
@@ -67,7 +67,7 @@ func TestAnytime(t *testing.T) {
 
 	tasks, err := db.Anytime(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tasks, testAnytime)
+	assert.ElementsMatch(t, testAnytimeUUIDs, extractUUIDs(tasks))
 
 	// Verify at least one task has area_title "Area 1"
 	hasArea1 := false
@@ -86,7 +86,7 @@ func TestSomeday(t *testing.T) {
 
 	tasks, err := db.Someday(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tasks, testSomeday)
+	assert.ElementsMatch(t, testSomedayUUIDs, extractUUIDs(tasks))
 }
 
 func TestLogbook(t *testing.T) {
@@ -95,7 +95,7 @@ func TestLogbook(t *testing.T) {
 
 	tasks, err := db.Logbook(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tasks, testLogbook)
+	assert.ElementsMatch(t, append(testCompletedUUIDs, testCanceledUUIDs...), extractUUIDs(tasks))
 }
 
 func TestCompleted(t *testing.T) {
@@ -104,7 +104,7 @@ func TestCompleted(t *testing.T) {
 
 	tasks, err := db.Completed(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tasks, testCompleted)
+	assert.ElementsMatch(t, testCompletedUUIDs, extractUUIDs(tasks))
 }
 
 func TestCanceled(t *testing.T) {
@@ -113,7 +113,7 @@ func TestCanceled(t *testing.T) {
 
 	tasks, err := db.Canceled(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tasks, testCanceled)
+	assert.ElementsMatch(t, testCanceledUUIDs, extractUUIDs(tasks))
 }
 
 func TestTodos(t *testing.T) {
@@ -123,7 +123,7 @@ func TestTodos(t *testing.T) {
 	// Test incomplete todos
 	todos, err := db.Todos(ctx)
 	require.NoError(t, err)
-	assert.Len(t, todos, testTodosIncomplete)
+	assert.ElementsMatch(t, testTodosIncompleteUUIDs, extractUUIDs(todos))
 
 	// Test todos with start=Anytime
 	todos, err = db.Tasks().
@@ -132,7 +132,7 @@ func TestTodos(t *testing.T) {
 		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
-	assert.Len(t, todos, testTodosAnytime)
+	assert.ElementsMatch(t, testTodosAnytimeUUIDs, extractUUIDs(todos))
 
 	// Test todos with start=Anytime, status=completed
 	todos, err = db.Tasks().
@@ -141,7 +141,7 @@ func TestTodos(t *testing.T) {
 		Status().Completed().
 		All(ctx)
 	require.NoError(t, err)
-	assert.Len(t, todos, testTodosAnytimeComplete)
+	assert.ElementsMatch(t, testTodosAnytimeCompleteUUIDs, extractUUIDs(todos))
 
 	// Test todos with status=completed
 	todos, err = db.Tasks().
@@ -149,7 +149,7 @@ func TestTodos(t *testing.T) {
 		Status().Completed().
 		All(ctx)
 	require.NoError(t, err)
-	assert.Len(t, todos, testTodosComplete)
+	assert.ElementsMatch(t, testTodosCompleteUUIDs, extractUUIDs(todos))
 
 	// Test get todo by UUID - use a UUID that exists in the incomplete todos
 	allTodos, err := db.Todos(ctx)
@@ -169,7 +169,7 @@ func TestProjects(t *testing.T) {
 	// Test incomplete projects (not trashed)
 	projects, err := db.Projects(ctx)
 	require.NoError(t, err)
-	assert.Len(t, projects, testProjectsNotTrashed)
+	assert.ElementsMatch(t, testProjectsNotTrashedUUIDs, extractUUIDs(projects))
 
 	// Test projects with include_items
 	projects, err = db.Tasks().
@@ -190,12 +190,12 @@ func TestAreas(t *testing.T) {
 	// Test all areas
 	areas, err := db.Areas().All(ctx)
 	require.NoError(t, err)
-	assert.Len(t, areas, testAreas)
+	assert.ElementsMatch(t, testAreaUUIDs, extractAreaUUIDs(areas))
 
 	// Test areas with include_items
 	areas, err = db.Areas().IncludeItems(true).All(ctx)
 	require.NoError(t, err)
-	assert.Len(t, areas, testAreas)
+	assert.ElementsMatch(t, testAreaUUIDs, extractAreaUUIDs(areas))
 
 	// Test area count
 	count, err := db.Areas().Count(ctx)
@@ -203,7 +203,7 @@ func TestAreas(t *testing.T) {
 	assert.Equal(t, testAreas, count)
 
 	// Test get area by UUID
-	area, err := db.Areas().WithUUID(testUUIDArea).First(ctx)
+	area, err := db.Areas().WithUUID(testUUIDArea3).First(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "Area 3", area.Title)
 }
@@ -215,12 +215,12 @@ func TestTags(t *testing.T) {
 	// Test all tags
 	tags, err := db.Tags().All(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tags, testTags)
+	assert.ElementsMatch(t, testTagUUIDs, extractTagUUIDs(tags))
 
 	// Test tags with include_items
 	tags, err = db.Tags().IncludeItems(true).All(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tags, testTags)
+	assert.ElementsMatch(t, testTagUUIDs, extractTagUUIDs(tags))
 
 	// Test get tag by title
 	tag, err := db.Tags().WithTitle("Errand").First(ctx)
@@ -230,12 +230,14 @@ func TestTags(t *testing.T) {
 	// Test tasks filtered by tag
 	tasks, err := db.Tasks().InTag("Errand").All(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tasks, 1)
+	require.Len(t, tasks, 1)
+	assert.Equal(t, testUUIDTodoInArea1Tags, tasks[0].UUID)
 
 	// Test tasks with tag "Home"
 	tasks, err = db.Tasks().InTag("Home").All(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tasks, 1)
+	require.Len(t, tasks, 1)
+	assert.Equal(t, testUUIDTodoInArea1Tags, tasks[0].UUID)
 }
 
 func TestDeadlines(t *testing.T) {
@@ -245,7 +247,7 @@ func TestDeadlines(t *testing.T) {
 	// Test all deadlines
 	tasks, err := db.Deadlines(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tasks, testDeadlines)
+	assert.ElementsMatch(t, testDeadlineUUIDs, extractUUIDs(tasks))
 
 	// Test past deadlines
 	tasks, err = db.Tasks().
@@ -253,7 +255,7 @@ func TestDeadlines(t *testing.T) {
 		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tasks, testDeadlinePast)
+	assert.ElementsMatch(t, testDeadlinePastUUIDs, extractUUIDs(tasks))
 
 	// Test future deadlines
 	tasks, err = db.Tasks().
@@ -261,7 +263,7 @@ func TestDeadlines(t *testing.T) {
 		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tasks, testDeadlineFuture)
+	assert.ElementsMatch(t, testDeadlineFutureUUIDs, extractUUIDs(tasks))
 }
 
 func TestTrash(t *testing.T) {
@@ -271,7 +273,7 @@ func TestTrash(t *testing.T) {
 	// Test all trashed items
 	tasks, err := db.Trash(ctx)
 	require.NoError(t, err)
-	assert.Len(t, tasks, testTrashed)
+	assert.ElementsMatch(t, testTrashedUUIDs, extractUUIDs(tasks))
 
 	// Test trashed todos
 	todos, err := db.Tasks().
@@ -280,7 +282,7 @@ func TestTrash(t *testing.T) {
 		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
-	assert.Len(t, todos, testTrashedTodos)
+	assert.ElementsMatch(t, testTrashedTodoUUIDs, extractUUIDs(todos))
 
 	// Test trashed projects
 	projects, err := db.Tasks().
@@ -289,7 +291,7 @@ func TestTrash(t *testing.T) {
 		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
-	assert.Len(t, projects, testTrashedProjects)
+	assert.ElementsMatch(t, testTrashedProjectUUIDs, extractUUIDs(projects))
 }
 
 func TestChecklist(t *testing.T) {
@@ -297,12 +299,12 @@ func TestChecklist(t *testing.T) {
 	ctx := context.Background()
 
 	// Test todo with checklist
-	items, err := db.ChecklistItems(ctx, testUUIDTodoChecklist)
+	items, err := db.ChecklistItems(ctx, testUUIDTodoInboxChecklist)
 	require.NoError(t, err)
-	assert.Len(t, items, 3)
+	assert.ElementsMatch(t, testChecklistUUIDs, extractChecklistUUIDs(items))
 
 	// Test todo without checklist
-	items, err = db.ChecklistItems(ctx, testUUIDTodoNoChecklist)
+	items, err = db.ChecklistItems(ctx, testUUIDTodoRepeating)
 	require.NoError(t, err)
 	assert.Empty(t, items)
 }
@@ -321,12 +323,12 @@ func TestSearch(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, tasks)
 
-	// Test search that finds results (search with status=nil to include all)
-	_, err = db.Tasks().
+	// Test search with SQL wildcard character - should not crash and should find match
+	tasks, err = db.Tasks().
 		Search("To-Do % Heading").
 		All(ctx)
 	require.NoError(t, err)
-	// Note: This searches incomplete tasks by default
+	require.NotEmpty(t, tasks, "search with wildcard should find matching tasks")
 }
 
 func TestGetByUUID(t *testing.T) {
@@ -339,12 +341,12 @@ func TestGetByUUID(t *testing.T) {
 	assert.Nil(t, result)
 
 	// Test get tag by UUID
-	result, err = db.Get(ctx, testUUIDTag)
+	result, err = db.Get(ctx, testUUIDTagOffice)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	tag, ok := result.(*Tag)
 	require.True(t, ok, "expected *Tag, got %T", result)
-	assert.Equal(t, testUUIDTag, tag.UUID)
+	assert.Equal(t, testUUIDTagOffice, tag.UUID)
 }
 
 func TestCreatedWithin(t *testing.T) {
@@ -355,18 +357,30 @@ func TestCreatedWithin(t *testing.T) {
 	_, err := db.CreatedWithin(ctx, time.Time{})
 	require.ErrorIs(t, err, ErrInvalidParameter)
 
-	// Test many weeks ago - should return results
-	tasks, err := db.CreatedWithin(ctx, WeeksAgo(10000))
+	// Test many weeks ago - should return all filtered tasks
+	allTasks, err := db.CreatedWithin(ctx, WeeksAgo(10000))
 	require.NoError(t, err)
-	assert.Len(t, tasks, testTasksIncompleteFiltered)
+	assert.Len(t, allTasks, testTasksIncompleteFiltered)
 
-	// Test months ago
-	_, err = db.CreatedWithin(ctx, MonthsAgo(1))
+	// Test months ago - recent filter should return subset, validate Created time
+	threshold := MonthsAgo(1)
+	recentTasks, err := db.CreatedWithin(ctx, threshold)
 	require.NoError(t, err)
+	assert.LessOrEqual(t, len(recentTasks), len(allTasks))
+	for _, task := range recentTasks {
+		assert.True(t, task.Created.After(threshold),
+			"Created %v should be after %v", task.Created, threshold)
+	}
 
-	// Test years ago
-	_, err = db.CreatedWithin(ctx, YearsAgo(1))
+	// Test years ago - same validation
+	threshold = YearsAgo(1)
+	recentTasks, err = db.CreatedWithin(ctx, threshold)
 	require.NoError(t, err)
+	assert.LessOrEqual(t, len(recentTasks), len(allTasks))
+	for _, task := range recentTasks {
+		assert.True(t, task.Created.After(threshold),
+			"Created %v should be after %v", task.Created, threshold)
+	}
 }
 
 func TestTasks(t *testing.T) {
@@ -382,7 +396,7 @@ func TestTasks(t *testing.T) {
 	assert.Equal(t, testCompleted, count)
 
 	// Test get task by UUID
-	count, err = db.Tasks().WithUUID(testUUIDTaskCount).Count(ctx)
+	count, err = db.Tasks().WithUUID(testUUIDTodoInToday).Count(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 
@@ -392,14 +406,14 @@ func TestTasks(t *testing.T) {
 	assert.Equal(t, 0, count)
 
 	// Test tasks in project (without status filter = all tasks)
-	tasks, err := db.Tasks().InProject(testUUIDProject).All(ctx)
+	tasks, err := db.Tasks().InProject(testUUIDProjectInArea1).All(ctx)
 	require.NoError(t, err)
 	assert.Len(t, tasks, testTasksInProjectAll)
 
 	// Test tasks with tag and project
 	tasks, err = db.Tasks().
 		InTag("Home").
-		InProject(testUUIDProject).
+		InProject(testUUIDProjectInArea1).
 		All(ctx)
 	require.NoError(t, err)
 	assert.Len(t, tasks, 1)
@@ -432,7 +446,7 @@ func TestReminderTime(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	task, err := db.Tasks().WithUUID(testUUIDTodoReminder).First(ctx)
+	task, err := db.Tasks().WithUUID(testUUIDTodoUpcoming).First(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, task.ReminderTime)
 	assert.Equal(t, 12, task.ReminderTime.Hour())

@@ -6,13 +6,13 @@ Date: 2026-02-24
 
 ## Summary
 
-Introduce a clean domain model layer between the SQLite database and the public API. The core changes are: (1) separate domain types for Todo, Project, Area, Tag, and ChecklistItem with consistent typing, (2) move all type conversion from SQL to Go, and (3) structured hierarchical results for queries that return mixed types.
+Introduce a clean domain model layer between the SQLite database and the public API. The core changes are: (1) separate domain types for Todo, Project, Area, Tag, and ChecklistItem with consistent typing, (2) move all type conversion from SQL to Go, (3) structured hierarchical results for queries that return mixed types, and (4) a unified naming convention across the entire codebase.
 
 ## Motivation
 
 ### Current Issues
 
-1. **Union type confusion**: `Task` represents three distinct domain concepts (to-do, project, heading) with fields that are only valid for certain types. Users must check `.IsTodo()` before accessing `.Checklist`, and `.IsProject()` before accessing `.Items`.
+1. **Union type confusion**: `Task` represents three distinct domain concepts (todo, project, heading) with fields that are only valid for certain types. Users must check `.IsTodo()` before accessing `.Checklist`, and `.IsProject()` before accessing `.Items`.
 
 2. **Inconsistent typing**: The same concept uses different types across structs:
    - `Task.Status` is `Status` (enum), but `ChecklistItem.Status` is `string`
@@ -25,6 +25,8 @@ Introduce a clean domain model layer between the SQLite database and the public 
 
 5. **Type-unsafe containers**: `Tag.Items` is `[]any`, requiring type assertions at every use site.
 
+6. **Inconsistent naming**: The same concept appears as "to-do", "todo", "Todo", and "Task" across SQL strings, Go types, JSON output, and comments. No canonical naming convention is defined.
+
 ### Goals
 
 - Each domain concept has its own Go type with only relevant fields
@@ -32,6 +34,50 @@ Introduce a clean domain model layer between the SQLite database and the public 
 - SQL only does data retrieval, not formatting
 - Queries can return both flat typed results and structured hierarchical results
 - Zero use of `any` in public model types
+
+## Naming Convention
+
+A unified naming convention across all layers of the codebase. The canonical term is **"todo"** (not "to-do", not "task" for the todo concept).
+
+### Naming Taxonomy
+
+| Layer | Naming | Examples |
+|-------|--------|----------|
+| Database | Raw integers | `type = 0`, `status = 0`, `start = 0` |
+| SQL constants | Internal, descriptive | `filterIsTodo = "type = 0"` |
+| Internal types | Unexported Go | `taskType`, `taskTypeTodo` |
+| Internal strings | `"todo"` | `taskTypeStringTodo = "todo"` (not `"to-do"`) |
+| Domain structs | Exported Go | `Todo`, `Project`, `Heading`, `Area`, `Tag`, `ChecklistItem` |
+| Query interfaces | Exported Go | `TodoQueryBuilder`, `ProjectQueryBuilder` |
+| URL scheme interfaces | Exported Go | `TodoAdder`, `TodoUpdater`, `ProjectAdder`, `ProjectUpdater` |
+| Comments and docs | `todo` everywhere | `// todo item`, `a todo in Things 3` |
+
+### Key Decisions
+
+1. **`"todo"` not `"to-do"`**: All string representations use `"todo"` without hyphen. The database stores integer `0`, not a string. The previous `"to-do"` string existed only in our SQL CASE expressions and will be eliminated.
+
+2. **`taskType` is unexported**: After the type split, `TaskType` becomes `taskType` (unexported). Users distinguish types through Go's type system (`Todo`, `Project`, `Heading`), not through an enum. The enum remains internally for scan-layer routing.
+
+3. **`client.Tasks()` is removed**: No generic "task" query entry point. Users choose `client.Todos()` or `client.Projects()` explicitly. Mixed-type results come from structured result types like `SearchResult`.
+
+4. **`Todos()` is a builder entry point**: `client.Todos()` returns `TodoQueryBuilder` (no ctx parameter). The convenience shorthand `client.Todos(ctx)` (returning `[]Todo` directly) is removed. Use `client.Todos().All(ctx)` instead.
+
+5. **Consistent `"todo"` in all contexts**: Comments, doc strings, error messages, CLI output, and JSON serialization all use `"todo"`, never `"to-do"` or `"task"` (when referring to the todo concept specifically).
+
+### Before / After
+
+```
+Before                              After
+------                              -----
+taskTypeStringTodo = "to-do"        taskTypeStringTodo = "todo"
+TaskType (exported)                 taskType (unexported)
+TaskTypeTodo (exported)             taskTypeTodo (unexported)
+Task struct (union type)            Todo, Project, Heading structs
+Task.Type TaskType                  (removed, Go type is the type)
+client.Tasks() TaskQueryBuilder     (removed)
+client.Todos(ctx) []Task            client.Todos() TodoQueryBuilder
+"a to-do item" (in comments)       "a todo item"
+```
 
 ## Design
 
@@ -59,7 +105,7 @@ SQLite Database (TMTask, TMArea, TMTag, TMChecklistItem)
 ### Domain Types
 
 ```go
-// Todo represents an actionable to-do item.
+// Todo represents an actionable todo item.
 type Todo struct {
     UUID   string
     Title  string
@@ -152,7 +198,7 @@ type Tag struct {
     UUID     string
     Title    string
     Shortcut string
-    Tasks    []Todo     // Tagged todos
+    Todos    []Todo     // Tagged todos
     Projects []Project  // Tagged projects
     Areas    []Area     // Tagged areas
 }
@@ -178,7 +224,7 @@ Key differences from current `Task`:
 | ProjectUUID | always present | yes | no | no |
 | HeadingUUID | always present | yes | no | no |
 | Status | always present | yes | yes | no |
-| Type field | TaskType enum | not needed | not needed | not needed |
+| Type field | `TaskType` enum (exported) | not needed (Go type is the type) | not needed | not needed |
 
 ### Structured Results
 
@@ -343,21 +389,27 @@ for _, group := range result.Groups {
 client, _ := things3.NewClient()
 defer client.Close()
 
-// --- Flat typed queries (simple, common use cases) ---
+// --- Builder queries (primary API) ---
+// Todos() and Projects() are builder entry points, not convenience methods.
+// No client.Tasks() — users choose the type explicitly.
 
-// Todo queries
-todos, _ := client.Todos(ctx)                     // []Todo - all incomplete
-todos, _ := client.TodayTodos(ctx)                 // []Todo - today's todos
-todos, _ := client.InboxTodos(ctx)                 // []Todo - inbox todos
-
-// Project queries
-projects, _ := client.Projects(ctx)                // []Project - all incomplete
+todos, _ := client.Todos().All(ctx)                        // []Todo - all incomplete
+todos, _ := client.Todos().InArea(uuid).All(ctx)           // []Todo
+todos, _ := client.Todos().Status().Completed().All(ctx)   // []Todo
+projects, _ := client.Projects().All(ctx)                  // []Project
+projects, _ := client.Projects().InArea(uuid).All(ctx)     // []Project
 
 // Area and Tag queries
-areas, _ := client.Areas().All(ctx)                // []Area
-tags, _ := client.Tags().All(ctx)                  // []Tag
+areas, _ := client.Areas().All(ctx)                        // []Area
+tags, _ := client.Tags().All(ctx)                          // []Tag
 
-// --- Structured queries (hierarchical, organized) ---
+// Search through builders
+todos, _ := client.Todos().Search("keyword").All(ctx)      // []Todo
+projects, _ := client.Projects().Search("keyword").All(ctx) // []Project
+areas, _ := client.Areas().Search("keyword").All(ctx)       // []Area
+
+// --- Convenience methods (common use cases) ---
+// TBD: exact list of convenience methods and their return types.
 
 result, _ := client.Today(ctx)                     // TodayResult (Area > Project > Todo)
 for _, group := range result.Groups {
@@ -368,18 +420,6 @@ for _, group := range result.Groups {
 
 results, _ := client.Search(ctx, "keyword")        // SearchResult
 // results.Todos, results.Projects, results.Areas, results.Tags
-
-// --- Builder queries (advanced, composable) ---
-
-// Typed builders with typed returns
-todos, _ := client.Todos().InArea(uuid).All(ctx)           // []Todo
-todos, _ := client.Todos().Status().Completed().All(ctx)   // []Todo
-projects, _ := client.Projects().InArea(uuid).All(ctx)     // []Project
-
-// Search through builders
-todos, _ := client.Todos().Search("keyword").All(ctx)      // []Todo
-projects, _ := client.Projects().Search("keyword").All(ctx) // []Project
-areas, _ := client.Areas().Search("keyword").All(ctx)       // []Area
 ```
 
 ### Internal Implementation
@@ -390,12 +430,12 @@ The internal `task` type (unexported) maps directly to TMTask:
 // task is the internal database row representation.
 // Not exported; converted to Todo/Project/Heading before returning to users.
 type task struct {
-    uuid       string
-    taskType   TaskType
-    status     Status
-    title      string
-    notes      string
-    start      *StartBucket
+    uuid     string
+    typ      taskType     // unexported enum: taskTypeTodo, taskTypeProject, taskTypeHeading
+    status   Status
+    title    string
+    notes    string
+    start    *StartBucket
     // ... all fields from TMTask
 }
 ```
@@ -453,13 +493,15 @@ All conversion moves to Go scan layer using existing functions (`thingsDateToTim
 
 | Type | Before | After |
 |------|--------|-------|
+| `TaskType` | exported enum | `taskType` unexported (Go types replace enum) |
+| `taskTypeStringTodo` | `"to-do"` | `"todo"` |
 | `ChecklistItem.Status` | `string` | `Status` enum |
-| `Task.Start` → `Todo.Start` | `string` | `*StartBucket` enum |
+| `Task.Start` -> `Todo.Start` | `string` | `*StartBucket` enum |
 | `Area.Type` | `string` (always "area") | removed (Go type is the type) |
 | `Tag.Type` | `string` (always "tag") | removed |
 | `ChecklistItem.Type` | `string` (always "checklist-item") | removed |
-| `Tag.Items` | `[]any` | `Tasks []Todo` + `Projects []Project` + `Areas []Area` |
-| `StartBucket` JSON | no marshaler | `MarshalJSON` / `UnmarshalJSON` (like `TaskType`, `Status`) |
+| `Tag.Items` | `[]any` | `Todos []Todo` + `Projects []Project` + `Areas []Area` |
+| `StartBucket` JSON | no marshaler | `MarshalJSON` / `UnmarshalJSON` (like `Status`) |
 
 ## Open Questions
 
@@ -478,29 +520,32 @@ These items require further discussion before implementation:
 ## Implementation Notes
 
 ### Phase 1: Foundation (no API changes)
-- Simplify SQL to return raw values
+- Simplify SQL to return raw values (remove all CASE expressions)
 - Unify scan layer to do all type conversion in Go
 - Fix `ChecklistItem.Status` to use `Status` enum
 - Add `MarshalJSON`/`UnmarshalJSON` to `StartBucket`
+- Change `taskTypeStringTodo` from `"to-do"` to `"todo"`
 - These changes are internal; public API stays the same temporarily
 
-### Phase 2: Type Split
-- Introduce unexported `task` as internal type
+### Phase 2: Type Split and Naming
+- Introduce unexported `task` and `taskType` as internal types
+- Demote `TaskType` to unexported `taskType`
 - Add `Todo`, `Project`, `Heading` as exported types
-- Add conversion functions
-- Update convenience methods to return typed results
-- Add typed builder entry points (`Todos()`, `Projects()`)
+- Add conversion functions (`taskToTodo`, `taskToProject`, `taskToHeading`)
+- Remove `client.Tasks()` entry point
+- Add typed builder entry points: `client.Todos()` -> `TodoQueryBuilder`, `client.Projects()` -> `ProjectQueryBuilder`
+- Update all comments and docs to use "todo" (not "to-do")
 
 ### Phase 3: Structured Results
 - Add `AreaGroup`, `ProjectGroup`, `TodayResult`, `SearchResult` types
 - Implement grouping logic (group todos by area, then by project within each area)
 - Handle area inheritance: todos inherit area from their project when not set directly
 - Update `Today()`, `Search()` to return structured results
-- Add flat convenience methods: `TodayTodos()`, `InboxTodos()`
 - Add `Areas().Search()`, `Tags().Search()` methods
 
 ### Phase 4: Cleanup
 - Remove exported `Task` type (replaced by Todo/Project/Heading)
+- Remove exported `TaskType` enum (replaced by unexported `taskType`)
 - Remove redundant `Type` fields from Area, Tag, ChecklistItem
-- Split `Tag.Items []any` into typed fields
+- Split `Tag.Items []any` into typed fields (`Todos`, `Projects`, `Areas`)
 - Update all tests

@@ -2,6 +2,7 @@ package things3
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -210,7 +211,7 @@ func (u *urlAttrs) SetString(key, value string) {
 
 // SetBool sets a boolean parameter as "true" or "false" string.
 func (u *urlAttrs) SetBool(key string, value bool) {
-	u.params[key] = fmt.Sprintf("%t", value)
+	u.params[key] = strconv.FormatBool(value)
 }
 
 // SetStrings joins values with separator and stores as string.

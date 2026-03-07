@@ -1,9 +1,10 @@
 package things3
 
 import (
+	"cmp"
 	"context"
 	"errors"
-	"sort"
+	"slices"
 	"time"
 )
 
@@ -83,11 +84,11 @@ func (d *db) Today(ctx context.Context) ([]Task, error) {
 	result = append(result, overdueTasks...)
 
 	// Sort by today_index and start_date
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].TodayIndex != result[j].TodayIndex {
-			return result[i].TodayIndex < result[j].TodayIndex
+	slices.SortFunc(result, func(a, b Task) int {
+		if c := cmp.Compare(a.TodayIndex, b.TodayIndex); c != 0 {
+			return c
 		}
-		return comparePtrTime(result[i].StartDate, result[j].StartDate)
+		return comparePtrTimeCmp(a.StartDate, b.StartDate)
 	})
 
 	return result, nil
@@ -139,8 +140,8 @@ func (d *db) Logbook(ctx context.Context) ([]Task, error) {
 	result = append(result, canceled...)
 
 	// Sort by stop_date (newest first)
-	sort.Slice(result, func(i, j int) bool {
-		return comparePtrTimeDesc(result[i].StopDate, result[j].StopDate)
+	slices.SortFunc(result, func(a, b Task) int {
+		return comparePtrTimeCmp(b.StopDate, a.StopDate)
 	})
 
 	return result, nil
@@ -182,8 +183,8 @@ func (d *db) Deadlines(ctx context.Context) ([]Task, error) {
 	}
 
 	// Sort by deadline
-	sort.Slice(tasks, func(i, j int) bool {
-		return comparePtrTime(tasks[i].Deadline, tasks[j].Deadline)
+	slices.SortFunc(tasks, func(a, b Task) int {
+		return comparePtrTimeCmp(a.Deadline, b.Deadline)
 	})
 
 	return tasks, nil
@@ -206,8 +207,8 @@ func (d *db) CreatedWithin(ctx context.Context, since time.Time) ([]Task, error)
 	}
 
 	// Sort by created date (newest first)
-	sort.Slice(tasks, func(i, j int) bool {
-		return tasks[i].Created.After(tasks[j].Created)
+	slices.SortFunc(tasks, func(a, b Task) int {
+		return b.Created.Compare(a.Created)
 	})
 
 	return tasks, nil

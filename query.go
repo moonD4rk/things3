@@ -191,13 +191,13 @@ func (q *taskQuery) buildWhere() string {
 	fb := newFilterBuilder()
 
 	// Always exclude recurring tasks
-	fb.addStatic(fmt.Sprintf("TASK.%s", filterIsNotRecurring))
+	fb.addStatic("TASK." + filterIsNotRecurring)
 
 	// Trashed filter (default: not trashed)
 	if q.trashed != nil && *q.trashed {
-		fb.addStatic(fmt.Sprintf("TASK.%s", filterIsTrashed))
+		fb.addStatic("TASK." + filterIsTrashed)
 	} else {
-		fb.addStatic(fmt.Sprintf("TASK.%s", filterIsNotTrashed))
+		fb.addStatic("TASK." + filterIsNotTrashed)
 	}
 
 	// Context trashed filter
@@ -208,11 +208,11 @@ func (q *taskQuery) buildWhere() string {
 	if q.taskType != nil {
 		switch *q.taskType {
 		case TaskTypeTodo:
-			fb.addStatic(fmt.Sprintf("TASK.%s", filterIsTodo))
+			fb.addStatic("TASK." + filterIsTodo)
 		case TaskTypeProject:
-			fb.addStatic(fmt.Sprintf("TASK.%s", filterIsProject))
+			fb.addStatic("TASK." + filterIsProject)
 		case TaskTypeHeading:
-			fb.addStatic(fmt.Sprintf("TASK.%s", filterIsHeading))
+			fb.addStatic("TASK." + filterIsHeading)
 		}
 	}
 
@@ -220,11 +220,11 @@ func (q *taskQuery) buildWhere() string {
 	if q.status != nil {
 		switch *q.status {
 		case StatusIncomplete:
-			fb.addStatic(fmt.Sprintf("TASK.%s", filterIsIncomplete))
+			fb.addStatic("TASK." + filterIsIncomplete)
 		case StatusCanceled:
-			fb.addStatic(fmt.Sprintf("TASK.%s", filterIsCanceled))
+			fb.addStatic("TASK." + filterIsCanceled)
 		case StatusCompleted:
-			fb.addStatic(fmt.Sprintf("TASK.%s", filterIsCompleted))
+			fb.addStatic("TASK." + filterIsCompleted)
 		}
 	}
 
@@ -232,11 +232,11 @@ func (q *taskQuery) buildWhere() string {
 	if q.start != nil {
 		switch *q.start {
 		case StartInbox:
-			fb.addStatic(fmt.Sprintf("TASK.%s", filterIsInbox))
+			fb.addStatic("TASK." + filterIsInbox)
 		case StartAnytime:
-			fb.addStatic(fmt.Sprintf("TASK.%s", filterIsAnytime))
+			fb.addStatic("TASK." + filterIsAnytime)
 		case StartSomeday:
-			fb.addStatic(fmt.Sprintf("TASK.%s", filterIsSomeday))
+			fb.addStatic("TASK." + filterIsSomeday)
 		}
 	}
 
@@ -289,18 +289,18 @@ func (q *taskQuery) buildWhere() string {
 
 	// Date filters using new type-safe structure
 	if q.startDateFilter != nil {
-		fb.addDateFilterValue(fmt.Sprintf("TASK.%s", colStartDate), q.startDateFilter, true)
+		fb.addDateFilterValue("TASK."+colStartDate, q.startDateFilter, true)
 	}
 	if q.stopDateFilter != nil {
-		fb.addDateFilterValue(fmt.Sprintf("TASK.%s", colStopDate), q.stopDateFilter, false)
+		fb.addDateFilterValue("TASK."+colStopDate, q.stopDateFilter, false)
 	}
 	if q.deadlineFilter != nil {
-		fb.addDateFilterValue(fmt.Sprintf("TASK.%s", colDeadline), q.deadlineFilter, true)
+		fb.addDateFilterValue("TASK."+colDeadline, q.deadlineFilter, true)
 	}
 
 	// CreatedAfter filter
 	if q.createdAfter != nil {
-		fb.addCreatedAfterFilter(fmt.Sprintf("TASK.%s", colCreationDate), *q.createdAfter)
+		fb.addCreatedAfterFilter("TASK."+colCreationDate, *q.createdAfter)
 	}
 
 	// Search filter

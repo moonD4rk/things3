@@ -1,7 +1,6 @@
 package things3
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -41,7 +40,7 @@ func TestNewClient(t *testing.T) {
 
 func TestClientConvenienceMethods(t *testing.T) {
 	client := newTestClient(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("Inbox", func(t *testing.T) {
 		tasks, err := client.Inbox(ctx)
@@ -118,7 +117,7 @@ func TestClientConvenienceMethods(t *testing.T) {
 
 func TestClientQueryBuilders(t *testing.T) {
 	client := newTestClient(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("Tasks builder", func(t *testing.T) {
 		count, err := client.Tasks().
@@ -143,7 +142,7 @@ func TestClientQueryBuilders(t *testing.T) {
 
 func TestClientGet(t *testing.T) {
 	client := newTestClient(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("task", func(t *testing.T) {
 		result, err := client.Get(ctx, testUUIDTodoInbox)
@@ -181,7 +180,7 @@ func TestClientGet(t *testing.T) {
 
 func TestClientSearch(t *testing.T) {
 	client := newTestClient(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tasks, err := client.Search(ctx, "To-Do in Today")
 	require.NoError(t, err)
@@ -190,7 +189,7 @@ func TestClientSearch(t *testing.T) {
 
 func TestClientChecklistItems(t *testing.T) {
 	client := newTestClient(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	items, err := client.ChecklistItems(ctx, testUUIDTodoInboxChecklist)
 	require.NoError(t, err)
@@ -199,7 +198,7 @@ func TestClientChecklistItems(t *testing.T) {
 
 func TestClientToken(t *testing.T) {
 	client := newTestClient(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	token, err := client.Token(ctx)
 	require.NoError(t, err)

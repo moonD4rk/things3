@@ -1,7 +1,6 @@
 package things3
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +11,7 @@ import (
 
 func TestTaskQueryChaining(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test method chaining
 	tasks, err := db.Tasks().
@@ -26,7 +25,7 @@ func TestTaskQueryChaining(t *testing.T) {
 
 func TestTaskQueryWithUUID(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// First get a valid task UUID from the database
 	tasks, err := db.Tasks().Status().Incomplete().All(ctx)
@@ -43,7 +42,7 @@ func TestTaskQueryWithUUID(t *testing.T) {
 
 func TestTaskQueryWithType(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test todos
 	todos, err := db.Tasks().
@@ -68,7 +67,7 @@ func TestTaskQueryWithType(t *testing.T) {
 
 func TestTaskQueryWithStatus(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test incomplete
 	tasks, err := db.Tasks().Status().Incomplete().All(ctx)
@@ -94,7 +93,7 @@ func TestTaskQueryWithStatus(t *testing.T) {
 
 func TestTaskQueryWithStart(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test Inbox
 	tasks, err := db.Tasks().
@@ -129,7 +128,7 @@ func TestTaskQueryWithStart(t *testing.T) {
 
 func TestTaskQueryInArea(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test with specific area
 	tasks, err := db.Tasks().
@@ -165,7 +164,7 @@ func TestTaskQueryInArea(t *testing.T) {
 
 func TestTaskQueryInProject(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test with specific project
 	tasks, err := db.Tasks().
@@ -178,7 +177,7 @@ func TestTaskQueryInProject(t *testing.T) {
 
 func TestTaskQueryInTag(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test with specific tag
 	tasks, err := db.Tasks().
@@ -202,7 +201,7 @@ func TestTaskQueryInTag(t *testing.T) {
 
 func TestTaskQueryWithDeadline(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test has deadline
 	tasks, err := db.Tasks().
@@ -227,7 +226,7 @@ func TestTaskQueryWithDeadline(t *testing.T) {
 
 func TestTaskQueryWithStartDate(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test has start date
 	tasks, err := db.Tasks().
@@ -242,7 +241,7 @@ func TestTaskQueryWithStartDate(t *testing.T) {
 
 func TestTaskQueryTrashed(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test trashed
 	tasks, err := db.Tasks().
@@ -267,7 +266,7 @@ func TestTaskQueryTrashed(t *testing.T) {
 
 func TestTaskQuerySearch(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test search
 	tasks, err := db.Tasks().
@@ -288,7 +287,7 @@ func TestTaskQuerySearch(t *testing.T) {
 
 func TestTaskQueryCreatedAfter(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test many years ago - should return all tasks created after that time
 	allTasks, err := db.Tasks().
@@ -341,7 +340,7 @@ func TestTaskQueryCreatedAfter(t *testing.T) {
 
 func TestTaskQueryCount(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	count, err := db.Tasks().
 		Status().Incomplete().
@@ -352,7 +351,7 @@ func TestTaskQueryCount(t *testing.T) {
 
 func TestTaskQueryFirst(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test First with results
 	task, err := db.Tasks().
@@ -370,7 +369,7 @@ func TestTaskQueryFirst(t *testing.T) {
 
 func TestTaskQueryIncludeItems(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test include items on project
 	projects, err := db.Tasks().
@@ -395,7 +394,7 @@ func TestTaskQueryIncludeItems(t *testing.T) {
 
 func TestTaskQueryOrderByTodayIndex(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tasks, err := db.Tasks().
 		StartDate().Exists(true).
@@ -418,7 +417,7 @@ func TestTaskQueryOrderByTodayIndex(t *testing.T) {
 
 func TestStatusFilter(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test Incomplete
 	tasks, err := db.Tasks().
@@ -450,7 +449,7 @@ func TestStatusFilter(t *testing.T) {
 
 func TestStartFilter(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test Inbox
 	tasks, err := db.Tasks().
@@ -485,7 +484,7 @@ func TestStartFilter(t *testing.T) {
 
 func TestTypeFilter(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test Todo
 	tasks, err := db.Tasks().
@@ -519,7 +518,7 @@ func TestTypeFilter(t *testing.T) {
 
 func TestDateFilterExists(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test StartDate exists
 	tasks, err := db.Tasks().
@@ -564,7 +563,7 @@ func TestDateFilterExists(t *testing.T) {
 
 func TestDateFilterRelative(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Now()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
 
@@ -632,7 +631,7 @@ func TestDateFilterRelative(t *testing.T) {
 
 func TestDateFilterComparison(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Pivot date: 3 deadlines before 2025, 1 after (2040-11-04)
 	pivot := time.Date(2025, 1, 1, 0, 0, 0, 0, time.Local)
@@ -764,7 +763,7 @@ func TestDateFilterComparison(t *testing.T) {
 
 func TestSubBuilderChaining(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test complex chaining with multiple sub-builders
 	tasks, err := db.Tasks().
@@ -799,7 +798,7 @@ func TestSubBuilderChaining(t *testing.T) {
 
 func TestContextTrashedFilter(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test 1: Without ContextTrashed filter - should include context-trashed tasks
 	tasksWithoutFilter, err := db.Tasks().
@@ -849,7 +848,7 @@ func TestContextTrashedFilter(t *testing.T) {
 
 func TestContextTrashedTaskDetails(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Verify the test task exists and has expected properties
 	task, err := db.Tasks().
@@ -874,7 +873,7 @@ func TestContextTrashedTaskDetails(t *testing.T) {
 
 func TestWithUUIDPrefix(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// testUUIDTodoInbox = "DfYoiXcNLQssk9DkSoJV3Y" starts with "DfYo"
 	tasks, err := db.Tasks().
@@ -903,7 +902,7 @@ func TestWithUUIDPrefix(t *testing.T) {
 
 func TestStopDateFilter(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Completed tasks should have stop dates
 	tasks, err := db.Tasks().
@@ -929,7 +928,7 @@ func TestStopDateFilter(t *testing.T) {
 
 func TestHasProject(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Tasks with a project
 	tasksWithProject, err := db.Tasks().
@@ -954,7 +953,7 @@ func TestHasProject(t *testing.T) {
 
 func TestHasHeading(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Tasks in a heading
 	tasksInHeading, err := db.Tasks().
@@ -982,7 +981,7 @@ func TestHasHeading(t *testing.T) {
 
 func TestAreaWithTitle(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	area, err := db.Areas().WithTitle("Area 1").First(ctx)
 	require.NoError(t, err)
@@ -996,7 +995,7 @@ func TestAreaWithTitle(t *testing.T) {
 
 func TestAreaVisible(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	visibleAreas, err := db.Areas().Visible(true).All(ctx)
 	require.NoError(t, err)
@@ -1012,7 +1011,7 @@ func TestAreaVisible(t *testing.T) {
 
 func TestAreaHasTag(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	areasWithTag, err := db.Areas().HasTag(true).All(ctx)
 	require.NoError(t, err)
@@ -1026,7 +1025,7 @@ func TestAreaHasTag(t *testing.T) {
 
 func TestTagWithUUID(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tag, err := db.Tags().WithUUID(testUUIDTagOffice).First(ctx)
 	require.NoError(t, err)
@@ -1036,7 +1035,7 @@ func TestTagWithUUID(t *testing.T) {
 
 func TestTagWithParent(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// No nested tags in test data, so result should be empty
 	tags, err := db.Tags().WithParent("nonexistent").All(ctx)

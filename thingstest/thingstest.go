@@ -28,17 +28,13 @@ import (
 )
 
 var (
-	sourcePath string
-	pathOnce   sync.Once
-)
-
-func initSourcePath() {
-	pathOnce.Do(func() {
+	sourcePath     string
+	initSourcePath = sync.OnceFunc(func() {
 		_, filename, _, _ := runtime.Caller(0)
 		dir := filepath.Dir(filename)
 		sourcePath = filepath.Join(dir, "..", "testdata", "main.sqlite")
 	})
-}
+)
 
 // DatabasePath copies the things3 test fixture database to a temporary
 // directory and returns the path to the copy. The temporary file is

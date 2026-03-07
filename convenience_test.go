@@ -1,7 +1,6 @@
 package things3
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -11,7 +10,7 @@ import (
 
 func TestInbox(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tasks, err := db.Inbox(ctx)
 	require.NoError(t, err)
@@ -20,7 +19,7 @@ func TestInbox(t *testing.T) {
 
 func TestToday(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test all Today items
 	tasks, err := db.Today(ctx)
@@ -54,7 +53,7 @@ func TestToday(t *testing.T) {
 
 func TestUpcoming(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tasks, err := db.Upcoming(ctx)
 	require.NoError(t, err)
@@ -63,7 +62,7 @@ func TestUpcoming(t *testing.T) {
 
 func TestAnytime(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tasks, err := db.Anytime(ctx)
 	require.NoError(t, err)
@@ -82,7 +81,7 @@ func TestAnytime(t *testing.T) {
 
 func TestSomeday(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tasks, err := db.Someday(ctx)
 	require.NoError(t, err)
@@ -91,7 +90,7 @@ func TestSomeday(t *testing.T) {
 
 func TestLogbook(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tasks, err := db.Logbook(ctx)
 	require.NoError(t, err)
@@ -100,7 +99,7 @@ func TestLogbook(t *testing.T) {
 
 func TestCompleted(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tasks, err := db.Completed(ctx)
 	require.NoError(t, err)
@@ -109,7 +108,7 @@ func TestCompleted(t *testing.T) {
 
 func TestCanceled(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tasks, err := db.Canceled(ctx)
 	require.NoError(t, err)
@@ -118,7 +117,7 @@ func TestCanceled(t *testing.T) {
 
 func TestTodos(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test incomplete todos
 	todos, err := db.Todos(ctx)
@@ -164,7 +163,7 @@ func TestTodos(t *testing.T) {
 
 func TestProjects(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test incomplete projects (not trashed)
 	projects, err := db.Projects(ctx)
@@ -185,7 +184,7 @@ func TestProjects(t *testing.T) {
 
 func TestAreas(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test all areas
 	areas, err := db.Areas().All(ctx)
@@ -210,7 +209,7 @@ func TestAreas(t *testing.T) {
 
 func TestTags(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test all tags
 	tags, err := db.Tags().All(ctx)
@@ -242,7 +241,7 @@ func TestTags(t *testing.T) {
 
 func TestDeadlines(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test all deadlines
 	tasks, err := db.Deadlines(ctx)
@@ -268,7 +267,7 @@ func TestDeadlines(t *testing.T) {
 
 func TestTrash(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test all trashed items
 	tasks, err := db.Trash(ctx)
@@ -296,7 +295,7 @@ func TestTrash(t *testing.T) {
 
 func TestChecklist(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test todo with checklist
 	items, err := db.ChecklistItems(ctx, testUUIDTodoInboxChecklist)
@@ -311,7 +310,7 @@ func TestChecklist(t *testing.T) {
 
 func TestSearch(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test invalid query
 	tasks, err := db.Search(ctx, "invalid_query")
@@ -333,7 +332,7 @@ func TestSearch(t *testing.T) {
 
 func TestGetByUUID(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test invalid UUID
 	result, err := db.Get(ctx, "invalid_uuid")
@@ -351,7 +350,7 @@ func TestGetByUUID(t *testing.T) {
 
 func TestCreatedWithin(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test zero time - should return error
 	_, err := db.CreatedWithin(ctx, time.Time{})
@@ -385,7 +384,7 @@ func TestCreatedWithin(t *testing.T) {
 
 func TestTasks(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test tasks count with filters
 	count, err := db.Tasks().
@@ -435,7 +434,7 @@ func TestDatabaseVersionMismatch(t *testing.T) {
 
 func TestToken(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	token, err := db.Token(ctx)
 	require.NoError(t, err)
@@ -444,7 +443,7 @@ func TestToken(t *testing.T) {
 
 func TestReminderTime(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	task, err := db.Tasks().WithUUID(testUUIDTodoUpcoming).First(ctx)
 	require.NoError(t, err)

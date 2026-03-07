@@ -42,9 +42,9 @@ func buildTasksSQL(wherePredicate, orderPredicate string) string {
 		orderPredicate = fmt.Sprintf("TASK.%q", indexDefault)
 	}
 
-	startDateExpr := thingsDateExpressionToISODate(fmt.Sprintf("TASK.%s", colStartDate))
-	deadlineExpr := thingsDateExpressionToISODate(fmt.Sprintf("TASK.%s", colDeadline))
-	reminderTimeExpr := thingsTimeExpressionToISOTime(fmt.Sprintf("TASK.%s", colReminderTime))
+	startDateExpr := thingsDateExpressionToISODate("TASK." + colStartDate)
+	deadlineExpr := thingsDateExpressionToISODate("TASK." + colDeadline)
+	reminderTimeExpr := thingsTimeExpressionToISOTime("TASK." + colReminderTime)
 
 	return fmt.Sprintf(`
 		SELECT DISTINCT

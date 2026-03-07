@@ -75,9 +75,9 @@ func (f equalFilter) SQL() string {
 	switch v := f.value.(type) {
 	case bool:
 		if v {
-			return fmt.Sprintf("%s IS NOT NULL", f.column)
+			return f.column + " IS NOT NULL"
 		}
-		return fmt.Sprintf("%s IS NULL", f.column)
+		return f.column + " IS NULL"
 	case string:
 		return fmt.Sprintf("%s = '%s'", f.column, escapeString(v))
 	default:
@@ -282,9 +282,9 @@ type thingsDateFilter struct {
 func (f thingsDateFilter) SQL() string {
 	switch f.op {
 	case dateOpExists:
-		return fmt.Sprintf("%s IS NOT NULL", f.column)
+		return f.column + " IS NOT NULL"
 	case dateOpNotExists:
-		return fmt.Sprintf("%s IS NULL", f.column)
+		return f.column + " IS NULL"
 	case dateOpFuture:
 		return fmt.Sprintf("%s > %s", f.column, todayThingsDateSQL())
 	case dateOpPast:
@@ -331,13 +331,13 @@ func (f unixTimeFilter) SQL() string {
 
 	switch f.op {
 	case dateOpExists:
-		return fmt.Sprintf("%s IS NOT NULL", f.column)
+		return f.column + " IS NOT NULL"
 	case dateOpNotExists:
-		return fmt.Sprintf("%s IS NULL", f.column)
+		return f.column + " IS NULL"
 	case dateOpFuture:
-		return fmt.Sprintf("%s > date('now', 'localtime')", dateExpr)
+		return dateExpr + " > date('now', 'localtime')"
 	case dateOpPast:
-		return fmt.Sprintf("%s <= date('now', 'localtime')", dateExpr)
+		return dateExpr + " <= date('now', 'localtime')"
 	case dateOpEqual, dateOpBefore, dateOpBeforeEq, dateOpAfter, dateOpAfterEq:
 		if f.value == "" {
 			return ""
@@ -417,9 +417,9 @@ func (b *filterBuilder) addDateFilterValue(column string, v *dateFilterValue, is
 	// Handle existence check
 	if v.hasDate != nil {
 		if *v.hasDate {
-			return b.add(static(fmt.Sprintf("%s IS NOT NULL", column)))
+			return b.add(static(column + " IS NOT NULL"))
 		}
-		return b.add(static(fmt.Sprintf("%s IS NULL", column)))
+		return b.add(static(column + " IS NULL"))
 	}
 
 	// Handle relative date (future/past)
@@ -433,9 +433,9 @@ func (b *filterBuilder) addDateFilterValue(column string, v *dateFilterValue, is
 		// Unix timestamp format
 		dateExpr := fmt.Sprintf("date(%s, 'unixepoch', 'localtime')", column)
 		if v.relative == dateFuture {
-			return b.add(static(fmt.Sprintf("%s > date('now', 'localtime')", dateExpr)))
+			return b.add(static(dateExpr + " > date('now', 'localtime')"))
 		}
-		return b.add(static(fmt.Sprintf("%s <= date('now', 'localtime')", dateExpr)))
+		return b.add(static(dateExpr + " <= date('now', 'localtime')"))
 	}
 
 	// Handle specific date comparison

@@ -14,34 +14,19 @@ const (
 	timeFormat     = "15:04"
 )
 
-// comparePtrTime compares two *time.Time pointers for sorting.
+// comparePtrTimeCmp compares two *time.Time pointers for use with slices.SortFunc.
 // nil values are sorted to the end.
-func comparePtrTime(a, b *time.Time) bool {
+func comparePtrTimeCmp(a, b *time.Time) int {
 	if a == nil && b == nil {
-		return false
+		return 0
 	}
 	if a == nil {
-		return false
+		return 1
 	}
 	if b == nil {
-		return true
+		return -1
 	}
-	return a.Before(*b)
-}
-
-// comparePtrTimeDesc compares two *time.Time pointers for descending sort.
-// nil values are sorted to the end.
-func comparePtrTimeDesc(a, b *time.Time) bool {
-	if a == nil && b == nil {
-		return false
-	}
-	if a == nil {
-		return false
-	}
-	if b == nil {
-		return true
-	}
-	return a.After(*b)
+	return a.Compare(*b)
 }
 
 // parseDate parses a date string in "2006-01-02" format.

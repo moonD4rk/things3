@@ -22,7 +22,7 @@ func TestExecuteQuery_ContextCancellation(t *testing.T) {
 
 func TestExecuteQuery_EmptyResult(t *testing.T) {
 	db := newTestDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Query with UUID that doesn't exist should return empty, not error
 	tasks, err := db.Tasks().WithUUID("non-existent-uuid-12345").All(ctx)

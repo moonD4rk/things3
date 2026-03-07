@@ -11,17 +11,13 @@ import (
 var (
 	testDatabasePath    string
 	testDatabasePathOld string
-	testPathOnce        sync.Once
-)
-
-func initTestPaths() {
-	testPathOnce.Do(func() {
+	initTestPaths       = sync.OnceFunc(func() {
 		_, filename, _, _ := runtime.Caller(0)
 		dir := filepath.Dir(filename)
 		testDatabasePath = filepath.Join(dir, "testdata", "main.sqlite")
 		testDatabasePathOld = filepath.Join(dir, "testdata", "db2022", "main.sqlite")
 	})
-}
+)
 
 // Test expected counts from Python test suite.
 // Note: Some counts may differ slightly from Python due to database state.

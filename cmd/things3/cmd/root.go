@@ -35,6 +35,8 @@ query tasks, projects, areas, and tags from the command line.`,
 	cmd.AddCommand(NewVersionCmd())
 	cmd.AddCommand(NewListCmd())
 	cmd.AddCommand(NewSearchCmd())
+	cmd.AddCommand(NewTodoCmd())
+	cmd.AddCommand(NewProjectCmd())
 
 	return cmd
 }

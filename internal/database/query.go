@@ -12,6 +12,7 @@ import (
 type TaskFilter struct {
 	UUID               *string
 	UUIDPrefix         *string
+	Title              *string
 	TaskType           *int
 	Status             *int
 	Start              *int
@@ -25,7 +26,6 @@ type TaskFilter struct {
 	HasTags            *bool
 	DeadlineSuppressed *bool
 	Trashed            *bool
-	ContextTrashed     *bool
 	CreatedAfter       *time.Time
 	SearchQuery        *string
 	Index              string
@@ -43,25 +43,29 @@ func (f *TaskFilter) buildWhere() string {
 	w.add("TASK." + filterIsNotRecurring)
 
 	// Trashed filter (default: not trashed)
+	// When viewing trash, only check the task's own trashed flag.
+	// Otherwise, also exclude tasks whose parent project is trashed.
 	if f.Trashed != nil && *f.Trashed {
 		w.add("TASK." + filterIsTrashed)
 	} else {
 		w.add("TASK." + filterIsNotTrashed)
+		notTrashed := false
+		w.addTruthy("PROJECT.trashed", &notTrashed)
+		w.addTruthy("PROJECT_OF_HEADING.trashed", &notTrashed)
 	}
-
-	// Context trashed
-	w.addTruthy("PROJECT.trashed", f.ContextTrashed)
-	w.addTruthy("PROJECT_OF_HEADING.trashed", f.ContextTrashed)
 
 	// Integer field filters
 	w.addIntEqual("TASK.type", f.TaskType)
 	w.addIntEqual("TASK.status", f.Status)
 	w.addIntEqual("TASK.start", f.Start)
 
-	// UUID filters
+	// Identity filters
 	w.addStringEqual("TASK.uuid", f.UUID)
 	if f.UUIDPrefix != nil {
 		w.addLike("TASK.uuid", *f.UUIDPrefix+"%")
+	}
+	if f.Title != nil {
+		w.addLike("TASK.title", "%"+*f.Title+"%")
 	}
 
 	// Relation filters

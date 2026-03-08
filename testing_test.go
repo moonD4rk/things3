@@ -27,7 +27,7 @@ const (
 	testDeadlineFuture  = 1
 	testDeadlines       = 4 // testDeadlinePast + testDeadlineFuture
 	testAreas           = 3
-	testTodosIncomplete = 16                       // Incomplete todos (type=0) including context-trashed
+	testTodosIncomplete = 15                       // Incomplete todos (type=0) excluding parent-trashed
 	testTodosInProject  = 4                        // Incomplete todos (type=0) in test project
 	testAuthToken       = "vKkylosuSuGwxrz7qcklOw" //nolint:gosec // Test token, not a real credential
 )
@@ -84,7 +84,7 @@ var (
 	testTodosAnytimeUUIDs = []string{
 		testUUIDTodoInToday, testUUIDTodoAnytime, testUUIDTodoInProject,
 		testUUIDTodoInArea1, testUUIDTodoInHeading, testUUIDTodoRepeating,
-		testUUIDTodoInArea3, testUUIDTodoInArea1Tags, testUUIDTodoInDeletedProject,
+		testUUIDTodoInArea3, testUUIDTodoInArea1Tags,
 		testUUIDTodoOverdueInToday, testUUIDTodoOverdueNotToday,
 	}
 

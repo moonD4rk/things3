@@ -733,66 +733,53 @@ func TestSubBuilderChaining(t *testing.T) {
 }
 
 // =============================================================================
-// Context Trashed Filter Tests
+// Parent Trashed Filter Tests
 // =============================================================================
 
-func TestContextTrashedFilter(t *testing.T) {
+func TestDefaultExcludesParentTrashed(t *testing.T) {
 	db := newTestDB(t)
 	ctx := t.Context()
 
-	// Without ContextTrashed filter - should include context-trashed todos
-	todosWithoutFilter, err := db.Todos().
+	// Default query should automatically exclude todos in trashed projects
+	todos, err := db.Todos().
 		Start().Anytime().
 		Status().Incomplete().
 		All(ctx)
 	require.NoError(t, err)
 
-	foundWithoutFilter := false
-	for _, todo := range todosWithoutFilter {
-		if todo.UUID == testUUIDTodoInDeletedProject {
-			foundWithoutFilter = true
-			break
-		}
+	for _, todo := range todos {
+		assert.NotEqual(t, testUUIDTodoInDeletedProject, todo.UUID,
+			"default query should exclude todo in trashed project")
 	}
-	assert.True(t, foundWithoutFilter,
-		"Without ContextTrashed filter, context-trashed todo should be included")
-
-	// With ContextTrashed(false) - should exclude context-trashed todos
-	todosWithFilter, err := db.Todos().
-		Start().Anytime().
-		Status().Incomplete().
-		ContextTrashed(false).
-		All(ctx)
-	require.NoError(t, err)
-
-	foundWithFilter := false
-	for _, todo := range todosWithFilter {
-		if todo.UUID == testUUIDTodoInDeletedProject {
-			foundWithFilter = true
-			break
-		}
-	}
-	assert.False(t, foundWithFilter,
-		"With ContextTrashed(false), context-trashed todo should be excluded")
-
-	expectedCount := len(todosWithoutFilter) - 1
-	assert.Len(t, todosWithFilter, expectedCount,
-		"ContextTrashed(false) should filter out exactly 1 context-trashed todo")
 }
 
-func TestContextTrashedTodoDetails(t *testing.T) {
+func TestInTrashIncludesParentTrashed(t *testing.T) {
 	db := newTestDB(t)
 	ctx := t.Context()
 
-	todo, err := db.Todos().
-		WithUUID(testUUIDTodoInDeletedProject).
-		First(ctx)
+	// InTrash query should not apply parent trashed filter
+	todos, err := db.Todos().
+		Trashed(true).
+		Status().Any().
+		All(ctx)
 	require.NoError(t, err)
 
-	assert.Equal(t, "Task in Deleted Project", todo.Title)
-	assert.NotEmpty(t, todo.ProjectTitle)
-	assert.Equal(t, "Deleted Project", todo.ProjectTitle)
-	assert.False(t, todo.Trashed, "Todo itself should not be trashed")
+	// Trashed query returns explicitly trashed tasks only
+	for _, todo := range todos {
+		assert.True(t, todo.Trashed, "InTrash query should only return trashed todos")
+	}
+}
+
+func TestParentTrashedTodoExcludedByDefault(t *testing.T) {
+	db := newTestDB(t)
+	ctx := t.Context()
+
+	// UUID lookup also excludes parent-trashed todos by default
+	_, err := db.Todos().
+		WithUUID(testUUIDTodoInDeletedProject).
+		First(ctx)
+	assert.ErrorIs(t, err, ErrTodoNotFound,
+		"todo in trashed project should not be found by default")
 }
 
 // =============================================================================

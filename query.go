@@ -47,6 +47,18 @@ func (q *todoQuery) WithUUID(uuid string) TodoQueryBuilder {
 	return q
 }
 
+// WithUUIDPrefix filters todos by UUID prefix (LIKE match).
+func (q *todoQuery) WithUUIDPrefix(prefix string) TodoQueryBuilder {
+	q.inner.filter.UUIDPrefix = &prefix
+	return q
+}
+
+// WithTitle filters todos by title (keyword match).
+func (q *todoQuery) WithTitle(title string) TodoQueryBuilder {
+	q.inner.filter.Title = &title
+	return q
+}
+
 // Status returns a StatusFilter for type-safe status filtering.
 func (q *todoQuery) Status() StatusFilter[TodoQueryBuilder] {
 	return &statusFilter[TodoQueryBuilder]{query: q.inner, parent: q}
@@ -60,12 +72,6 @@ func (q *todoQuery) Start() StartFilter[TodoQueryBuilder] {
 // Trashed filters todos by trash status.
 func (q *todoQuery) Trashed(trashed bool) TodoQueryBuilder {
 	q.inner.filter.Trashed = &trashed
-	return q
-}
-
-// ContextTrashed filters todos by the trash status of their context (project/heading).
-func (q *todoQuery) ContextTrashed(trashed bool) TodoQueryBuilder {
-	q.inner.filter.ContextTrashed = &trashed
 	return q
 }
 
@@ -130,6 +136,12 @@ func (q *todoQuery) StopDate() DateFilter[TodoQueryBuilder] {
 // Deadline returns a DateFilter for deadline filtering.
 func (q *todoQuery) Deadline() DateFilter[TodoQueryBuilder] {
 	return &dateFilter[TodoQueryBuilder]{query: q.inner, parent: q, field: dateFieldDeadline}
+}
+
+// DeadlineSuppressed filters todos by whether the deadline has been suppressed.
+func (q *todoQuery) DeadlineSuppressed(suppressed bool) TodoQueryBuilder {
+	q.inner.filter.DeadlineSuppressed = &suppressed
+	return q
 }
 
 // CreatedAfter filters todos created after the specified time.
@@ -243,6 +255,12 @@ func (d *db) Projects() *projectQuery {
 // WithUUID filters projects by UUID (exact match).
 func (q *projectQuery) WithUUID(uuid string) ProjectQueryBuilder {
 	q.inner.filter.UUID = &uuid
+	return q
+}
+
+// WithTitle filters projects by title (keyword match).
+func (q *projectQuery) WithTitle(title string) ProjectQueryBuilder {
+	q.inner.filter.Title = &title
 	return q
 }
 

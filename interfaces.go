@@ -85,11 +85,12 @@ type TodoQueryBuilder interface {
 	TodoQueryExecutor
 
 	WithUUID(uuid string) TodoQueryBuilder
+	WithUUIDPrefix(prefix string) TodoQueryBuilder
+	WithTitle(title string) TodoQueryBuilder
 
 	Status() StatusFilter[TodoQueryBuilder]
 	Start() StartFilter[TodoQueryBuilder]
 	Trashed(trashed bool) TodoQueryBuilder
-	ContextTrashed(trashed bool) TodoQueryBuilder
 
 	InArea(uuid string) TodoQueryBuilder
 	HasArea(has bool) TodoQueryBuilder
@@ -103,6 +104,7 @@ type TodoQueryBuilder interface {
 	StartDate() DateFilter[TodoQueryBuilder]
 	StopDate() DateFilter[TodoQueryBuilder]
 	Deadline() DateFilter[TodoQueryBuilder]
+	DeadlineSuppressed(suppressed bool) TodoQueryBuilder
 	CreatedAfter(t time.Time) TodoQueryBuilder
 
 	Search(query string) TodoQueryBuilder
@@ -117,6 +119,7 @@ type ProjectQueryBuilder interface {
 	ProjectQueryExecutor
 
 	WithUUID(uuid string) ProjectQueryBuilder
+	WithTitle(title string) ProjectQueryBuilder
 
 	Status() StatusFilter[ProjectQueryBuilder]
 	Start() StartFilter[ProjectQueryBuilder]

@@ -15,7 +15,7 @@ type URLBuilder interface {
 // Layer 5: URL Scheme Builder Interfaces
 // ============================================================================
 
-// TodoAdder builds URLs for creating new to-dos.
+// TodoAdder builds URLs for creating new todos.
 type TodoAdder interface {
 	URLBuilder
 
@@ -65,7 +65,7 @@ type ProjectAdder interface {
 	CompletionDate(date time.Time) ProjectAdder
 }
 
-// TodoUpdater builds URLs for updating existing to-dos.
+// TodoUpdater builds URLs for updating existing todos.
 type TodoUpdater interface {
 	URLBuilder
 
@@ -156,7 +156,7 @@ type AuthBatchCreator interface {
 	Execute(ctx context.Context) error
 }
 
-// BatchTodoConfigurator configures a to-do entry for batch operations.
+// BatchTodoConfigurator configures a todo entry for batch operations.
 type BatchTodoConfigurator interface {
 	Title(title string) BatchTodoConfigurator
 	Notes(notes string) BatchTodoConfigurator

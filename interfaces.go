@@ -8,13 +8,27 @@ import (
 )
 
 // ============================================================================
-// Layer 1: Reusable Small Interfaces (Terminal Operations)
+// Layer 1: Terminal Operation Interfaces
 // ============================================================================
 
-// TaskQueryExecutor executes task queries and returns results.
-type TaskQueryExecutor interface {
-	All(ctx context.Context) ([]Task, error)
-	First(ctx context.Context) (*Task, error)
+// TodoQueryExecutor executes todo queries and returns results.
+type TodoQueryExecutor interface {
+	All(ctx context.Context) ([]Todo, error)
+	First(ctx context.Context) (*Todo, error)
+	Count(ctx context.Context) (int, error)
+}
+
+// ProjectQueryExecutor executes project queries and returns results.
+type ProjectQueryExecutor interface {
+	All(ctx context.Context) ([]Project, error)
+	First(ctx context.Context) (*Project, error)
+	Count(ctx context.Context) (int, error)
+}
+
+// HeadingQueryExecutor executes heading queries and returns results.
+type HeadingQueryExecutor interface {
+	All(ctx context.Context) ([]Heading, error)
+	First(ctx context.Context) (*Heading, error)
 	Count(ctx context.Context) (int, error)
 }
 
@@ -32,94 +46,103 @@ type TagQueryExecutor interface {
 }
 
 // ============================================================================
-// Layer 2: Sub-builder Interfaces (Already Small Interfaces)
+// Layer 2: Generic Sub-builder Interfaces
 // ============================================================================
 
-// TypeFilterBuilder provides type-safe task type filtering.
-type TypeFilterBuilder interface {
-	Todo() TaskQueryBuilder
-	Project() TaskQueryBuilder
-	Heading() TaskQueryBuilder
+// StatusFilter provides type-safe status filtering.
+type StatusFilter[T any] interface {
+	Incomplete() T
+	Completed() T
+	Canceled() T
+	Any() T
 }
 
-// StatusFilterBuilder provides type-safe status filtering.
-type StatusFilterBuilder interface {
-	Incomplete() TaskQueryBuilder
-	Completed() TaskQueryBuilder
-	Canceled() TaskQueryBuilder
-	Any() TaskQueryBuilder
+// StartFilter provides type-safe start bucket filtering.
+type StartFilter[T any] interface {
+	Inbox() T
+	Anytime() T
+	Someday() T
 }
 
-// StartFilterBuilder provides type-safe start bucket filtering.
-type StartFilterBuilder interface {
-	Inbox() TaskQueryBuilder
-	Anytime() TaskQueryBuilder
-	Someday() TaskQueryBuilder
-}
-
-// DateFilterBuilder provides type-safe date filtering.
-type DateFilterBuilder interface {
-	Exists(has bool) TaskQueryBuilder
-	Future() TaskQueryBuilder
-	Past() TaskQueryBuilder
-	On(date time.Time) TaskQueryBuilder
-	Before(date time.Time) TaskQueryBuilder
-	OnOrBefore(date time.Time) TaskQueryBuilder
-	After(date time.Time) TaskQueryBuilder
-	OnOrAfter(date time.Time) TaskQueryBuilder
+// DateFilter provides type-safe date filtering.
+type DateFilter[T any] interface {
+	Exists(has bool) T
+	Future() T
+	Past() T
+	On(date time.Time) T
+	Before(date time.Time) T
+	OnOrBefore(date time.Time) T
+	After(date time.Time) T
+	OnOrAfter(date time.Time) T
 }
 
 // ============================================================================
-// Layer 3: Functional Group Interfaces (For Composition)
+// Layer 3: Composed Query Builder Interfaces
 // ============================================================================
 
-// TaskRelationFilter provides relation-based filtering for tasks.
-type TaskRelationFilter interface {
-	InArea(uuid string) TaskQueryBuilder
-	HasArea(has bool) TaskQueryBuilder
-	InProject(uuid string) TaskQueryBuilder
-	HasProject(has bool) TaskQueryBuilder
-	InHeading(uuid string) TaskQueryBuilder
-	HasHeading(has bool) TaskQueryBuilder
-	InTag(title string) TaskQueryBuilder
-	HasTag(has bool) TaskQueryBuilder
+// TodoQueryBuilder provides a fluent interface for building todo queries.
+type TodoQueryBuilder interface {
+	TodoQueryExecutor
+
+	WithUUID(uuid string) TodoQueryBuilder
+
+	Status() StatusFilter[TodoQueryBuilder]
+	Start() StartFilter[TodoQueryBuilder]
+	Trashed(trashed bool) TodoQueryBuilder
+	ContextTrashed(trashed bool) TodoQueryBuilder
+
+	InArea(uuid string) TodoQueryBuilder
+	HasArea(has bool) TodoQueryBuilder
+	InProject(uuid string) TodoQueryBuilder
+	HasProject(has bool) TodoQueryBuilder
+	InHeading(uuid string) TodoQueryBuilder
+	HasHeading(has bool) TodoQueryBuilder
+	InTag(title string) TodoQueryBuilder
+	HasTag(has bool) TodoQueryBuilder
+
+	StartDate() DateFilter[TodoQueryBuilder]
+	StopDate() DateFilter[TodoQueryBuilder]
+	Deadline() DateFilter[TodoQueryBuilder]
+	CreatedAfter(t time.Time) TodoQueryBuilder
+
+	Search(query string) TodoQueryBuilder
+	OrderByTodayIndex() TodoQueryBuilder
+	Limit(n int) TodoQueryBuilder
+
+	IncludeChecklist() TodoQueryBuilder
 }
 
-// TaskStateFilter provides state and type filtering for tasks.
-type TaskStateFilter interface {
-	Type() TypeFilterBuilder
-	Status() StatusFilterBuilder
-	Start() StartFilterBuilder
-	Trashed(trashed bool) TaskQueryBuilder
-	ContextTrashed(trashed bool) TaskQueryBuilder
+// ProjectQueryBuilder provides a fluent interface for building project queries.
+type ProjectQueryBuilder interface {
+	ProjectQueryExecutor
+
+	WithUUID(uuid string) ProjectQueryBuilder
+
+	Status() StatusFilter[ProjectQueryBuilder]
+	Start() StartFilter[ProjectQueryBuilder]
+	Trashed(trashed bool) ProjectQueryBuilder
+
+	InArea(uuid string) ProjectQueryBuilder
+	HasArea(has bool) ProjectQueryBuilder
+	InTag(title string) ProjectQueryBuilder
+	HasTag(has bool) ProjectQueryBuilder
+
+	StartDate() DateFilter[ProjectQueryBuilder]
+	StopDate() DateFilter[ProjectQueryBuilder]
+	Deadline() DateFilter[ProjectQueryBuilder]
+	CreatedAfter(t time.Time) ProjectQueryBuilder
+
+	Search(query string) ProjectQueryBuilder
+	Limit(n int) ProjectQueryBuilder
 }
 
-// TaskTimeFilter provides time-based filtering for tasks.
-type TaskTimeFilter interface {
-	CreatedAfter(t time.Time) TaskQueryBuilder
-	StartDate() DateFilterBuilder
-	StopDate() DateFilterBuilder
-	Deadline() DateFilterBuilder
-}
+// HeadingQueryBuilder provides a fluent interface for building heading queries.
+type HeadingQueryBuilder interface {
+	HeadingQueryExecutor
 
-// ============================================================================
-// Layer 4: Composed Query Builder Interfaces
-// ============================================================================
-
-// TaskQueryBuilder provides a fluent interface for building task queries.
-// Composed of: TaskQueryExecutor + TaskRelationFilter + TaskStateFilter + TaskTimeFilter
-type TaskQueryBuilder interface {
-	TaskQueryExecutor
-	TaskRelationFilter
-	TaskStateFilter
-	TaskTimeFilter
-
-	WithUUID(uuid string) TaskQueryBuilder
-	WithUUIDPrefix(prefix string) TaskQueryBuilder
-	WithDeadlineSuppressed(suppressed bool) TaskQueryBuilder
-	Search(query string) TaskQueryBuilder
-	OrderByTodayIndex() TaskQueryBuilder
-	IncludeItems(include bool) TaskQueryBuilder
+	WithUUID(uuid string) HeadingQueryBuilder
+	InProject(uuid string) HeadingQueryBuilder
+	Limit(n int) HeadingQueryBuilder
 }
 
 // AreaQueryBuilder provides a fluent interface for building area queries.
@@ -131,7 +154,6 @@ type AreaQueryBuilder interface {
 	Visible(visible bool) AreaQueryBuilder
 	InTag(title string) AreaQueryBuilder
 	HasTag(has bool) AreaQueryBuilder
-	IncludeItems(include bool) AreaQueryBuilder
 }
 
 // TagQueryBuilder provides a fluent interface for building tag queries.
@@ -141,23 +163,22 @@ type TagQueryBuilder interface {
 	WithUUID(uuid string) TagQueryBuilder
 	WithTitle(title string) TagQueryBuilder
 	WithParent(parentUUID string) TagQueryBuilder
-	IncludeItems(include bool) TagQueryBuilder
 }
 
 // ============================================================================
-// Layer 5: URL Scheme Builder Interfaces (aliased from internal/scheme)
+// Layer 4: URL Scheme Builder Interfaces (aliased from internal/scheme)
 // ============================================================================
 
 // URLBuilder builds and executes Things URL schemes.
 type URLBuilder = scheme.URLBuilder
 
-// TodoAdder builds URLs for creating new to-dos.
+// TodoAdder builds URLs for creating new todos.
 type TodoAdder = scheme.TodoAdder
 
 // ProjectAdder builds URLs for creating new projects.
 type ProjectAdder = scheme.ProjectAdder
 
-// TodoUpdater builds URLs for updating existing to-dos.
+// TodoUpdater builds URLs for updating existing todos.
 type TodoUpdater = scheme.TodoUpdater
 
 // ProjectUpdater builds URLs for updating existing projects.
@@ -167,7 +188,7 @@ type ProjectUpdater = scheme.ProjectUpdater
 type ShowNavigator = scheme.ShowNavigator
 
 // ============================================================================
-// Layer 6: Batch Operation Interfaces (aliased from internal/scheme)
+// Layer 5: Batch Operation Interfaces (aliased from internal/scheme)
 // ============================================================================
 
 // BatchCreator builds URLs for batch create operations.
@@ -176,7 +197,7 @@ type BatchCreator = scheme.BatchCreator
 // AuthBatchCreator builds URLs for batch operations including updates.
 type AuthBatchCreator = scheme.AuthBatchCreator
 
-// BatchTodoConfigurator configures a to-do entry for batch operations.
+// BatchTodoConfigurator configures a todo entry for batch operations.
 type BatchTodoConfigurator = scheme.BatchTodoConfigurator
 
 // BatchProjectConfigurator configures a project entry for batch operations.

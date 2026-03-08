@@ -1,4 +1,4 @@
-package db
+package database
 
 import (
 	"context"
@@ -32,6 +32,7 @@ type TaskFilter struct {
 	StartDateFilter    *DateFilterValue
 	StopDateFilter     *DateFilterValue
 	DeadlineFilter     *DateFilterValue
+	Limit              *int
 }
 
 // buildWhere builds the WHERE clause for a task query.
@@ -142,7 +143,7 @@ func (f *TagFilter) buildWhere() string {
 func (d *DB) QueryTasks(ctx context.Context, f *TaskFilter) ([]TaskRow, error) {
 	where := f.buildWhere()
 	order := f.buildOrder()
-	query := buildTasksSQL(where, order)
+	query := buildTasksSQL(where, order, f.Limit)
 
 	rows, err := d.ExecuteQuery(ctx, query)
 	if err != nil {
@@ -166,7 +167,7 @@ func (d *DB) QueryTasks(ctx context.Context, f *TaskFilter) ([]TaskRow, error) {
 func (d *DB) CountTasks(ctx context.Context, f *TaskFilter) (int, error) {
 	where := f.buildWhere()
 	order := f.buildOrder()
-	taskSQL := buildTasksSQL(where, order)
+	taskSQL := buildTasksSQL(where, order, nil)
 	countSQL := buildCountSQL(taskSQL)
 
 	var count int

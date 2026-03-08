@@ -1,11 +1,11 @@
-package db
+package database
 
 import "time"
 
 // TaskRow represents a row from a task query result.
 type TaskRow struct {
 	UUID         string
-	Type         string // "to-do", "project", "heading"
+	Type         string // "todo", "project", "heading"
 	Trashed      bool
 	Title        string
 	Status       string // "incomplete", "completed", "canceled"

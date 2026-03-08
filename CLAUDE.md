@@ -19,7 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 go test ./...                              # Run all tests
 go test -cover ./...                       # Run tests with coverage
-go test -run TestTaskQuery ./...           # Run single test
+go test -run TestTodoQuery ./...           # Run single test
 golangci-lint run                          # Run linter
 gofumpt -l -w .                            # Format (stricter than gofmt)
 goimports -w -local github.com/moond4rk/things3 . # Format Import
@@ -31,47 +31,47 @@ go build ./...                             # Build
 ### Design Philosophy
 
 - **Single Entry Point**: `NewClient()` is the only public constructor
+- **Typed Query Builders**: Separate builders for Todo, Project, Heading (no union Task type)
+- **Flat Data Model**: No nested items; parent refs inline, child queries via builders
 - **Interface-Based API**: Methods return interfaces, not concrete types
-- **Go Idioms**: Small interfaces, composition over inheritance
+- **Go Idioms**: Small interfaces, generics for type-safe sub-builders
 
 ### Design Patterns
 
 - **Client Configuration**: Functional Options pattern (ClientOption)
-- **Query Building**: Builder pattern with chainable methods returning interfaces
+- **Query Building**: Builder pattern with chainable methods returning typed interfaces
 - **URL Building**: Builder pattern with Build() or Execute()
-- **Convenience Methods**: Direct access for common queries (Inbox, Today, etc.)
+- **Generic Sub-builders**: `StatusFilter[T]`, `StartFilter[T]`, `DateFilter[T]`
 
 ### Interface Hierarchy
 
 ```
-Layer 1: Reusable Small Interfaces (Terminal Operations)
-├── TaskQueryExecutor   (All, First, Count)
-├── AreaQueryExecutor   (All, First, Count)
-├── TagQueryExecutor    (All, First)
-└── URLBuilder          (Build, Execute)
+Layer 1: Terminal Operations
+├── TodoQueryExecutor    (All, First, Count -> []Todo)
+├── ProjectQueryExecutor (All, First, Count -> []Project)
+├── HeadingQueryExecutor (All, First, Count -> []Heading)
+├── AreaQueryExecutor    (All, First, Count -> []Area)
+├── TagQueryExecutor     (All, First -> []Tag)
+└── URLBuilder           (Build, Execute)
 
-Layer 2: Sub-builder Interfaces (Small, Type-Safe)
-├── TypeFilterBuilder   (Todo, Project, Heading)
-├── StatusFilterBuilder (Incomplete, Completed, Canceled, Any)
-├── StartFilterBuilder  (Inbox, Anytime, Someday)
-└── DateFilterBuilder   (Exists, Future, Past, On, Before, After, etc.)
+Layer 2: Generic Sub-builders
+├── StatusFilter[T]  (Incomplete, Completed, Canceled, Any)
+├── StartFilter[T]   (Inbox, Anytime, Someday)
+└── DateFilter[T]    (Exists, Future, Past, On, Before, After, etc.)
 
-Layer 3: Functional Group Interfaces (For Composition)
-├── TaskRelationFilter  (InArea, InProject, InTag, etc.)
-├── TaskStateFilter     (Type, Status, Start, Trashed)
-└── TaskTimeFilter      (CreatedAfter, StartDate, StopDate, Deadline)
+Layer 3: Composed Query Builders
+├── TodoQueryBuilder    = TodoQueryExecutor + filters + IncludeChecklist
+├── ProjectQueryBuilder = ProjectQueryExecutor + filters
+├── HeadingQueryBuilder = HeadingQueryExecutor + WithUUID + InProject
+├── AreaQueryBuilder    = AreaQueryExecutor + filters
+└── TagQueryBuilder     = TagQueryExecutor + filters
 
-Layer 4: Composed Query Builders
-├── TaskQueryBuilder = TaskQueryExecutor + TaskRelationFilter + TaskStateFilter + TaskTimeFilter
-├── AreaQueryBuilder = AreaQueryExecutor + filters
-└── TagQueryBuilder  = TagQueryExecutor + filters
+Layer 4: URL Scheme Builders (aliased from internal/scheme)
+├── TodoAdder, ProjectAdder     (creation)
+├── TodoUpdater, ProjectUpdater (update)
+└── ShowNavigator               (navigation)
 
-Layer 5: URL Scheme Builders
-├── TodoAdder, ProjectAdder     (URLBuilder + creation methods)
-├── TodoUpdater, ProjectUpdater (URLBuilder + update methods)
-└── ShowNavigator               (navigation methods)
-
-Layer 6: Batch Operations
+Layer 5: Batch Operations (aliased from internal/scheme)
 ├── BatchCreator, AuthBatchCreator
 └── BatchTodoConfigurator, BatchProjectConfigurator
 ```
@@ -80,36 +80,37 @@ Layer 6: Batch Operations
 
 | File | Purpose |
 |------|---------|
-| `client.go` | Client type, NewClient(), unified API entry point |
+| `client.go` | Client type, NewClient(), query/URL entry points |
 | `client_options.go` | ClientOption functional options |
-| `interfaces.go` | All public interface definitions (6 layers) |
-| `db.go` | Internal db type, database operations |
-| `db_options.go` | Internal dbOption functional options |
-| `scheme.go` | Internal scheme type, URL building and execution |
-| `scheme_options.go` | Internal schemeOption |
-| `scheme_builder.go` | AddTodoBuilder, AddProjectBuilder |
-| `scheme_update.go` | UpdateTodoBuilder, UpdateProjectBuilder |
-| `scheme_show.go` | ShowBuilder for navigation |
-| `scheme_json.go` | BatchBuilder for batch operations |
-| `query.go` | taskQuery builder with filter methods |
-| `query_filter.go` | typeFilter, statusFilter, startFilter, dateFilter |
+| `interfaces.go` | All public interface definitions |
+| `models.go` | Todo, Project, Heading, Area, Tag, ChecklistItem |
+| `types.go` | TaskType, Status, StartBucket enums |
+| `db.go` | Internal db type, row-to-model conversion |
+| `query.go` | todoQuery, projectQuery, headingQuery builders |
+| `query_filter.go` | Generic statusFilter, startFilter, dateFilter |
 | `query_area.go` | areaQuery builder |
 | `query_tag.go` | tagQuery builder |
-| `convenience.go` | Inbox(), Today(), Todos(), etc. |
-| `models.go` | Task, Area, Tag, ChecklistItem structs |
-| `types.go` | TaskType, Status, StartBucket enums |
-| `date.go` | Things date format conversion |
-| `sql.go` | SQL query building and execution |
-| `database.go` | Database connection and path discovery |
 | `errors.go` | Error definitions |
-| `constants.go` | Table names, column mappings |
+| `time_helpers.go` | DaysAgo, WeeksAgo, Today, ApplyWhen |
+| `internal/database/` | DB connection, SQL, filters, date conversion |
+| `internal/scheme/` | URL scheme building and execution |
+
+### Domain Types
+
+Separate types per domain concept (no union Task type):
+- `Todo` - actionable item with checklist, relationships, dates
+- `Project` - container for organizing todos
+- `Heading` - grouping label within a project (UUID + Title only)
+- `Area` - high-level responsibility area
+- `Tag` - label for categorizing items
+- `ChecklistItem` - sub-item within a todo
 
 ### Type System
 
 Enums are integer-based for database mapping:
-- TaskType: 0=to-do, 1=project, 2=heading
 - Status: 0=incomplete, 2=canceled, 3=completed
-- StartBucket: 0=Inbox, 1=Anytime, 2=Someday
+- StartBucket: 0=inbox, 1=anytime, 2=someday
+- TaskType: 0=todo, 1=project, 2=heading (internal use only)
 
 ### Things Date Format
 
@@ -119,25 +120,22 @@ Things uses custom binary date formats:
 
 ## API Design
 
-### Unified Client Pattern
-
-All operations go through a single Client:
+### Client Entry Points
 
 ```go
 client, _ := things3.NewClient()
 defer client.Close()
 
-// Query operations
-tasks, _ := client.Today(ctx)
-tasks, _ := client.Tasks().Status().Incomplete().All(ctx)
+// Typed query builders
+todos, _ := client.Todos().Status().Incomplete().All(ctx)
+projects, _ := client.Projects().InArea(uuid).All(ctx)
+headings, _ := client.Headings().InProject(uuid).All(ctx)
+areas, _ := client.Areas().All(ctx)
+tags, _ := client.Tags().All(ctx)
 
-// Add operations
+// URL scheme operations
 client.AddTodo().Title("Buy milk").Execute(ctx)
-
-// Update operations (auto-manages auth token)
 client.UpdateTodo(uuid).Completed(true).Execute(ctx)
-
-// Show operations
 client.Show(ctx, uuid)
 ```
 
@@ -145,28 +143,23 @@ client.Show(ctx, uuid)
 
 Filter methods are chainable, terminal methods execute the query:
 - `.All(ctx)` - Get all matching results
-- `.First(ctx)` - Get first match
+- `.First(ctx)` - Get first match (auto-loads checklist for todos)
 - `.Count(ctx)` - Count matches
 
-### Python to Go API Mapping
+### Relationship Model
 
-| Python | Go |
-|--------|-----|
-| `tasks(uuid=X)` | `client.Tasks().WithUUID(X).First(ctx)` |
-| `tasks(**kwargs)` | `client.Tasks().<filters>.All(ctx)` |
-| `todos()` | `client.Todos(ctx)` |
-| `inbox()` | `client.Inbox(ctx)` |
-| `today()` | `client.Today(ctx)` |
+- **Upward (inline)**: `todo.ProjectUUID`, `todo.AreaTitle` (from SQL JOIN, zero cost)
+- **Downward (query)**: `client.Todos().InProject(uuid)` (separate builder call)
 
 ## Code Quality Standards
 
 ### Naming Conventions
 
-- Exported types: PascalCase (Client, Task, TaskQueryBuilder)
-- Internal types: camelCase (db, scheme, taskQuery)
-- Interfaces: Verb+er or descriptive (TaskQueryBuilder, URLBuilder)
-- Enums: Type prefix (TaskTypeTodo, StatusCompleted)
-- Query methods: With* for filters, In* for relationships
+- Exported types: PascalCase (Client, Todo, TodoQueryBuilder)
+- Internal types: camelCase (db, taskQuery, todoQuery)
+- Interfaces: Verb+er or descriptive (TodoQueryBuilder, URLBuilder)
+- Enums: Type prefix (StatusCompleted, StartInbox)
+- Query methods: With* for identity, In* for relationships, Has* for existence
 
 ### Documentation Requirements
 
@@ -182,12 +175,16 @@ Every exported type and function MUST have Go doc comments starting with the ide
 
 RFC documents are stored in `rfcs/` directory with naming format `NNN_snake_case_title.md`.
 
+Active RFCs:
+- RFC 008: Domain Model Redesign (Superseded by RFC 009 for query/model sections)
+- RFC 009: Query Builder Redesign (current design spec)
+
 ### RFC Template
 
 ```
 # RFC NNN: Title
 
-Status: Draft | Accepted | Implemented
+Status: Draft | Accepted | Implemented | Superseded
 Author: @username
 Date: YYYY-MM-DD
 

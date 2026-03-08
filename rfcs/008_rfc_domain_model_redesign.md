@@ -1,12 +1,17 @@
 # RFC 008: Domain Model Redesign
 
-Status: Draft
+Status: Superseded by RFC 009
 Author: @moond4rk
 Date: 2026-02-24
 
 ## Summary
 
-Introduce a clean domain model layer between the SQLite database and the public API, with physical separation via `internal/` sub-packages. The core changes are: (1) move database and SQL implementation into `internal/db`, (2) separate domain types for Todo, Project, Heading, Area, Tag, and ChecklistItem with consistent typing, (3) a conversion layer that transforms raw database rows into domain types, (4) move all type conversion from SQL to Go, and (5) a unified naming convention across the entire codebase.
+> **Note**: This RFC has been superseded by [RFC 009: Query Builder Redesign](009_rfc_query_builder_redesign.md).
+> RFC 009 covers the final implemented design for query builders, generic sub-builders,
+> flat data model, and IncludeChecklist semantics. This document remains as historical
+> context for the original domain model motivation and internal restructure (Phase 1).
+
+Introduce a clean domain model layer between the SQLite database and the public API, with physical separation via `internal/` sub-packages. The core changes are: (1) move database and SQL implementation into `internal/database`, (2) separate domain types for Todo, Project, Heading, Area, Tag, and ChecklistItem with consistent typing, (3) a conversion layer that transforms raw database rows into domain types, (4) move all type conversion from SQL to Go, and (5) a unified naming convention across the entire codebase.
 
 ## Motivation
 
@@ -144,13 +149,13 @@ Files moved from root to `internal/`:
 
 | Current file | Moved to | Reason |
 |-------------|----------|--------|
-| `database.go` | `internal/db/db.go` | connection, path discovery |
-| `db.go` | `internal/db/db.go` | execute, scan (merged) |
-| `db_options.go` | `internal/db/options.go` | internal options |
-| `sql.go` | `internal/db/sql.go` | SQL building |
-| `filter.go` | `internal/db/filter.go` | filter primitives |
-| `constants.go` | `internal/db/constants.go` | table/column names |
-| `date.go` | `internal/db/date.go` | binary date conversion |
+| `database.go` | `internal/database/db.go` | connection, path discovery |
+| `db.go` | `internal/database/db.go` | execute, scan (merged) |
+| `db_options.go` | `internal/database/options.go` | internal options |
+| `sql.go` | `internal/database/sql.go` | SQL building |
+| `filter.go` | `internal/database/filter.go` | filter primitives |
+| `constants.go` | `internal/database/constants.go` | table/column names |
+| `date.go` | `internal/database/date.go` | binary date conversion |
 | `scheme.go` | `internal/scheme/scheme.go` | URL execution |
 | `scheme_attrs.go` | `internal/scheme/attrs.go` | URL params |
 | `scheme_constants.go` | `internal/scheme/constants.go` | URL constants |
@@ -164,10 +169,10 @@ Root package: **29 files -> ~18 files**. Internal implementation hidden in `inte
 SQLite Database (TMTask, TMArea, TMTag, TMChecklistItem)
         |
         v
-    internal/db             SQL building + execution (raw columns, no CASE/printf)
+    internal/database             SQL building + execution (raw columns, no CASE/printf)
         |
         v
-    internal/db.RawTask     raw struct, maps 1:1 to database row
+    internal/database.RawTask     raw struct, maps 1:1 to database row
         |
         v
     things3/convert.go      rawTaskToTodo(), rawTaskToProject(), rawTaskToHeading()
@@ -300,7 +305,7 @@ Key differences from current `Task`:
 
 ### Internal Raw Types
 
-Located in `internal/db/raw.go`. Map 1:1 to database rows with raw values:
+Located in `internal/database/raw.go`. Map 1:1 to database rows with raw values:
 
 ```go
 package db
@@ -367,12 +372,12 @@ type RawChecklistItem struct {
 
 ### Conversion Layer
 
-Located in `things3/convert.go`. Bridges `internal/db` raw types and public domain types:
+Located in `things3/convert.go`. Bridges `internal/database` raw types and public domain types:
 
 ```go
 package things3
 
-import "github.com/moond4rk/things3/internal/db"
+import "github.com/moond4rk/things3/internal/database"
 
 func rawTaskToTodo(raw db.RawTask) Todo {
     return Todo{
@@ -558,7 +563,7 @@ items, _ := client.Logbook(ctx)
 
 3. **JSON serialization**: The `Type` fields (`Area.Type`, `Tag.Type`, `ChecklistItem.Type`) are removed. No JSON compatibility with Python things.py is maintained. Go types themselves express the type information. **Decision: drop Type fields.**
 
-4. **File structure**: Internal implementation (database, SQL, filters, date conversion, URL execution) moves to `internal/` sub-packages. Public API stays in root. **Decision: `internal/db` + `internal/scheme`.**
+4. **File structure**: Internal implementation (database, SQL, filters, date conversion, URL execution) moves to `internal/` sub-packages. Public API stays in root. **Decision: `internal/database` + `internal/scheme`.**
 
 5. **Relationship fields**: Use flat `string` fields with `omitempty` instead of a separate reference type. Users access fields directly (`todo.AreaTitle`), no nil check needed (empty string = no relationship). **Decision: flat string fields, no Ref type.**
 
@@ -580,11 +585,11 @@ items, _ := client.Logbook(ctx)
 
 Move internal implementation to `internal/` sub-packages:
 
-- Create `internal/db/`: move database connection, SQL building, filter primitives, date conversion, constants, scan functions
+- Create `internal/database/`: move database connection, SQL building, filter primitives, date conversion, constants, scan functions
 - Create `internal/scheme/`: move URL execution, parameter building, scheme constants
-- Define `RawTask`, `RawArea`, `RawTag`, `RawChecklistItem` in `internal/db/raw.go`
+- Define `RawTask`, `RawArea`, `RawTag`, `RawChecklistItem` in `internal/database/raw.go`
 - Simplify SQL to return raw values (remove all CASE expressions and printf)
-- Root package wraps `internal/db` for query execution
+- Root package wraps `internal/database` for query execution
 - Public API stays the same (still returns `Task`) -- this is a pure internal refactor
 
 ### Phase 2: Type Split and Conversion Layer

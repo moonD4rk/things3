@@ -10,84 +10,23 @@ import (
 // String constant for unknown enum values.
 const unknownString = "unknown"
 
-// TaskType represents the kind of task in Things 3.
-// Tasks can be to-dos, projects, or headings within projects.
-type TaskType int
-
+// Status string constants.
 const (
-	// TaskTypeTodo represents a regular to-do item.
-	TaskTypeTodo TaskType = 0
-	// TaskTypeProject represents a project containing tasks.
-	TaskTypeProject TaskType = 1
-	// TaskTypeHeading represents a heading within a project.
-	TaskTypeHeading TaskType = 2
+	statusStringIncomplete = "incomplete"
+	statusStringCompleted  = "completed"
+	statusStringCanceled   = "canceled"
 )
 
-// String returns the string representation of the TaskType.
-func (t TaskType) String() string {
-	switch t {
-	case TaskTypeTodo:
-		return taskTypeStringTodo
-	case TaskTypeProject:
-		return taskTypeStringProject
-	case TaskTypeHeading:
-		return taskTypeStringHeading
-	default:
-		return unknownString
-	}
-}
+// taskType represents the kind of task in the Things 3 database.
+// Users distinguish types through Go's type system (Todo, Project, Heading),
+// not through this enum. It remains internal for query filter routing.
+type taskType int
 
-// MarshalJSON implements json.Marshaler for TaskType.
-func (t TaskType) MarshalJSON() ([]byte, error) {
-	return json.Marshal(t.String())
-}
-
-// MarshalYAML implements yaml.Marshaler for TaskType.
-func (t TaskType) MarshalYAML() (any, error) {
-	return t.String(), nil
-}
-
-// UnmarshalJSON implements json.Unmarshaler for TaskType.
-func (t *TaskType) UnmarshalJSON(data []byte) error {
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
-		return err
-	}
-	v, err := parseTaskType(s)
-	if err != nil {
-		return err
-	}
-	*t = v
-	return nil
-}
-
-// UnmarshalYAML implements yaml.Unmarshaler for TaskType.
-func (t *TaskType) UnmarshalYAML(unmarshal func(any) error) error {
-	var s string
-	if err := unmarshal(&s); err != nil {
-		return err
-	}
-	v, err := parseTaskType(s)
-	if err != nil {
-		return err
-	}
-	*t = v
-	return nil
-}
-
-// parseTaskType converts a string to TaskType.
-func parseTaskType(s string) (TaskType, error) {
-	switch s {
-	case taskTypeStringTodo:
-		return TaskTypeTodo, nil
-	case taskTypeStringProject:
-		return TaskTypeProject, nil
-	case taskTypeStringHeading:
-		return TaskTypeHeading, nil
-	default:
-		return 0, fmt.Errorf("things3: unknown task type %q", s)
-	}
-}
+const (
+	taskTypeTodo    taskType = 0
+	taskTypeProject taskType = 1
+	taskTypeHeading taskType = 2
+)
 
 // Status represents the completion status of a task.
 type Status int
@@ -189,17 +128,76 @@ const (
 	StartSomeday StartBucket = 2
 )
 
+// Start bucket string constants.
+const (
+	startBucketStringInbox   = "inbox"
+	startBucketStringAnytime = "anytime"
+	startBucketStringSomeday = "someday"
+)
+
 // String returns the string representation of the StartBucket.
 func (s StartBucket) String() string {
 	switch s {
 	case StartInbox:
-		return "Inbox"
+		return startBucketStringInbox
 	case StartAnytime:
-		return "Anytime"
+		return startBucketStringAnytime
 	case StartSomeday:
-		return "Someday"
+		return startBucketStringSomeday
 	default:
 		return unknownString
+	}
+}
+
+// MarshalJSON implements json.Marshaler for StartBucket.
+func (s StartBucket) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
+}
+
+// MarshalYAML implements yaml.Marshaler for StartBucket.
+func (s StartBucket) MarshalYAML() (any, error) {
+	return s.String(), nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler for StartBucket.
+func (s *StartBucket) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+	v, err := parseStartBucket(str)
+	if err != nil {
+		return err
+	}
+	*s = v
+	return nil
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler for StartBucket.
+func (s *StartBucket) UnmarshalYAML(unmarshal func(any) error) error {
+	var str string
+	if err := unmarshal(&str); err != nil {
+		return err
+	}
+	v, err := parseStartBucket(str)
+	if err != nil {
+		return err
+	}
+	*s = v
+	return nil
+}
+
+// parseStartBucket converts a string to StartBucket.
+func parseStartBucket(s string) (StartBucket, error) {
+	switch s {
+	case startBucketStringInbox:
+		return StartInbox, nil
+	case startBucketStringAnytime:
+		return StartAnytime, nil
+	case startBucketStringSomeday:
+		return StartSomeday, nil
+	default:
+		return 0, fmt.Errorf("things3: unknown start bucket %q", s)
 	}
 }
 

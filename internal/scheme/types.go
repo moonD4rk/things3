@@ -6,7 +6,7 @@ type Command string
 const (
 	// CommandShow opens and shows an item.
 	CommandShow Command = "show"
-	// CommandAdd creates a new to-do.
+	// CommandAdd creates a new todo.
 	CommandAdd Command = "add"
 	// CommandAddProject creates a new project.
 	CommandAddProject Command = "add-project"

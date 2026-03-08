@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"net/url"
 	"sync"
-	"time"
 
-	idb "github.com/moond4rk/things3/internal/db"
+	"github.com/moond4rk/things3/internal/database"
 	"github.com/moond4rk/things3/internal/scheme"
 )
 
@@ -25,8 +24,7 @@ import (
 //
 // Query operations read from the Things 3 database:
 //
-//	tasks, _ := client.Inbox(ctx)
-//	tasks, _ := client.Tasks().Status().Incomplete().All(ctx)
+//	todos, _ := client.Todos().Status().Incomplete().All(ctx)
 //
 // Add operations create new items via URL scheme:
 //
@@ -82,16 +80,16 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 	}
 
 	// Build DB options
-	var dbOpts []idb.Option
+	var dbOpts []database.Option
 	if options.databasePath != "" {
-		dbOpts = append(dbOpts, idb.WithPath(options.databasePath))
+		dbOpts = append(dbOpts, database.WithPath(options.databasePath))
 	}
 	if options.printSQL {
-		dbOpts = append(dbOpts, idb.WithPrintSQL(options.printSQL))
+		dbOpts = append(dbOpts, database.WithPrintSQL(options.printSQL))
 	}
 
 	// Create DB connection
-	database, err := newDB(dbOpts...)
+	d, err := newDB(dbOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -100,14 +98,14 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 	s := scheme.New(schemeOpts...)
 
 	client := &Client{
-		database: database,
+		database: d,
 		scheme:   s,
 	}
 
 	// Preload token if requested
 	if options.preloadToken {
 		if _, err := client.Token(context.Background()); err != nil {
-			database.Close()
+			d.Close()
 			return nil, err
 		}
 	}
@@ -157,81 +155,22 @@ func (c *Client) Token(ctx context.Context) (string, error) {
 }
 
 // ============================================================================
-// Query Operations - Convenience Methods
-// ============================================================================
-
-// Inbox returns all tasks in the Inbox.
-func (c *Client) Inbox(ctx context.Context) ([]Task, error) {
-	return c.database.Inbox(ctx)
-}
-
-// Today returns tasks that would appear in Today view.
-func (c *Client) Today(ctx context.Context) ([]Task, error) {
-	return c.database.Today(ctx)
-}
-
-// Todos returns all incomplete todo items.
-func (c *Client) Todos(ctx context.Context) ([]Task, error) {
-	return c.database.Todos(ctx)
-}
-
-// Projects returns all incomplete projects.
-func (c *Client) Projects(ctx context.Context) ([]Task, error) {
-	return c.database.Projects(ctx)
-}
-
-// Upcoming returns tasks scheduled for future dates.
-func (c *Client) Upcoming(ctx context.Context) ([]Task, error) {
-	return c.database.Upcoming(ctx)
-}
-
-// Anytime returns tasks in the Anytime list.
-func (c *Client) Anytime(ctx context.Context) ([]Task, error) {
-	return c.database.Anytime(ctx)
-}
-
-// Someday returns tasks in the Someday list.
-func (c *Client) Someday(ctx context.Context) ([]Task, error) {
-	return c.database.Someday(ctx)
-}
-
-// Logbook returns completed and canceled tasks.
-func (c *Client) Logbook(ctx context.Context) ([]Task, error) {
-	return c.database.Logbook(ctx)
-}
-
-// Trash returns trashed tasks.
-func (c *Client) Trash(ctx context.Context) ([]Task, error) {
-	return c.database.Trash(ctx)
-}
-
-// Completed returns completed tasks.
-func (c *Client) Completed(ctx context.Context) ([]Task, error) {
-	return c.database.Completed(ctx)
-}
-
-// Canceled returns canceled tasks.
-func (c *Client) Canceled(ctx context.Context) ([]Task, error) {
-	return c.database.Canceled(ctx)
-}
-
-// Deadlines returns tasks with deadlines, sorted by deadline.
-func (c *Client) Deadlines(ctx context.Context) ([]Task, error) {
-	return c.database.Deadlines(ctx)
-}
-
-// CreatedWithin returns tasks created after the specified time.
-func (c *Client) CreatedWithin(ctx context.Context, since time.Time) ([]Task, error) {
-	return c.database.CreatedWithin(ctx, since)
-}
-
-// ============================================================================
 // Query Operations - Query Builders
 // ============================================================================
 
-// Tasks creates a new TaskQueryBuilder for querying tasks.
-func (c *Client) Tasks() TaskQueryBuilder {
-	return c.database.Tasks()
+// Todos creates a new TodoQueryBuilder for querying todos.
+func (c *Client) Todos() TodoQueryBuilder {
+	return c.database.Todos()
+}
+
+// Projects creates a new ProjectQueryBuilder for querying projects.
+func (c *Client) Projects() ProjectQueryBuilder {
+	return c.database.Projects()
+}
+
+// Headings creates a new HeadingQueryBuilder for querying headings.
+func (c *Client) Headings() HeadingQueryBuilder {
+	return c.database.Headings()
 }
 
 // Areas creates a new AreaQueryBuilder for querying areas.
@@ -242,27 +181,6 @@ func (c *Client) Areas() AreaQueryBuilder {
 // Tags creates a new TagQueryBuilder for querying tags.
 func (c *Client) Tags() TagQueryBuilder {
 	return c.database.Tags()
-}
-
-// ============================================================================
-// Query Operations - Utilities
-// ============================================================================
-
-// Get retrieves an object by UUID.
-// Returns a Task, Area, or Tag depending on what is found.
-// Returns nil if not found.
-func (c *Client) Get(ctx context.Context, uuid string) (any, error) {
-	return c.database.Get(ctx, uuid)
-}
-
-// Search searches for tasks matching the query.
-func (c *Client) Search(ctx context.Context, query string) ([]Task, error) {
-	return c.database.Search(ctx, query)
-}
-
-// ChecklistItems returns the checklist items for a todo.
-func (c *Client) ChecklistItems(ctx context.Context, todoUUID string) ([]ChecklistItem, error) {
-	return c.database.ChecklistItems(ctx, todoUUID)
 }
 
 // ============================================================================

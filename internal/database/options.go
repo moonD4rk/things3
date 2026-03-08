@@ -1,4 +1,4 @@
-package db
+package database
 
 // Options holds the configuration options for the DB.
 type Options struct {

@@ -3,14 +3,13 @@ package things3
 import (
 	"context"
 
-	idb "github.com/moond4rk/things3/internal/db"
+	"github.com/moond4rk/things3/internal/database"
 )
 
 // areaQuery provides a fluent interface for building area queries.
 type areaQuery struct {
-	database     *db
-	filter       idb.AreaFilter
-	includeItems bool
+	database *db
+	filter   database.AreaFilter
 }
 
 // Areas creates a new areaQuery for querying areas.
@@ -52,12 +51,6 @@ func (q *areaQuery) HasTag(has bool) AreaQueryBuilder {
 	return q
 }
 
-// IncludeItems includes tasks in each area.
-func (q *areaQuery) IncludeItems(include bool) AreaQueryBuilder {
-	q.includeItems = include
-	return q
-}
-
 // All executes the query and returns all matching areas.
 func (q *areaQuery) All(ctx context.Context) ([]Area, error) {
 	rows, err := q.database.inner.QueryAreas(ctx, q.filter)
@@ -76,19 +69,6 @@ func (q *areaQuery) All(ctx context.Context) ([]Area, error) {
 				return nil, err
 			}
 			area.Tags = tags
-		}
-
-		// Load items if requested
-		if q.includeItems {
-			items, err := q.database.Tasks().
-				InArea(area.UUID).
-				ContextTrashed(false).
-				IncludeItems(true).
-				All(ctx)
-			if err != nil {
-				return nil, err
-			}
-			area.Items = items
 		}
 
 		areas = append(areas, area)

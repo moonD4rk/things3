@@ -4,245 +4,433 @@ import (
 	"context"
 	"time"
 
-	idb "github.com/moond4rk/things3/internal/db"
+	"github.com/moond4rk/things3/internal/database"
 )
 
-// taskQuery provides a fluent interface for building task queries.
+// =============================================================================
+// Shared Internal Query
+// =============================================================================
+
+// taskQuery holds the shared query state for todo, project, and heading builders.
 type taskQuery struct {
-	database     *db
-	filter       idb.TaskFilter
-	includeItems bool
+	database         *db
+	filter           database.TaskFilter
+	includeChecklist bool
 }
 
-// Tasks creates a new taskQuery for querying tasks.
-func (d *db) Tasks() *taskQuery {
-	return &taskQuery{
-		database: d,
-		filter:   idb.TaskFilter{Index: idb.IndexDefault},
+// =============================================================================
+// TodoQuery Builder
+// =============================================================================
+
+// todoQuery provides a fluent interface for building todo queries.
+type todoQuery struct {
+	inner *taskQuery
+}
+
+// Todos creates a new todoQuery for querying todos.
+func (d *db) Todos() *todoQuery {
+	taskType := int(taskTypeTodo)
+	return &todoQuery{
+		inner: &taskQuery{
+			database: d,
+			filter: database.TaskFilter{
+				Index:    database.IndexDefault,
+				TaskType: &taskType,
+			},
+		},
 	}
 }
 
-// WithUUID filters tasks by UUID (exact match).
-func (q *taskQuery) WithUUID(uuid string) TaskQueryBuilder {
-	q.filter.UUID = &uuid
+// WithUUID filters todos by UUID (exact match).
+func (q *todoQuery) WithUUID(uuid string) TodoQueryBuilder {
+	q.inner.filter.UUID = &uuid
 	return q
 }
 
-// WithUUIDPrefix filters tasks by UUID prefix (partial match).
-func (q *taskQuery) WithUUIDPrefix(prefix string) TaskQueryBuilder {
-	q.filter.UUIDPrefix = &prefix
+// Status returns a StatusFilter for type-safe status filtering.
+func (q *todoQuery) Status() StatusFilter[TodoQueryBuilder] {
+	return &statusFilter[TodoQueryBuilder]{query: q.inner, parent: q}
+}
+
+// Start returns a StartFilter for type-safe start bucket filtering.
+func (q *todoQuery) Start() StartFilter[TodoQueryBuilder] {
+	return &startFilter[TodoQueryBuilder]{query: q.inner, parent: q}
+}
+
+// Trashed filters todos by trash status.
+func (q *todoQuery) Trashed(trashed bool) TodoQueryBuilder {
+	q.inner.filter.Trashed = &trashed
 	return q
 }
 
-// =============================================================================
-// Type-Safe Sub-Builder Entry Points
-// =============================================================================
-
-// Type returns a typeFilter for type-safe task type filtering.
-func (q *taskQuery) Type() TypeFilterBuilder {
-	return &typeFilter{query: q}
-}
-
-// Status returns a statusFilter for type-safe status filtering.
-func (q *taskQuery) Status() StatusFilterBuilder {
-	return &statusFilter{query: q}
-}
-
-// Start returns a startFilter for type-safe start bucket filtering.
-func (q *taskQuery) Start() StartFilterBuilder {
-	return &startFilter{query: q}
-}
-
-// StartDate returns a dateFilter for start date filtering.
-func (q *taskQuery) StartDate() DateFilterBuilder {
-	return &dateFilter{query: q, field: dateFieldStartDate}
-}
-
-// StopDate returns a dateFilter for stop date filtering.
-func (q *taskQuery) StopDate() DateFilterBuilder {
-	return &dateFilter{query: q, field: dateFieldStopDate}
-}
-
-// Deadline returns a dateFilter for deadline filtering.
-func (q *taskQuery) Deadline() DateFilterBuilder {
-	return &dateFilter{query: q, field: dateFieldDeadline}
-}
-
-// InArea filters tasks by a specific area UUID.
-func (q *taskQuery) InArea(uuid string) TaskQueryBuilder {
-	q.filter.AreaUUID = &uuid
+// ContextTrashed filters todos by the trash status of their context (project/heading).
+func (q *todoQuery) ContextTrashed(trashed bool) TodoQueryBuilder {
+	q.inner.filter.ContextTrashed = &trashed
 	return q
 }
 
-// HasArea filters tasks by whether they have an area.
-func (q *taskQuery) HasArea(has bool) TaskQueryBuilder {
-	q.filter.HasArea = &has
+// InArea filters todos by a specific area UUID.
+func (q *todoQuery) InArea(uuid string) TodoQueryBuilder {
+	q.inner.filter.AreaUUID = &uuid
 	return q
 }
 
-// InProject filters tasks by a specific project UUID.
-func (q *taskQuery) InProject(uuid string) TaskQueryBuilder {
-	q.filter.ProjectUUID = &uuid
+// HasArea filters todos by whether they have an area.
+func (q *todoQuery) HasArea(has bool) TodoQueryBuilder {
+	q.inner.filter.HasArea = &has
 	return q
 }
 
-// HasProject filters tasks by whether they have a project.
-func (q *taskQuery) HasProject(has bool) TaskQueryBuilder {
-	q.filter.HasProject = &has
+// InProject filters todos by a specific project UUID.
+func (q *todoQuery) InProject(uuid string) TodoQueryBuilder {
+	q.inner.filter.ProjectUUID = &uuid
 	return q
 }
 
-// InHeading filters tasks by a specific heading UUID.
-func (q *taskQuery) InHeading(uuid string) TaskQueryBuilder {
-	q.filter.HeadingUUID = &uuid
+// HasProject filters todos by whether they have a project.
+func (q *todoQuery) HasProject(has bool) TodoQueryBuilder {
+	q.inner.filter.HasProject = &has
 	return q
 }
 
-// HasHeading filters tasks by whether they have a heading.
-func (q *taskQuery) HasHeading(has bool) TaskQueryBuilder {
-	q.filter.HasHeading = &has
+// InHeading filters todos by a specific heading UUID.
+func (q *todoQuery) InHeading(uuid string) TodoQueryBuilder {
+	q.inner.filter.HeadingUUID = &uuid
 	return q
 }
 
-// InTag filters tasks by a specific tag title.
-func (q *taskQuery) InTag(title string) TaskQueryBuilder {
-	q.filter.TagTitle = &title
+// HasHeading filters todos by whether they have a heading.
+func (q *todoQuery) HasHeading(has bool) TodoQueryBuilder {
+	q.inner.filter.HasHeading = &has
 	return q
 }
 
-// HasTag filters tasks by whether they have any tags.
-func (q *taskQuery) HasTag(has bool) TaskQueryBuilder {
-	q.filter.HasTags = &has
+// InTag filters todos by a specific tag title.
+func (q *todoQuery) InTag(title string) TodoQueryBuilder {
+	q.inner.filter.TagTitle = &title
 	return q
 }
 
-// WithDeadlineSuppressed filters tasks by deadline suppression status.
-func (q *taskQuery) WithDeadlineSuppressed(suppressed bool) TaskQueryBuilder {
-	q.filter.DeadlineSuppressed = &suppressed
+// HasTag filters todos by whether they have any tags.
+func (q *todoQuery) HasTag(has bool) TodoQueryBuilder {
+	q.inner.filter.HasTags = &has
 	return q
 }
 
-// Trashed filters tasks by trash status.
-func (q *taskQuery) Trashed(trashed bool) TaskQueryBuilder {
-	q.filter.Trashed = &trashed
+// StartDate returns a DateFilter for start date filtering.
+func (q *todoQuery) StartDate() DateFilter[TodoQueryBuilder] {
+	return &dateFilter[TodoQueryBuilder]{query: q.inner, parent: q, field: dateFieldStartDate}
+}
+
+// StopDate returns a DateFilter for stop date filtering.
+func (q *todoQuery) StopDate() DateFilter[TodoQueryBuilder] {
+	return &dateFilter[TodoQueryBuilder]{query: q.inner, parent: q, field: dateFieldStopDate}
+}
+
+// Deadline returns a DateFilter for deadline filtering.
+func (q *todoQuery) Deadline() DateFilter[TodoQueryBuilder] {
+	return &dateFilter[TodoQueryBuilder]{query: q.inner, parent: q, field: dateFieldDeadline}
+}
+
+// CreatedAfter filters todos created after the specified time.
+func (q *todoQuery) CreatedAfter(t time.Time) TodoQueryBuilder {
+	q.inner.filter.CreatedAfter = &t
 	return q
 }
 
-// ContextTrashed filters tasks by the trash status of their context (project/heading).
-func (q *taskQuery) ContextTrashed(trashed bool) TaskQueryBuilder {
-	q.filter.ContextTrashed = &trashed
-	return q
-}
-
-// CreatedAfter filters tasks created after the specified time.
-func (q *taskQuery) CreatedAfter(t time.Time) TaskQueryBuilder {
-	q.filter.CreatedAfter = &t
-	return q
-}
-
-// Search filters tasks by a search query.
-func (q *taskQuery) Search(query string) TaskQueryBuilder {
-	q.filter.SearchQuery = &query
+// Search filters todos by a search query.
+func (q *todoQuery) Search(query string) TodoQueryBuilder {
+	q.inner.filter.SearchQuery = &query
 	return q
 }
 
 // OrderByTodayIndex orders results by today index instead of default index.
-func (q *taskQuery) OrderByTodayIndex() TaskQueryBuilder {
-	q.filter.Index = idb.IndexToday
+func (q *todoQuery) OrderByTodayIndex() TodoQueryBuilder {
+	q.inner.filter.Index = database.IndexToday
 	return q
 }
 
-// IncludeItems includes nested items (checklist for to-dos, tasks for projects/headings).
-func (q *taskQuery) IncludeItems(include bool) TaskQueryBuilder {
-	q.includeItems = include
+// Limit restricts the maximum number of results returned.
+func (q *todoQuery) Limit(n int) TodoQueryBuilder {
+	q.inner.filter.Limit = &n
 	return q
 }
 
-// All executes the query and returns all matching tasks.
-func (q *taskQuery) All(ctx context.Context) ([]Task, error) {
-	rows, err := q.database.inner.QueryTasks(ctx, &q.filter)
+// IncludeChecklist opts in to loading checklist items for each todo.
+func (q *todoQuery) IncludeChecklist() TodoQueryBuilder {
+	q.inner.includeChecklist = true
+	return q
+}
+
+// All executes the query and returns all matching todos.
+func (q *todoQuery) All(ctx context.Context) ([]Todo, error) {
+	rows, err := q.inner.database.inner.QueryTasks(ctx, &q.inner.filter)
 	if err != nil {
 		return nil, err
 	}
 
-	var tasks []Task
+	var todos []Todo
 	for i := range rows {
-		task := convertTaskRow(&rows[i])
+		todo := convertTaskRowToTodo(&rows[i])
 
 		// Load tags if present
 		if rows[i].HasTags {
-			tags, err := q.database.inner.TagsOfTask(ctx, rows[i].UUID)
+			tags, err := q.inner.database.inner.TagsOfTask(ctx, rows[i].UUID)
 			if err != nil {
 				return nil, err
 			}
-			task.Tags = tags
+			todo.Tags = tags
 		}
 
-		// Load nested items if requested
-		if q.includeItems {
-			if err := q.loadTaskItems(ctx, &task); err != nil {
+		// Load checklist if requested
+		if q.inner.includeChecklist && rows[i].HasChecklist {
+			clRows, err := q.inner.database.inner.QueryChecklistItems(ctx, rows[i].UUID)
+			if err != nil {
 				return nil, err
 			}
+			todo.Checklist = convertChecklistItemRows(clRows)
 		}
 
-		tasks = append(tasks, task)
+		todos = append(todos, todo)
 	}
 
-	return tasks, nil
+	return todos, nil
 }
 
-// First executes the query and returns the first matching task.
-func (q *taskQuery) First(ctx context.Context) (*Task, error) {
-	// For single task fetch, always include items
-	q.includeItems = true
+// First executes the query and returns the first matching todo.
+func (q *todoQuery) First(ctx context.Context) (*Todo, error) {
+	// For single todo fetch, always include checklist
+	q.inner.includeChecklist = true
 
-	tasks, err := q.All(ctx)
+	todos, err := q.All(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if len(tasks) == 0 {
-		return nil, ErrTaskNotFound
+	if len(todos) == 0 {
+		return nil, ErrTodoNotFound
 	}
-	return &tasks[0], nil
+	return &todos[0], nil
 }
 
-// Count executes the query and returns the count of matching tasks.
-func (q *taskQuery) Count(ctx context.Context) (int, error) {
-	return q.database.inner.CountTasks(ctx, &q.filter)
+// Count executes the query and returns the count of matching todos.
+func (q *todoQuery) Count(ctx context.Context) (int, error) {
+	return q.inner.database.inner.CountTasks(ctx, &q.inner.filter)
 }
 
-// loadTaskItems loads nested items for a task (checklist for to-dos, tasks for projects/headings).
-func (q *taskQuery) loadTaskItems(ctx context.Context, task *Task) error {
-	switch task.Type {
-	case TaskTypeTodo:
-		if task.Checklist != nil {
-			rows, err := q.database.inner.QueryChecklistItems(ctx, task.UUID)
+// =============================================================================
+// ProjectQuery Builder
+// =============================================================================
+
+// projectQuery provides a fluent interface for building project queries.
+type projectQuery struct {
+	inner *taskQuery
+}
+
+// Projects creates a new projectQuery for querying projects.
+func (d *db) Projects() *projectQuery {
+	taskType := int(taskTypeProject)
+	return &projectQuery{
+		inner: &taskQuery{
+			database: d,
+			filter: database.TaskFilter{
+				Index:    database.IndexDefault,
+				TaskType: &taskType,
+			},
+		},
+	}
+}
+
+// WithUUID filters projects by UUID (exact match).
+func (q *projectQuery) WithUUID(uuid string) ProjectQueryBuilder {
+	q.inner.filter.UUID = &uuid
+	return q
+}
+
+// Status returns a StatusFilter for type-safe status filtering.
+func (q *projectQuery) Status() StatusFilter[ProjectQueryBuilder] {
+	return &statusFilter[ProjectQueryBuilder]{query: q.inner, parent: q}
+}
+
+// Start returns a StartFilter for type-safe start bucket filtering.
+func (q *projectQuery) Start() StartFilter[ProjectQueryBuilder] {
+	return &startFilter[ProjectQueryBuilder]{query: q.inner, parent: q}
+}
+
+// Trashed filters projects by trash status.
+func (q *projectQuery) Trashed(trashed bool) ProjectQueryBuilder {
+	q.inner.filter.Trashed = &trashed
+	return q
+}
+
+// InArea filters projects by a specific area UUID.
+func (q *projectQuery) InArea(uuid string) ProjectQueryBuilder {
+	q.inner.filter.AreaUUID = &uuid
+	return q
+}
+
+// HasArea filters projects by whether they have an area.
+func (q *projectQuery) HasArea(has bool) ProjectQueryBuilder {
+	q.inner.filter.HasArea = &has
+	return q
+}
+
+// InTag filters projects by a specific tag title.
+func (q *projectQuery) InTag(title string) ProjectQueryBuilder {
+	q.inner.filter.TagTitle = &title
+	return q
+}
+
+// HasTag filters projects by whether they have any tags.
+func (q *projectQuery) HasTag(has bool) ProjectQueryBuilder {
+	q.inner.filter.HasTags = &has
+	return q
+}
+
+// StartDate returns a DateFilter for start date filtering.
+func (q *projectQuery) StartDate() DateFilter[ProjectQueryBuilder] {
+	return &dateFilter[ProjectQueryBuilder]{query: q.inner, parent: q, field: dateFieldStartDate}
+}
+
+// StopDate returns a DateFilter for stop date filtering.
+func (q *projectQuery) StopDate() DateFilter[ProjectQueryBuilder] {
+	return &dateFilter[ProjectQueryBuilder]{query: q.inner, parent: q, field: dateFieldStopDate}
+}
+
+// Deadline returns a DateFilter for deadline filtering.
+func (q *projectQuery) Deadline() DateFilter[ProjectQueryBuilder] {
+	return &dateFilter[ProjectQueryBuilder]{query: q.inner, parent: q, field: dateFieldDeadline}
+}
+
+// CreatedAfter filters projects created after the specified time.
+func (q *projectQuery) CreatedAfter(t time.Time) ProjectQueryBuilder {
+	q.inner.filter.CreatedAfter = &t
+	return q
+}
+
+// Search filters projects by a search query.
+func (q *projectQuery) Search(query string) ProjectQueryBuilder {
+	q.inner.filter.SearchQuery = &query
+	return q
+}
+
+// Limit restricts the maximum number of results returned.
+func (q *projectQuery) Limit(n int) ProjectQueryBuilder {
+	q.inner.filter.Limit = &n
+	return q
+}
+
+// All executes the query and returns all matching projects.
+func (q *projectQuery) All(ctx context.Context) ([]Project, error) {
+	rows, err := q.inner.database.inner.QueryTasks(ctx, &q.inner.filter)
+	if err != nil {
+		return nil, err
+	}
+
+	var projects []Project
+	for i := range rows {
+		project := convertTaskRowToProject(&rows[i])
+
+		// Load tags if present
+		if rows[i].HasTags {
+			tags, err := q.inner.database.inner.TagsOfTask(ctx, rows[i].UUID)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			task.Checklist = convertChecklistItemRows(rows)
+			project.Tags = tags
 		}
-	case TaskTypeProject:
-		items, err := q.database.Tasks().
-			InProject(task.UUID).
-			ContextTrashed(false).
-			IncludeItems(true).
-			All(ctx)
-		if err != nil {
-			return err
-		}
-		task.Items = items
-	case TaskTypeHeading:
-		items, err := q.database.Tasks().
-			Type().Todo().
-			InHeading(task.UUID).
-			ContextTrashed(false).
-			IncludeItems(true).
-			All(ctx)
-		if err != nil {
-			return err
-		}
-		task.Items = items
+
+		projects = append(projects, project)
 	}
-	return nil
+
+	return projects, nil
+}
+
+// First executes the query and returns the first matching project.
+func (q *projectQuery) First(ctx context.Context) (*Project, error) {
+	projects, err := q.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(projects) == 0 {
+		return nil, ErrProjectNotFound
+	}
+	return &projects[0], nil
+}
+
+// Count executes the query and returns the count of matching projects.
+func (q *projectQuery) Count(ctx context.Context) (int, error) {
+	return q.inner.database.inner.CountTasks(ctx, &q.inner.filter)
+}
+
+// =============================================================================
+// HeadingQuery Builder
+// =============================================================================
+
+// headingQuery provides a fluent interface for building heading queries.
+type headingQuery struct {
+	inner *taskQuery
+}
+
+// Headings creates a new headingQuery for querying headings.
+func (d *db) Headings() *headingQuery {
+	taskType := int(taskTypeHeading)
+	return &headingQuery{
+		inner: &taskQuery{
+			database: d,
+			filter: database.TaskFilter{
+				Index:    database.IndexDefault,
+				TaskType: &taskType,
+			},
+		},
+	}
+}
+
+// WithUUID filters headings by UUID (exact match).
+func (q *headingQuery) WithUUID(uuid string) HeadingQueryBuilder {
+	q.inner.filter.UUID = &uuid
+	return q
+}
+
+// InProject filters headings by a specific project UUID.
+func (q *headingQuery) InProject(uuid string) HeadingQueryBuilder {
+	q.inner.filter.ProjectUUID = &uuid
+	return q
+}
+
+// Limit restricts the maximum number of results returned.
+func (q *headingQuery) Limit(n int) HeadingQueryBuilder {
+	q.inner.filter.Limit = &n
+	return q
+}
+
+// All executes the query and returns all matching headings.
+func (q *headingQuery) All(ctx context.Context) ([]Heading, error) {
+	rows, err := q.inner.database.inner.QueryTasks(ctx, &q.inner.filter)
+	if err != nil {
+		return nil, err
+	}
+
+	headings := make([]Heading, len(rows))
+	for i := range rows {
+		headings[i] = convertTaskRowToHeading(&rows[i])
+	}
+
+	return headings, nil
+}
+
+// First executes the query and returns the first matching heading.
+func (q *headingQuery) First(ctx context.Context) (*Heading, error) {
+	headings, err := q.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(headings) == 0 {
+		return nil, ErrHeadingNotFound
+	}
+	return &headings[0], nil
+}
+
+// Count executes the query and returns the count of matching headings.
+func (q *headingQuery) Count(ctx context.Context) (int, error) {
+	return q.inner.database.inner.CountTasks(ctx, &q.inner.filter)
 }

@@ -13,9 +13,9 @@
 //	    require.NoError(t, err)
 //	    defer client.Close()
 //
-//	    tasks, err := client.Inbox(ctx)
+//	    todos, err := client.Todos().Start().Inbox().Status().Incomplete().All(ctx)
 //	    require.NoError(t, err)
-//	    assert.Len(t, tasks, thingstest.Inbox)
+//	    assert.Len(t, todos, thingstest.Inbox)
 //	}
 package thingstest
 
@@ -72,41 +72,46 @@ func SourceDatabasePath() string {
 
 // Expected item counts from the test fixture database.
 // These mirror the internal test constants and can be used to verify query results.
+//
+// Counts are specific to each domain type (Todo, Project, Heading).
+// There is no unified "Task" count -- use the typed constants instead.
 const (
-	Headings                = 3
-	Inbox                   = 2
-	TrashedTodos            = 3
-	TrashedProjects         = 1
-	TrashedCanceled         = 1
-	TrashedCompleted        = 1
-	TrashedProjectTodos     = 1
-	Trashed                 = 6
-	Projects                = 5
-	ProjectsNotTrashed      = 4
-	Upcoming                = 1
-	DeadlinePast            = 3
-	DeadlineFuture          = 1
-	Deadlines               = 4
-	TodayProjects           = 1
-	TodayTasks              = 4
-	Today                   = 5
-	Anytime                 = 15
-	Logbook                 = 25
-	Canceled                = 11
-	Completed               = 14
-	Someday                 = 2
-	Tags                    = 5
-	Areas                   = 3
-	TodosIncomplete         = 15
-	TodosAnytime            = 11
-	TodosAnytimeComplete    = 8
-	TodosComplete           = 12
-	TasksIncomplete         = 22
-	TasksIncompleteFiltered = 21
-	TasksInProjectAll       = 7
-	TasksInProject          = 5
-	ProjectItems            = 7
-	DatabaseVersion         = 24
+	// Todos (type=0)
+	TodosIncomplete      = 16
+	TodosAnytime         = 11
+	TodosAnytimeComplete = 8
+	TodosComplete        = 12
+	TodosInProject       = 4
+	Inbox                = 2
+
+	// Projects (type=1)
+	Projects           = 5
+	ProjectsNotTrashed = 4
+
+	// Headings (type=2)
+	Headings = 3
+
+	// Areas
+	Areas = 3
+
+	// Tags
+	Tags = 5
+
+	// Dates
+	DeadlinePast   = 3
+	DeadlineFuture = 1
+	Deadlines      = 4
+
+	// Trashed
+	TrashedTodos        = 3
+	TrashedProjects     = 1
+	TrashedCanceled     = 1
+	TrashedCompleted    = 1
+	TrashedProjectTodos = 1
+	Trashed             = 6
+
+	// Database
+	DatabaseVersion = 24
 )
 
 // Well-known UUIDs from the test fixture database.
@@ -118,7 +123,7 @@ const (
 	UUIDProject          = "3x1QqJqfvZyhtw8NSdnZqG"
 	UUIDTodo             = "A2oPvtt4dXoypeoLc8uYzY"
 	UUIDTodoReminder     = "7F4vqUNiTvGKaCUfv5pqYG"
-	UUIDTaskCount        = "5pUx6PESj3ctFYbgth1PXY"
+	UUIDTodoInToday      = "5pUx6PESj3ctFYbgth1PXY"
 	UUIDCompletedProject = "CmpltdProjTestFixture01"
 	UUIDSomedayProject   = "SmdyProjTestFixture001"
 	UUIDCompletedHeading = "CmpltdHdngTestFixture1"

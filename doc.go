@@ -4,7 +4,7 @@
 // # Features
 //
 // This package offers two main capabilities:
-//   - Read-only access to the Things 3 SQLite database for querying tasks, projects, areas, and tags
+//   - Read-only access to the Things 3 SQLite database for querying todos, projects, areas, and tags
 //   - Full Things URL Scheme support for creating, updating, and navigating to items
 //
 // # Getting Started
@@ -17,17 +17,9 @@
 //	}
 //	defer client.Close()
 //
-//	// Convenience methods
-//	inbox, _ := client.Inbox(ctx)
-//	today, _ := client.Today(ctx)
-//	todos, _ := client.Todos(ctx)
+//	// Query todos with the fluent query builder
 //
-// # Fluent Query Builder
-//
-// For complex queries, use the type-safe fluent query builder:
-//
-//	tasks, _ := client.Tasks().
-//	    Type().Todo().
+//	todos, _ := client.Todos().
 //	    Status().Incomplete().
 //	    StartDate().Future().
 //	    All(ctx)
@@ -36,7 +28,7 @@
 //
 // Create and update items via Things URL Scheme:
 //
-//	// Create a new to-do
+//	// Create a new todo
 //	client.AddTodo().
 //	    Title("Buy groceries").
 //	    When(things3.Today()).
@@ -63,7 +55,6 @@
 // # Type System
 //
 // The package uses integer-based enums that map directly to database values:
-//   - TaskType: TaskTypeTodo (0), TaskTypeProject (1), TaskTypeHeading (2)
 //   - Status: StatusIncomplete (0), StatusCanceled (2), StatusCompleted (3)
 //   - StartBucket: StartInbox (0), StartAnytime (1), StartSomeday (2)
 //

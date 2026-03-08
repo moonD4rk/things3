@@ -3,30 +3,32 @@ package things3
 import (
 	"errors"
 
-	idb "github.com/moond4rk/things3/internal/db"
+	"github.com/moond4rk/things3/internal/database"
 	"github.com/moond4rk/things3/internal/scheme"
 )
 
-// Database Errors - aliased from internal/db so users can match with errors.Is.
+// Database Errors - aliased from internal/database so users can match with errors.Is.
 var (
 	// ErrDatabaseNotFound is returned when the Things database cannot be located.
-	ErrDatabaseNotFound = idb.ErrDatabaseNotFound
+	ErrDatabaseNotFound = database.ErrDatabaseNotFound
 	// ErrDatabaseVersionTooOld is returned when the database version is not supported.
-	ErrDatabaseVersionTooOld = idb.ErrDatabaseVersionTooOld
+	ErrDatabaseVersionTooOld = database.ErrDatabaseVersionTooOld
 	// ErrAuthTokenNotFound is returned when the URL scheme auth token cannot be read.
-	ErrAuthTokenNotFound = idb.ErrAuthTokenNotFound
+	ErrAuthTokenNotFound = database.ErrAuthTokenNotFound
 )
 
 // Query Errors
 var (
-	// ErrTaskNotFound is returned when a task with the specified UUID does not exist.
-	ErrTaskNotFound = errors.New("things3: task not found")
+	// ErrTodoNotFound is returned when a todo with the specified UUID does not exist.
+	ErrTodoNotFound = errors.New("things3: todo not found")
+	// ErrProjectNotFound is returned when a project with the specified UUID does not exist.
+	ErrProjectNotFound = errors.New("things3: project not found")
+	// ErrHeadingNotFound is returned when a heading with the specified UUID does not exist.
+	ErrHeadingNotFound = errors.New("things3: heading not found")
 	// ErrAreaNotFound is returned when an area with the specified UUID does not exist.
 	ErrAreaNotFound = errors.New("things3: area not found")
 	// ErrTagNotFound is returned when a tag with the specified title does not exist.
 	ErrTagNotFound = errors.New("things3: tag not found")
-	// ErrInvalidParameter is returned when an invalid parameter value is provided.
-	ErrInvalidParameter = errors.New("things3: invalid parameter")
 )
 
 // URL Scheme Validation Errors - aliased from internal/scheme.

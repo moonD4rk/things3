@@ -3,14 +3,13 @@ package things3
 import (
 	"context"
 
-	idb "github.com/moond4rk/things3/internal/db"
+	"github.com/moond4rk/things3/internal/database"
 )
 
 // tagQuery provides a fluent interface for building tag queries.
 type tagQuery struct {
-	database     *db
-	filter       idb.TagFilter
-	includeItems bool
+	database *db
+	filter   database.TagFilter
 }
 
 // Tags creates a new tagQuery for querying tags.
@@ -39,12 +38,6 @@ func (q *tagQuery) WithParent(parentUUID string) TagQueryBuilder {
 	return q
 }
 
-// IncludeItems includes areas and tasks for each tag.
-func (q *tagQuery) IncludeItems(include bool) TagQueryBuilder {
-	q.includeItems = include
-	return q
-}
-
 // All executes the query and returns all matching tags.
 func (q *tagQuery) All(ctx context.Context) ([]Tag, error) {
 	rows, err := q.database.inner.QueryTags(ctx, q.filter)
@@ -52,32 +45,9 @@ func (q *tagQuery) All(ctx context.Context) ([]Tag, error) {
 		return nil, err
 	}
 
-	var tags []Tag
-	for _, row := range rows {
-		tag := convertTagRow(row)
-
-		// Load items if requested
-		if q.includeItems {
-			areas, err := q.database.Areas().InTag(tag.Title).All(ctx)
-			if err != nil {
-				return nil, err
-			}
-			tasks, err := q.database.Tasks().InTag(tag.Title).ContextTrashed(false).All(ctx)
-			if err != nil {
-				return nil, err
-			}
-
-			items := make([]any, 0, len(areas)+len(tasks))
-			for i := range areas {
-				items = append(items, &areas[i])
-			}
-			for i := range tasks {
-				items = append(items, &tasks[i])
-			}
-			tag.Items = items
-		}
-
-		tags = append(tags, tag)
+	tags := make([]Tag, len(rows))
+	for i, row := range rows {
+		tags[i] = convertTagRow(row)
 	}
 
 	return tags, nil

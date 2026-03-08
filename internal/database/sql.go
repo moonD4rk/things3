@@ -1,4 +1,4 @@
-package db
+package database
 
 import "fmt"
 
@@ -6,7 +6,7 @@ import "fmt"
 const sqlTrue = "TRUE"
 
 // buildTasksSQL builds the SQL query for fetching tasks.
-func buildTasksSQL(wherePredicate, orderPredicate string) string {
+func buildTasksSQL(wherePredicate, orderPredicate string, limit *int) string {
 	if wherePredicate == "" {
 		wherePredicate = sqlTrue
 	}
@@ -18,7 +18,7 @@ func buildTasksSQL(wherePredicate, orderPredicate string) string {
 	deadlineExpr := thingsDateExpressionToISODate("TASK." + colDeadline)
 	reminderTimeExpr := thingsTimeExpressionToISOTime("TASK." + colReminderTime)
 
-	return fmt.Sprintf(`
+	sql := fmt.Sprintf(`
 		SELECT DISTINCT
 			TASK.uuid,
 			CASE
@@ -104,6 +104,12 @@ func buildTasksSQL(wherePredicate, orderPredicate string) string {
 		tableTaskTag, tableTag, tableChecklistItem,
 		wherePredicate, orderPredicate,
 	)
+
+	if limit != nil && *limit > 0 {
+		sql += fmt.Sprintf(" LIMIT %d", *limit)
+	}
+
+	return sql
 }
 
 // buildAreasSQL builds the SQL query for fetching areas.

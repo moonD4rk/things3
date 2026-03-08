@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	idb "github.com/moond4rk/things3/internal/db"
+	"github.com/moond4rk/things3/internal/scheme"
 )
 
 // Database Errors - aliased from internal/db so users can match with errors.Is.
@@ -28,20 +29,24 @@ var (
 	ErrInvalidParameter = errors.New("things3: invalid parameter")
 )
 
-// URL Scheme Errors
+// URL Scheme Validation Errors - aliased from internal/scheme.
+var (
+	// ErrTitleTooLong is returned when title exceeds the character limit.
+	ErrTitleTooLong = scheme.ErrTitleTooLong
+	// ErrNotesTooLong is returned when notes exceed the character limit.
+	ErrNotesTooLong = scheme.ErrNotesTooLong
+	// ErrTooManyChecklistItems is returned when checklist exceeds the item limit.
+	ErrTooManyChecklistItems = scheme.ErrTooManyChecklistItems
+	// ErrInvalidReminderTime is returned when reminder hour or minute is out of range.
+	ErrInvalidReminderTime = scheme.ErrInvalidReminderTime
+)
+
+// URL Scheme Operation Errors - aliased from internal/scheme.
 var (
 	// ErrEmptyToken is returned when an empty token is provided to WithToken.
-	ErrEmptyToken = errors.New("things3: empty token provided to WithToken")
+	ErrEmptyToken = scheme.ErrEmptyToken
 	// ErrIDRequired is returned when id is missing for an update operation.
-	ErrIDRequired = errors.New("things3: id required for update operation")
-	// ErrTitleTooLong is returned when title exceeds 4,000 character limit.
-	ErrTitleTooLong = errors.New("things3: title exceeds 4,000 character limit")
-	// ErrNotesTooLong is returned when notes exceed 10,000 character limit.
-	ErrNotesTooLong = errors.New("things3: notes exceed 10,000 character limit")
-	// ErrTooManyChecklistItems is returned when checklist exceeds 100 item limit.
-	ErrTooManyChecklistItems = errors.New("things3: checklist exceeds 100 item limit")
+	ErrIDRequired = scheme.ErrIDRequired
 	// ErrNoJSONItems is returned when building a JSON URL with no items.
-	ErrNoJSONItems = errors.New("things3: no items provided for JSON operation")
-	// ErrInvalidReminderTime is returned when reminder hour or minute is out of range.
-	ErrInvalidReminderTime = errors.New("things3: invalid reminder time (hour must be 0-23, minute must be 0-59)")
+	ErrNoJSONItems = scheme.ErrNoJSONItems
 )

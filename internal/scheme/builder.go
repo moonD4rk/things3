@@ -1,4 +1,4 @@
-package things3
+package scheme
 
 import (
 	"context"
@@ -8,157 +8,148 @@ import (
 	"time"
 )
 
-// addTodoBuilder builds URLs for creating new to-dos via the add command.
+// addTodoBuilder builds URLs for creating new todos via the add command.
 type addTodoBuilder struct {
-	scheme *scheme
-	attrs  urlAttrs
+	scheme *Scheme
+	attrs  URLAttrs
 	err    error
 }
 
-// getStore returns the attribute store for the builder.
-func (b *addTodoBuilder) getStore() attrStore { return &b.attrs }
-
-// setErr sets the error field for the builder.
-func (b *addTodoBuilder) setErr(err error) { b.err = err }
-
-// Title sets the to-do title.
-func (b *addTodoBuilder) Title(title string) TodoAdder {
-	return setStr(b, titleParam, title)
+// NewTodoAdder creates a new TodoAdder for creating a new todo.
+func NewTodoAdder(s *Scheme) TodoAdder {
+	return &addTodoBuilder{scheme: s, attrs: NewURLAttrs()}
 }
 
-// Titles sets multiple to-do titles (creates multiple to-dos).
+// GetStore returns the attribute store for the builder.
+func (b *addTodoBuilder) GetStore() AttrStore { return &b.attrs }
+
+// SetErr sets the error field for the builder.
+func (b *addTodoBuilder) SetErr(err error) { b.err = err }
+
+// Title sets the todo title.
+func (b *addTodoBuilder) Title(title string) TodoAdder {
+	return SetStr(b, TitleParam, title)
+}
+
+// Titles sets multiple todo titles (creates multiple todos).
 // Titles are newline-separated.
 func (b *addTodoBuilder) Titles(titles ...string) TodoAdder {
 	combined := strings.Join(titles, "\n")
-	if len(combined) > maxTitleLength {
+	if len(combined) > MaxTitleLength {
 		b.err = ErrTitleTooLong
 		return b
 	}
-	b.attrs.SetString(keyTitles, combined)
+	b.attrs.SetString(KeyTitles, combined)
 	return b
 }
 
-// Notes sets the to-do notes/description.
+// Notes sets the todo notes/description.
 func (b *addTodoBuilder) Notes(notes string) TodoAdder {
-	return setStr(b, notesParam, notes)
+	return SetStr(b, NotesParam, notes)
 }
 
 // When sets the scheduling date using a time.Time value.
 // The date portion is used; time-of-day is ignored.
-//
-// Example:
-//
-//	scheme.AddTodo().Title("Task").When(things3.Today())
-//	scheme.AddTodo().Title("Task").When(time.Now().AddDate(0, 0, 7))
 func (b *addTodoBuilder) When(t time.Time) TodoAdder {
-	return setWhenTime(b, t)
+	return SetWhenTime(b, t)
 }
 
-// WhenEvening schedules the to-do for this evening.
+// WhenEvening schedules the todo for this evening.
 // This is a Things 3-specific concept that cannot be expressed as a date.
 func (b *addTodoBuilder) WhenEvening() TodoAdder {
-	return setWhenStr(b, whenEvening)
+	return SetWhenStr(b, WhenEvening)
 }
 
-// WhenAnytime schedules the to-do for anytime (no specific time).
+// WhenAnytime schedules the todo for anytime (no specific time).
 // This is a Things 3-specific concept that cannot be expressed as a date.
 func (b *addTodoBuilder) WhenAnytime() TodoAdder {
-	return setWhenStr(b, whenAnytime)
+	return SetWhenStr(b, WhenAnytime)
 }
 
-// WhenSomeday schedules the to-do for someday (indefinite future).
+// WhenSomeday schedules the todo for someday (indefinite future).
 // This is a Things 3-specific concept that cannot be expressed as a date.
 func (b *addTodoBuilder) WhenSomeday() TodoAdder {
-	return setWhenStr(b, whenSomeday)
+	return SetWhenStr(b, WhenSomeday)
 }
 
 // Deadline sets the deadline date using a time.Time value.
 // The date portion is used; time-of-day is ignored.
-//
-// Example:
-//
-//	scheme.AddTodo().Title("Task").Deadline(time.Date(2025, 12, 31, 0, 0, 0, 0, time.Local))
 func (b *addTodoBuilder) Deadline(t time.Time) TodoAdder {
-	return setDeadlineTime(b, t)
+	return SetDeadlineTime(b, t)
 }
 
-// Tags sets the tags for the to-do.
+// Tags sets the tags for the todo.
 // Tags must already exist in Things.
 func (b *addTodoBuilder) Tags(tags ...string) TodoAdder {
-	return setStrs(b, tagsParam, tags)
+	return SetStrs(b, TagsParam, tags)
 }
 
 // ChecklistItems sets the checklist items.
 func (b *addTodoBuilder) ChecklistItems(items ...string) TodoAdder {
-	return setStrs(b, checklistItemsParam, items)
+	return SetStrs(b, ChecklistItemsParam, items)
 }
 
 // List sets the target project or area by name.
 func (b *addTodoBuilder) List(name string) TodoAdder {
-	return setStr(b, listParam, name)
+	return SetStr(b, ListParam, name)
 }
 
 // ListID sets the target project or area by UUID.
 func (b *addTodoBuilder) ListID(id string) TodoAdder {
-	return setStr(b, listIDParam, id)
+	return SetStr(b, ListIDParam, id)
 }
 
 // Heading sets the target heading within a project by name.
 func (b *addTodoBuilder) Heading(name string) TodoAdder {
-	return setStr(b, headingParam, name)
+	return SetStr(b, HeadingParam, name)
 }
 
 // HeadingID sets the target heading within a project by UUID.
 func (b *addTodoBuilder) HeadingID(id string) TodoAdder {
-	return setStr(b, headingIDParam, id)
+	return SetStr(b, HeadingIDParam, id)
 }
 
 // Completed sets the completion status.
 func (b *addTodoBuilder) Completed(completed bool) TodoAdder {
-	return setBool(b, completedParam, completed)
+	return SetBool(b, CompletedParam, completed)
 }
 
 // Canceled sets the canceled status.
 func (b *addTodoBuilder) Canceled(canceled bool) TodoAdder {
-	return setBool(b, canceledParam, canceled)
+	return SetBool(b, CanceledParam, canceled)
 }
 
 // ShowQuickEntry displays the quick entry dialog instead of adding directly.
 func (b *addTodoBuilder) ShowQuickEntry(show bool) TodoAdder {
-	return setBool(b, showQuickEntryParam, show)
+	return SetBool(b, ShowQuickEntryParam, show)
 }
 
-// Reveal navigates to the newly created to-do.
+// Reveal navigates to the newly created todo.
 func (b *addTodoBuilder) Reveal(reveal bool) TodoAdder {
-	return setBool(b, revealParam, reveal)
+	return SetBool(b, RevealParam, reveal)
 }
 
-// Reminder sets a reminder time for the to-do.
+// Reminder sets a reminder time for the todo.
 // The reminder is combined with the scheduling date (When/WhenDate).
 // If no scheduling date is set, defaults to "today".
 // Hour must be 0-23, minute must be 0-59.
-//
-// Example:
-//
-//	scheme.AddTodo().Title("Meeting").When(WhenTomorrow).Reminder(14, 30) // tomorrow@14:30
-//	scheme.AddTodo().Title("Call").Reminder(15, 0) // today@15:00 (defaults to today)
 func (b *addTodoBuilder) Reminder(hour, minute int) TodoAdder {
-	return setReminder(b, hour, minute)
+	return SetReminder(b, hour, minute)
 }
 
 // CreationDate sets the creation timestamp.
 // Future dates are ignored by Things.
 func (b *addTodoBuilder) CreationDate(date time.Time) TodoAdder {
-	return setTime(b, creationDateParam, date)
+	return SetTime(b, CreationDateParam, date)
 }
 
 // CompletionDate sets the completion timestamp.
 // Future dates are ignored by Things.
 func (b *addTodoBuilder) CompletionDate(date time.Time) TodoAdder {
-	return setTime(b, completionDateParam, date)
+	return SetTime(b, CompletionDateParam, date)
 }
 
-// Build returns the Things URL for creating the to-do.
+// Build returns the Things URL for creating the todo.
 func (b *addTodoBuilder) Build() (string, error) {
 	if b.err != nil {
 		return "", b.err
@@ -168,11 +159,11 @@ func (b *addTodoBuilder) Build() (string, error) {
 	b.attrs.FinalizeWhen()
 
 	query := url.Values{}
-	for k, v := range b.attrs.params {
+	for k, v := range b.attrs.Params {
 		query.Set(k, v)
 	}
 
-	return fmt.Sprintf("things:///%s?%s", CommandAdd, encodeQuery(query)), nil
+	return fmt.Sprintf("things:///%s?%s", CommandAdd, EncodeQuery(query)), nil
 }
 
 // Execute builds and executes the add URL.
@@ -182,93 +173,98 @@ func (b *addTodoBuilder) Execute(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return b.scheme.execute(ctx, uri)
+	return b.scheme.Execute(ctx, uri)
 }
 
 // addProjectBuilder builds URLs for creating new projects via the add-project command.
 type addProjectBuilder struct {
-	scheme *scheme
-	attrs  urlAttrs
+	scheme *Scheme
+	attrs  URLAttrs
 	err    error
 }
 
-// getStore returns the attribute store for the builder.
-func (b *addProjectBuilder) getStore() attrStore { return &b.attrs }
+// NewProjectAdder creates a new ProjectAdder for creating a new project.
+func NewProjectAdder(s *Scheme) ProjectAdder {
+	return &addProjectBuilder{scheme: s, attrs: NewURLAttrs()}
+}
 
-// setErr sets the error field for the builder.
-func (b *addProjectBuilder) setErr(err error) { b.err = err }
+// GetStore returns the attribute store for the builder.
+func (b *addProjectBuilder) GetStore() AttrStore { return &b.attrs }
+
+// SetErr sets the error field for the builder.
+func (b *addProjectBuilder) SetErr(err error) { b.err = err }
 
 // Title sets the project title.
 func (b *addProjectBuilder) Title(title string) ProjectAdder {
-	return setStr(b, titleParam, title)
+	return SetStr(b, TitleParam, title)
 }
 
 // Notes sets the project notes/description.
 func (b *addProjectBuilder) Notes(notes string) ProjectAdder {
-	return setStr(b, notesParam, notes)
+	return SetStr(b, NotesParam, notes)
 }
 
 // When sets the scheduling date using a time.Time value.
 // The date portion is used; time-of-day is ignored.
 func (b *addProjectBuilder) When(t time.Time) ProjectAdder {
-	return setWhenTime(b, t)
+	return SetWhenTime(b, t)
 }
 
 // WhenEvening schedules the project for this evening.
 func (b *addProjectBuilder) WhenEvening() ProjectAdder {
-	return setWhenStr(b, whenEvening)
+	return SetWhenStr(b, WhenEvening)
 }
 
 // WhenAnytime schedules the project for anytime (no specific time).
 func (b *addProjectBuilder) WhenAnytime() ProjectAdder {
-	return setWhenStr(b, whenAnytime)
+	return SetWhenStr(b, WhenAnytime)
 }
 
 // WhenSomeday schedules the project for someday (indefinite future).
 func (b *addProjectBuilder) WhenSomeday() ProjectAdder {
-	return setWhenStr(b, whenSomeday)
+	return SetWhenStr(b, WhenSomeday)
 }
 
 // Deadline sets the deadline date using a time.Time value.
 // The date portion is used; time-of-day is ignored.
 func (b *addProjectBuilder) Deadline(t time.Time) ProjectAdder {
-	return setDeadlineTime(b, t)
+	return SetDeadlineTime(b, t)
 }
 
 // Tags sets the tags for the project.
 func (b *addProjectBuilder) Tags(tags ...string) ProjectAdder {
-	return setStrs(b, tagsParam, tags)
+	return SetStrs(b, TagsParam, tags)
 }
 
 // Area sets the parent area by name.
 func (b *addProjectBuilder) Area(name string) ProjectAdder {
-	return setStr(b, areaParam, name)
+	return SetStr(b, AreaParam, name)
 }
 
 // AreaID sets the parent area by UUID.
 func (b *addProjectBuilder) AreaID(id string) ProjectAdder {
-	return setStr(b, areaIDParam, id)
+	return SetStr(b, AreaIDParam, id)
 }
 
-// Todos sets the child to-do titles.
+// Todos sets the child todo titles.
 func (b *addProjectBuilder) Todos(titles ...string) ProjectAdder {
-	b.attrs.SetStrings(keyTodos, titles, "\n")
+	b.attrs.SetStrings(KeyTodos, titles, "\n")
 	return b
 }
 
 // Completed sets the completion status.
 func (b *addProjectBuilder) Completed(completed bool) ProjectAdder {
-	return setBool(b, completedParam, completed)
+	return SetBool(b, CompletedParam, completed)
 }
 
 // Canceled sets the canceled status.
 func (b *addProjectBuilder) Canceled(canceled bool) ProjectAdder {
-	return setBool(b, canceledParam, canceled)
+	return SetBool(b, CanceledParam, canceled)
 }
 
 // Reveal navigates to the newly created project.
 func (b *addProjectBuilder) Reveal(reveal bool) ProjectAdder {
-	return setBool(b, revealParam, reveal)
+	return SetBool(b, RevealParam, reveal)
 }
 
 // Reminder sets a reminder time for the project.
@@ -276,17 +272,17 @@ func (b *addProjectBuilder) Reveal(reveal bool) ProjectAdder {
 // If no scheduling date is set, defaults to "today".
 // Hour must be 0-23, minute must be 0-59.
 func (b *addProjectBuilder) Reminder(hour, minute int) ProjectAdder {
-	return setReminder(b, hour, minute)
+	return SetReminder(b, hour, minute)
 }
 
 // CreationDate sets the creation timestamp.
 func (b *addProjectBuilder) CreationDate(date time.Time) ProjectAdder {
-	return setTime(b, creationDateParam, date)
+	return SetTime(b, CreationDateParam, date)
 }
 
 // CompletionDate sets the completion timestamp.
 func (b *addProjectBuilder) CompletionDate(date time.Time) ProjectAdder {
-	return setTime(b, completionDateParam, date)
+	return SetTime(b, CompletionDateParam, date)
 }
 
 // Build returns the Things URL for creating the project.
@@ -299,11 +295,11 @@ func (b *addProjectBuilder) Build() (string, error) {
 	b.attrs.FinalizeWhen()
 
 	query := url.Values{}
-	for k, v := range b.attrs.params {
+	for k, v := range b.attrs.Params {
 		query.Set(k, v)
 	}
 
-	return fmt.Sprintf("things:///%s?%s", CommandAddProject, encodeQuery(query)), nil
+	return fmt.Sprintf("things:///%s?%s", CommandAddProject, EncodeQuery(query)), nil
 }
 
 // Execute builds and executes the add-project URL.
@@ -313,5 +309,5 @@ func (b *addProjectBuilder) Execute(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return b.scheme.execute(ctx, uri)
+	return b.scheme.Execute(ctx, uri)
 }

@@ -3,6 +3,8 @@ package things3
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/moond4rk/things3/internal/scheme"
 )
 
 // String constant for unknown enum values.
@@ -201,76 +203,56 @@ func (s StartBucket) String() string {
 	}
 }
 
-// Command represents Things URL scheme commands.
-type Command string
+// Command represents Things URL scheme commands (aliased from internal/scheme).
+type Command = scheme.Command
 
+// Command constants for Things URL scheme.
 const (
-	// CommandShow opens and shows an item.
-	CommandShow Command = "show"
-	// CommandAdd creates a new to-do.
-	CommandAdd Command = "add"
-	// CommandAddProject creates a new project.
-	CommandAddProject Command = "add-project"
-	// CommandUpdate updates an existing item (requires auth token).
-	CommandUpdate Command = "update"
-	// CommandUpdateProject updates an existing project (requires auth token).
-	CommandUpdateProject Command = "update-project"
-	// CommandSearch performs a search.
-	CommandSearch Command = "search"
-	// CommandVersion returns Things version information.
-	CommandVersion Command = "version"
-	// CommandJSON enables advanced JSON-based operations.
-	CommandJSON Command = "json"
+	CommandShow          = scheme.CommandShow
+	CommandAdd           = scheme.CommandAdd
+	CommandAddProject    = scheme.CommandAddProject
+	CommandUpdate        = scheme.CommandUpdate
+	CommandUpdateProject = scheme.CommandUpdateProject
+	CommandSearch        = scheme.CommandSearch
+	CommandVersion       = scheme.CommandVersion
+	CommandJSON          = scheme.CommandJSON
 )
 
-// String returns the string representation of the Command.
-func (c Command) String() string {
-	return string(c)
-}
+// ListID represents built-in Things list identifiers (aliased from internal/scheme).
+type ListID = scheme.ListID
 
-// when represents scheduling values for the "when" parameter in URL scheme.
-// This is a private type; use When(time.Time) for dates or WhenEvening(),
-// WhenAnytime(), WhenSomeday() methods for Things 3-specific concepts.
-type when string
-
+// ListID constants for built-in Things lists.
 const (
-	// whenEvening schedules for this evening.
-	whenEvening when = "evening"
-	// whenAnytime schedules for anytime.
-	whenAnytime when = "anytime"
-	// whenSomeday schedules for someday.
-	whenSomeday when = "someday"
+	ListInbox          = scheme.ListInbox
+	ListToday          = scheme.ListToday
+	ListAnytime        = scheme.ListAnytime
+	ListUpcoming       = scheme.ListUpcoming
+	ListSomeday        = scheme.ListSomeday
+	ListLogbook        = scheme.ListLogbook
+	ListTomorrow       = scheme.ListTomorrow
+	ListDeadlines      = scheme.ListDeadlines
+	ListRepeating      = scheme.ListRepeating
+	ListAllProjects    = scheme.ListAllProjects
+	ListLoggedProjects = scheme.ListLoggedProjects
 )
 
-// ListID represents built-in Things list identifiers for the show command.
-type ListID string
-
-const (
-	// ListInbox is the Inbox list.
-	ListInbox ListID = "inbox"
-	// ListToday is the Today list.
-	ListToday ListID = "today"
-	// ListAnytime is the Anytime list.
-	ListAnytime ListID = "anytime"
-	// ListUpcoming is the Upcoming list.
-	ListUpcoming ListID = "upcoming"
-	// ListSomeday is the Someday list.
-	ListSomeday ListID = "someday"
-	// ListLogbook is the Logbook list.
-	ListLogbook ListID = "logbook"
-	// ListTomorrow is the Tomorrow list.
-	ListTomorrow ListID = "tomorrow"
-	// ListDeadlines is the Deadlines list.
-	ListDeadlines ListID = "deadlines"
-	// ListRepeating is the Repeating list.
-	ListRepeating ListID = "repeating"
-	// ListAllProjects is the All Projects list.
-	ListAllProjects ListID = "all-projects"
-	// ListLoggedProjects is the Logged Projects list.
-	ListLoggedProjects ListID = "logged-projects"
+// JSON batch operation types (aliased from internal/scheme).
+type (
+	JSONOperation = scheme.JSONOperation
+	JSONItemType  = scheme.JSONItemType
+	JSONItem      = scheme.JSONItem
 )
 
-// String returns the string representation of the ListID.
-func (l ListID) String() string {
-	return string(l)
+// JSON operation constants.
+const (
+	JSONOperationCreate = scheme.JSONOperationCreate
+	JSONOperationUpdate = scheme.JSONOperationUpdate
+	JSONItemTypeTodo    = scheme.JSONItemTypeTodo
+	JSONItemTypeProject = scheme.JSONItemTypeProject
+)
+
+// Headings creates heading entries for a project's items.
+// Used within BatchProjectConfigurator.Todos to organize todos under headings.
+func Headings(headings ...string) string {
+	return scheme.Headings(headings...)
 }

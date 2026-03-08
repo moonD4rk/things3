@@ -1,4 +1,4 @@
-package things3
+package scheme
 
 import (
 	"context"
@@ -9,56 +9,18 @@ import (
 	"time"
 )
 
-// JSONOperation represents the operation type for a JSON item.
-type JSONOperation string
-
-const (
-	// JSONOperationCreate creates a new item.
-	JSONOperationCreate JSONOperation = "create"
-	// JSONOperationUpdate updates an existing item.
-	JSONOperationUpdate JSONOperation = "update"
-)
-
-// JSONItemType represents the type of item in a JSON operation.
-type JSONItemType string
-
-const (
-	// JSONItemTypeTodo represents a to-do item.
-	JSONItemTypeTodo JSONItemType = "to-do"
-	// JSONItemTypeProject represents a project item.
-	JSONItemTypeProject JSONItemType = "project"
-)
-
-// JSONItem represents a single item in a JSON batch operation.
-type JSONItem struct {
-	Type       JSONItemType   `json:"type"`
-	Operation  JSONOperation  `json:"operation,omitempty"`
-	ID         string         `json:"id,omitempty"`
-	Attributes map[string]any `json:"attributes,omitempty"`
-}
-
-// batchTodoBuilder builds a to-do entry for batch operations.
-// Unlike addTodoBuilder which generates a complete URL, batchTodoBuilder creates
-// a JSON object that becomes part of a batchBuilder or authBatchBuilder batch.
-//
-// Example:
-//
-//	Scheme.Batch().
-//	    AddTodo(func(b BatchTodoConfigurator) {
-//	        b.Title("Buy milk").Tags("shopping")
-//	    }).
-//	    Build()
+// batchTodoBuilder builds a todo entry for batch operations.
 type batchTodoBuilder struct {
 	item      JSONItem
-	jsonAttrs jsonAttrs
+	jsonAttrs JSONAttrs
 	err       error
 }
 
-// getStore returns the attribute store for the builder.
-func (t *batchTodoBuilder) getStore() attrStore { return &t.jsonAttrs }
+// GetStore returns the attribute store for the builder.
+func (t *batchTodoBuilder) GetStore() AttrStore { return &t.jsonAttrs }
 
-// setErr sets the error field for the builder.
-func (t *batchTodoBuilder) setErr(err error) { t.err = err }
+// SetErr sets the error field for the builder.
+func (t *batchTodoBuilder) SetErr(err error) { t.err = err }
 
 // newBatchTodoBuilder creates a new batchTodoBuilder for create operations.
 func newBatchTodoBuilder() *batchTodoBuilder {
@@ -69,7 +31,7 @@ func newBatchTodoBuilder() *batchTodoBuilder {
 			Operation:  JSONOperationCreate,
 			Attributes: attrs,
 		},
-		jsonAttrs: jsonAttrs{attrs: attrs},
+		jsonAttrs: JSONAttrs{Attrs: attrs},
 	}
 }
 
@@ -83,55 +45,55 @@ func newBatchTodoBuilderUpdate(id string) *batchTodoBuilder {
 			ID:         id,
 			Attributes: attrs,
 		},
-		jsonAttrs: jsonAttrs{attrs: attrs},
+		jsonAttrs: JSONAttrs{Attrs: attrs},
 	}
 }
 
-// Title sets the to-do title.
+// Title sets the todo title.
 func (t *batchTodoBuilder) Title(title string) BatchTodoConfigurator {
-	return setStr(t, titleParam, title)
+	return SetStr(t, TitleParam, title)
 }
 
-// Notes sets the to-do notes.
+// Notes sets the todo notes.
 func (t *batchTodoBuilder) Notes(notes string) BatchTodoConfigurator {
-	return setStr(t, notesParam, notes)
+	return SetStr(t, NotesParam, notes)
 }
 
 // When sets the scheduling date using a time.Time value.
 // The date portion is used; time-of-day is ignored.
 func (t *batchTodoBuilder) When(tm time.Time) BatchTodoConfigurator {
-	return setWhenTime(t, tm)
+	return SetWhenTime(t, tm)
 }
 
-// WhenEvening schedules the to-do for this evening.
+// WhenEvening schedules the todo for this evening.
 func (t *batchTodoBuilder) WhenEvening() BatchTodoConfigurator {
-	return setWhenStr(t, whenEvening)
+	return SetWhenStr(t, WhenEvening)
 }
 
-// WhenAnytime schedules the to-do for anytime (no specific time).
+// WhenAnytime schedules the todo for anytime (no specific time).
 func (t *batchTodoBuilder) WhenAnytime() BatchTodoConfigurator {
-	return setWhenStr(t, whenAnytime)
+	return SetWhenStr(t, WhenAnytime)
 }
 
-// WhenSomeday schedules the to-do for someday (indefinite future).
+// WhenSomeday schedules the todo for someday (indefinite future).
 func (t *batchTodoBuilder) WhenSomeday() BatchTodoConfigurator {
-	return setWhenStr(t, whenSomeday)
+	return SetWhenStr(t, WhenSomeday)
 }
 
 // Deadline sets the deadline date using a time.Time value.
 // The date portion is used; time-of-day is ignored.
 func (t *batchTodoBuilder) Deadline(tm time.Time) BatchTodoConfigurator {
-	return setDeadlineTime(t, tm)
+	return SetDeadlineTime(t, tm)
 }
 
-// Tags sets the tags for the to-do.
+// Tags sets the tags for the todo.
 func (t *batchTodoBuilder) Tags(tags ...string) BatchTodoConfigurator {
-	return setStrs(t, tagsParam, tags)
+	return SetStrs(t, TagsParam, tags)
 }
 
 // ChecklistItems sets the checklist items.
 func (t *batchTodoBuilder) ChecklistItems(items ...string) BatchTodoConfigurator {
-	if len(items) > maxChecklistItems {
+	if len(items) > MaxChecklistItems {
 		t.err = ErrTooManyChecklistItems
 		return t
 	}
@@ -139,61 +101,61 @@ func (t *batchTodoBuilder) ChecklistItems(items ...string) BatchTodoConfigurator
 	for i, item := range items {
 		checklistItems[i] = map[string]any{
 			"type":       "checklist-item",
-			"attributes": map[string]any{keyTitle: item},
+			"attributes": map[string]any{KeyTitle: item},
 		}
 	}
-	t.item.Attributes[keyChecklistItems] = checklistItems
+	t.item.Attributes[KeyChecklistItems] = checklistItems
 	return t
 }
 
 // List sets the target project or area by name.
 func (t *batchTodoBuilder) List(name string) BatchTodoConfigurator {
-	return setStr(t, listParam, name)
+	return SetStr(t, ListParam, name)
 }
 
 // ListID sets the target project or area by UUID.
 func (t *batchTodoBuilder) ListID(id string) BatchTodoConfigurator {
-	return setStr(t, listIDParam, id)
+	return SetStr(t, ListIDParam, id)
 }
 
 // Heading sets the target heading within a project by name.
 func (t *batchTodoBuilder) Heading(name string) BatchTodoConfigurator {
-	return setStr(t, headingParam, name)
+	return SetStr(t, HeadingParam, name)
 }
 
 // Completed sets the completion status.
 func (t *batchTodoBuilder) Completed(completed bool) BatchTodoConfigurator {
-	return setBool(t, completedParam, completed)
+	return SetBool(t, CompletedParam, completed)
 }
 
 // Canceled sets the canceled status.
 func (t *batchTodoBuilder) Canceled(canceled bool) BatchTodoConfigurator {
-	return setBool(t, canceledParam, canceled)
+	return SetBool(t, CanceledParam, canceled)
 }
 
 // CreationDate sets the creation timestamp.
 func (t *batchTodoBuilder) CreationDate(date time.Time) BatchTodoConfigurator {
-	return setTime(t, creationDateParam, date)
+	return SetTime(t, CreationDateParam, date)
 }
 
 // CompletionDate sets the completion timestamp.
 func (t *batchTodoBuilder) CompletionDate(date time.Time) BatchTodoConfigurator {
-	return setTime(t, completionDateParam, date)
+	return SetTime(t, CompletionDateParam, date)
 }
 
 // PrependNotes prepends text to existing notes (update only).
 func (t *batchTodoBuilder) PrependNotes(notes string) BatchTodoConfigurator {
-	return setStr(t, prependNotesParam, notes)
+	return SetStr(t, PrependNotesParam, notes)
 }
 
 // AppendNotes appends text to existing notes (update only).
 func (t *batchTodoBuilder) AppendNotes(notes string) BatchTodoConfigurator {
-	return setStr(t, appendNotesParam, notes)
+	return SetStr(t, AppendNotesParam, notes)
 }
 
 // AddTags adds tags without replacing existing ones (update only).
 func (t *batchTodoBuilder) AddTags(tags ...string) BatchTodoConfigurator {
-	return setStrs(t, addTagsParam, tags)
+	return SetStrs(t, AddTagsParam, tags)
 }
 
 // build returns the JSON item and any error.
@@ -202,19 +164,17 @@ func (t *batchTodoBuilder) build() (JSONItem, error) {
 }
 
 // batchProjectBuilder builds a project entry for batch operations.
-// Unlike addProjectBuilder which generates a complete URL, batchProjectBuilder creates
-// a JSON object that becomes part of a batchBuilder or authBatchBuilder batch.
 type batchProjectBuilder struct {
 	item      JSONItem
-	jsonAttrs jsonAttrs
+	jsonAttrs JSONAttrs
 	err       error
 }
 
-// getStore returns the attribute store for the builder.
-func (p *batchProjectBuilder) getStore() attrStore { return &p.jsonAttrs }
+// GetStore returns the attribute store for the builder.
+func (p *batchProjectBuilder) GetStore() AttrStore { return &p.jsonAttrs }
 
-// setErr sets the error field for the builder.
-func (p *batchProjectBuilder) setErr(err error) { p.err = err }
+// SetErr sets the error field for the builder.
+func (p *batchProjectBuilder) SetErr(err error) { p.err = err }
 
 // newBatchProjectBuilder creates a new batchProjectBuilder for create operations.
 func newBatchProjectBuilder() *batchProjectBuilder {
@@ -225,7 +185,7 @@ func newBatchProjectBuilder() *batchProjectBuilder {
 			Operation:  JSONOperationCreate,
 			Attributes: attrs,
 		},
-		jsonAttrs: jsonAttrs{attrs: attrs},
+		jsonAttrs: JSONAttrs{Attrs: attrs},
 	}
 }
 
@@ -239,98 +199,98 @@ func newBatchProjectBuilderUpdate(id string) *batchProjectBuilder {
 			ID:         id,
 			Attributes: attrs,
 		},
-		jsonAttrs: jsonAttrs{attrs: attrs},
+		jsonAttrs: JSONAttrs{Attrs: attrs},
 	}
 }
 
 // Title sets the project title.
 func (p *batchProjectBuilder) Title(title string) BatchProjectConfigurator {
-	return setStr(p, titleParam, title)
+	return SetStr(p, TitleParam, title)
 }
 
 // Notes sets the project notes.
 func (p *batchProjectBuilder) Notes(notes string) BatchProjectConfigurator {
-	return setStr(p, notesParam, notes)
+	return SetStr(p, NotesParam, notes)
 }
 
 // When sets the scheduling date using a time.Time value.
 // The date portion is used; time-of-day is ignored.
 func (p *batchProjectBuilder) When(t time.Time) BatchProjectConfigurator {
-	return setWhenTime(p, t)
+	return SetWhenTime(p, t)
 }
 
 // WhenEvening schedules the project for this evening.
 func (p *batchProjectBuilder) WhenEvening() BatchProjectConfigurator {
-	return setWhenStr(p, whenEvening)
+	return SetWhenStr(p, WhenEvening)
 }
 
 // WhenAnytime schedules the project for anytime (no specific time).
 func (p *batchProjectBuilder) WhenAnytime() BatchProjectConfigurator {
-	return setWhenStr(p, whenAnytime)
+	return SetWhenStr(p, WhenAnytime)
 }
 
 // WhenSomeday schedules the project for someday (indefinite future).
 func (p *batchProjectBuilder) WhenSomeday() BatchProjectConfigurator {
-	return setWhenStr(p, whenSomeday)
+	return SetWhenStr(p, WhenSomeday)
 }
 
 // Deadline sets the deadline date using a time.Time value.
 // The date portion is used; time-of-day is ignored.
 func (p *batchProjectBuilder) Deadline(t time.Time) BatchProjectConfigurator {
-	return setDeadlineTime(p, t)
+	return SetDeadlineTime(p, t)
 }
 
 // Tags sets the tags for the project.
 func (p *batchProjectBuilder) Tags(tags ...string) BatchProjectConfigurator {
-	return setStrs(p, tagsParam, tags)
+	return SetStrs(p, TagsParam, tags)
 }
 
 // Area sets the parent area by name.
 func (p *batchProjectBuilder) Area(name string) BatchProjectConfigurator {
-	return setStr(p, areaParam, name)
+	return SetStr(p, AreaParam, name)
 }
 
 // AreaID sets the parent area by UUID.
 func (p *batchProjectBuilder) AreaID(id string) BatchProjectConfigurator {
-	return setStr(p, areaIDParam, id)
+	return SetStr(p, AreaIDParam, id)
 }
 
 // Completed sets the completion status.
 func (p *batchProjectBuilder) Completed(completed bool) BatchProjectConfigurator {
-	return setBool(p, completedParam, completed)
+	return SetBool(p, CompletedParam, completed)
 }
 
 // Canceled sets the canceled status.
 func (p *batchProjectBuilder) Canceled(canceled bool) BatchProjectConfigurator {
-	return setBool(p, canceledParam, canceled)
+	return SetBool(p, CanceledParam, canceled)
 }
 
 // CreationDate sets the creation timestamp.
 func (p *batchProjectBuilder) CreationDate(date time.Time) BatchProjectConfigurator {
-	return setTime(p, creationDateParam, date)
+	return SetTime(p, CreationDateParam, date)
 }
 
 // CompletionDate sets the completion timestamp.
 func (p *batchProjectBuilder) CompletionDate(date time.Time) BatchProjectConfigurator {
-	return setTime(p, completionDateParam, date)
+	return SetTime(p, CompletionDateParam, date)
 }
 
 // PrependNotes prepends text to existing notes (update only).
 func (p *batchProjectBuilder) PrependNotes(notes string) BatchProjectConfigurator {
-	return setStr(p, prependNotesParam, notes)
+	return SetStr(p, PrependNotesParam, notes)
 }
 
 // AppendNotes appends text to existing notes (update only).
 func (p *batchProjectBuilder) AppendNotes(notes string) BatchProjectConfigurator {
-	return setStr(p, appendNotesParam, notes)
+	return SetStr(p, AppendNotesParam, notes)
 }
 
 // AddTags adds tags without replacing existing ones (update only).
 func (p *batchProjectBuilder) AddTags(tags ...string) BatchProjectConfigurator {
-	return setStrs(p, addTagsParam, tags)
+	return SetStrs(p, AddTagsParam, tags)
 }
 
-// Todos sets the child to-do items using configuration functions.
+// Todos sets the child todo items using configuration functions.
 func (p *batchProjectBuilder) Todos(configs ...func(BatchTodoConfigurator)) BatchProjectConfigurator {
 	todos := make([]map[string]any, 0, len(configs))
 	for _, configure := range configs {
@@ -357,13 +317,18 @@ func (p *batchProjectBuilder) build() (JSONItem, error) {
 // batchBuilder builds URLs for batch create operations via the json command.
 // Does not support update operations; use authBatchBuilder for updates.
 type batchBuilder struct {
-	scheme *scheme
+	scheme *Scheme
 	items  []JSONItem
 	reveal bool
 	err    error
 }
 
-// AddTodo adds a to-do creation to the batch.
+// NewBatch creates a new BatchCreator for batch create operations.
+func NewBatch(s *Scheme) BatchCreator {
+	return &batchBuilder{scheme: s, items: make([]JSONItem, 0)}
+}
+
+// AddTodo adds a todo creation to the batch.
 func (b *batchBuilder) AddTodo(configure func(BatchTodoConfigurator)) BatchCreator {
 	item := newBatchTodoBuilder()
 	configure(item)
@@ -418,12 +383,12 @@ func (b *batchBuilder) Build() (string, error) {
 	}
 
 	query := url.Values{}
-	query.Set(keyData, string(jsonData))
+	query.Set(KeyData, string(jsonData))
 	if b.reveal {
-		query.Set(keyReveal, "true")
+		query.Set(KeyReveal, "true")
 	}
 
-	return fmt.Sprintf("things:///%s?%s", CommandJSON, encodeQuery(query)), nil
+	return fmt.Sprintf("things:///%s?%s", CommandJSON, EncodeQuery(query)), nil
 }
 
 // Execute builds and executes the JSON batch URL.
@@ -433,13 +398,13 @@ func (b *batchBuilder) Execute(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return b.scheme.execute(ctx, uri)
+	return b.scheme.Execute(ctx, uri)
 }
 
 // authBatchBuilder builds URLs for batch operations including updates via the json command.
 // Requires authentication token for update operations.
 type authBatchBuilder struct {
-	scheme    *scheme
+	scheme    *Scheme
 	token     string
 	tokenFunc func(context.Context) (string, error) // Optional lazy token loader
 	items     []JSONItem
@@ -447,7 +412,16 @@ type authBatchBuilder struct {
 	err       error
 }
 
-// AddTodo adds a to-do creation to the batch.
+// NewAuthBatch creates a new AuthBatchCreator for batch operations including updates.
+func NewAuthBatch(s *Scheme, tokenFunc func(context.Context) (string, error)) AuthBatchCreator {
+	return &authBatchBuilder{
+		scheme:    s,
+		tokenFunc: tokenFunc,
+		items:     make([]JSONItem, 0),
+	}
+}
+
+// AddTodo adds a todo creation to the batch.
 func (b *authBatchBuilder) AddTodo(configure func(BatchTodoConfigurator)) AuthBatchCreator {
 	item := newBatchTodoBuilder()
 	configure(item)
@@ -473,7 +447,7 @@ func (b *authBatchBuilder) AddProject(configure func(BatchProjectConfigurator)) 
 	return b
 }
 
-// UpdateTodo adds a to-do update to the batch.
+// UpdateTodo adds a todo update to the batch.
 func (b *authBatchBuilder) UpdateTodo(id string, configure func(BatchTodoConfigurator)) AuthBatchCreator {
 	item := newBatchTodoBuilderUpdate(id)
 	configure(item)
@@ -555,15 +529,15 @@ func (b *authBatchBuilder) Build() (string, error) {
 	}
 
 	query := url.Values{}
-	query.Set(keyData, string(jsonData))
+	query.Set(KeyData, string(jsonData))
 	if hasUpdates {
-		query.Set(keyAuthToken, b.token)
+		query.Set(KeyAuthToken, b.token)
 	}
 	if b.reveal {
-		query.Set(keyReveal, "true")
+		query.Set(KeyReveal, "true")
 	}
 
-	return fmt.Sprintf("things:///%s?%s", CommandJSON, encodeQuery(query)), nil
+	return fmt.Sprintf("things:///%s?%s", CommandJSON, EncodeQuery(query)), nil
 }
 
 // Execute builds and executes the JSON batch URL.
@@ -582,11 +556,11 @@ func (b *authBatchBuilder) Execute(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return b.scheme.execute(ctx, uri)
+	return b.scheme.Execute(ctx, uri)
 }
 
 // Headings creates heading entries for a project's items.
-// Used within batchProjectBuilder.Todos to organize to-dos under headings.
+// Used within batchProjectBuilder.Todos to organize todos under headings.
 func Headings(headings ...string) string {
 	return strings.Join(headings, "\n")
 }

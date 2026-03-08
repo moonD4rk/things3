@@ -3,6 +3,8 @@ package things3
 import (
 	"context"
 	"time"
+
+	"github.com/moond4rk/things3/internal/scheme"
 )
 
 // ============================================================================
@@ -27,12 +29,6 @@ type AreaQueryExecutor interface {
 type TagQueryExecutor interface {
 	All(ctx context.Context) ([]Tag, error)
 	First(ctx context.Context) (*Tag, error)
-}
-
-// URLBuilder builds and executes Things URL schemes.
-type URLBuilder interface {
-	Build() (string, error)
-	Execute(ctx context.Context) error
 }
 
 // ============================================================================
@@ -149,191 +145,39 @@ type TagQueryBuilder interface {
 }
 
 // ============================================================================
-// Layer 5: URL Scheme Builder Interfaces
+// Layer 5: URL Scheme Builder Interfaces (aliased from internal/scheme)
 // ============================================================================
+
+// URLBuilder builds and executes Things URL schemes.
+type URLBuilder = scheme.URLBuilder
 
 // TodoAdder builds URLs for creating new to-dos.
-type TodoAdder interface {
-	URLBuilder
-
-	Title(title string) TodoAdder
-	Titles(titles ...string) TodoAdder
-	Notes(notes string) TodoAdder
-	When(t time.Time) TodoAdder
-	WhenEvening() TodoAdder
-	WhenAnytime() TodoAdder
-	WhenSomeday() TodoAdder
-	Deadline(t time.Time) TodoAdder
-	Reminder(hour, minute int) TodoAdder
-	Tags(tags ...string) TodoAdder
-	ChecklistItems(items ...string) TodoAdder
-	List(name string) TodoAdder
-	ListID(id string) TodoAdder
-	Heading(name string) TodoAdder
-	HeadingID(id string) TodoAdder
-	Completed(completed bool) TodoAdder
-	Canceled(canceled bool) TodoAdder
-	ShowQuickEntry(show bool) TodoAdder
-	Reveal(reveal bool) TodoAdder
-	CreationDate(date time.Time) TodoAdder
-	CompletionDate(date time.Time) TodoAdder
-}
+type TodoAdder = scheme.TodoAdder
 
 // ProjectAdder builds URLs for creating new projects.
-type ProjectAdder interface {
-	URLBuilder
-
-	Title(title string) ProjectAdder
-	Notes(notes string) ProjectAdder
-	When(t time.Time) ProjectAdder
-	WhenEvening() ProjectAdder
-	WhenAnytime() ProjectAdder
-	WhenSomeday() ProjectAdder
-	Deadline(t time.Time) ProjectAdder
-	Reminder(hour, minute int) ProjectAdder
-	Tags(tags ...string) ProjectAdder
-	Area(name string) ProjectAdder
-	AreaID(id string) ProjectAdder
-	Todos(titles ...string) ProjectAdder
-	Completed(completed bool) ProjectAdder
-	Canceled(canceled bool) ProjectAdder
-	Reveal(reveal bool) ProjectAdder
-	CreationDate(date time.Time) ProjectAdder
-	CompletionDate(date time.Time) ProjectAdder
-}
+type ProjectAdder = scheme.ProjectAdder
 
 // TodoUpdater builds URLs for updating existing to-dos.
-type TodoUpdater interface {
-	URLBuilder
-
-	Title(title string) TodoUpdater
-	Notes(notes string) TodoUpdater
-	PrependNotes(notes string) TodoUpdater
-	AppendNotes(notes string) TodoUpdater
-	When(t time.Time) TodoUpdater
-	WhenEvening() TodoUpdater
-	WhenAnytime() TodoUpdater
-	WhenSomeday() TodoUpdater
-	Deadline(t time.Time) TodoUpdater
-	ClearDeadline() TodoUpdater
-	Reminder(hour, minute int) TodoUpdater
-	Tags(tags ...string) TodoUpdater
-	AddTags(tags ...string) TodoUpdater
-	ChecklistItems(items ...string) TodoUpdater
-	PrependChecklistItems(items ...string) TodoUpdater
-	AppendChecklistItems(items ...string) TodoUpdater
-	List(name string) TodoUpdater
-	ListID(id string) TodoUpdater
-	Heading(name string) TodoUpdater
-	HeadingID(id string) TodoUpdater
-	Completed(completed bool) TodoUpdater
-	Canceled(canceled bool) TodoUpdater
-	Duplicate(duplicate bool) TodoUpdater
-	Reveal(reveal bool) TodoUpdater
-	CreationDate(date time.Time) TodoUpdater
-	CompletionDate(date time.Time) TodoUpdater
-}
+type TodoUpdater = scheme.TodoUpdater
 
 // ProjectUpdater builds URLs for updating existing projects.
-type ProjectUpdater interface {
-	URLBuilder
-
-	Title(title string) ProjectUpdater
-	Notes(notes string) ProjectUpdater
-	PrependNotes(notes string) ProjectUpdater
-	AppendNotes(notes string) ProjectUpdater
-	When(t time.Time) ProjectUpdater
-	WhenEvening() ProjectUpdater
-	WhenAnytime() ProjectUpdater
-	WhenSomeday() ProjectUpdater
-	Deadline(t time.Time) ProjectUpdater
-	ClearDeadline() ProjectUpdater
-	Reminder(hour, minute int) ProjectUpdater
-	Tags(tags ...string) ProjectUpdater
-	AddTags(tags ...string) ProjectUpdater
-	Area(name string) ProjectUpdater
-	AreaID(id string) ProjectUpdater
-	Completed(completed bool) ProjectUpdater
-	Canceled(canceled bool) ProjectUpdater
-	Reveal(reveal bool) ProjectUpdater
-}
+type ProjectUpdater = scheme.ProjectUpdater
 
 // ShowNavigator builds URLs for navigating to items or lists.
-type ShowNavigator interface {
-	ID(id string) ShowNavigator
-	List(list ListID) ShowNavigator
-	Query(query string) ShowNavigator
-	Filter(tags ...string) ShowNavigator
-
-	Build() (string, error)
-	Execute(ctx context.Context) error
-}
+type ShowNavigator = scheme.ShowNavigator
 
 // ============================================================================
-// Layer 6: Batch Operation Interfaces
+// Layer 6: Batch Operation Interfaces (aliased from internal/scheme)
 // ============================================================================
 
 // BatchCreator builds URLs for batch create operations.
-type BatchCreator interface {
-	AddTodo(configure func(BatchTodoConfigurator)) BatchCreator
-	AddProject(configure func(BatchProjectConfigurator)) BatchCreator
-	Reveal(reveal bool) BatchCreator
-	Build() (string, error)
-	Execute(ctx context.Context) error
-}
+type BatchCreator = scheme.BatchCreator
 
 // AuthBatchCreator builds URLs for batch operations including updates.
-type AuthBatchCreator interface {
-	AddTodo(configure func(BatchTodoConfigurator)) AuthBatchCreator
-	AddProject(configure func(BatchProjectConfigurator)) AuthBatchCreator
-	UpdateTodo(id string, configure func(BatchTodoConfigurator)) AuthBatchCreator
-	UpdateProject(id string, configure func(BatchProjectConfigurator)) AuthBatchCreator
-	Reveal(reveal bool) AuthBatchCreator
-	Build() (string, error)
-	Execute(ctx context.Context) error
-}
+type AuthBatchCreator = scheme.AuthBatchCreator
 
 // BatchTodoConfigurator configures a to-do entry for batch operations.
-type BatchTodoConfigurator interface {
-	Title(title string) BatchTodoConfigurator
-	Notes(notes string) BatchTodoConfigurator
-	PrependNotes(notes string) BatchTodoConfigurator
-	AppendNotes(notes string) BatchTodoConfigurator
-	When(t time.Time) BatchTodoConfigurator
-	WhenEvening() BatchTodoConfigurator
-	WhenAnytime() BatchTodoConfigurator
-	WhenSomeday() BatchTodoConfigurator
-	Deadline(t time.Time) BatchTodoConfigurator
-	Tags(tags ...string) BatchTodoConfigurator
-	AddTags(tags ...string) BatchTodoConfigurator
-	ChecklistItems(items ...string) BatchTodoConfigurator
-	List(name string) BatchTodoConfigurator
-	ListID(id string) BatchTodoConfigurator
-	Heading(name string) BatchTodoConfigurator
-	Completed(completed bool) BatchTodoConfigurator
-	Canceled(canceled bool) BatchTodoConfigurator
-	CreationDate(date time.Time) BatchTodoConfigurator
-	CompletionDate(date time.Time) BatchTodoConfigurator
-}
+type BatchTodoConfigurator = scheme.BatchTodoConfigurator
 
 // BatchProjectConfigurator configures a project entry for batch operations.
-type BatchProjectConfigurator interface {
-	Title(title string) BatchProjectConfigurator
-	Notes(notes string) BatchProjectConfigurator
-	PrependNotes(notes string) BatchProjectConfigurator
-	AppendNotes(notes string) BatchProjectConfigurator
-	When(t time.Time) BatchProjectConfigurator
-	WhenEvening() BatchProjectConfigurator
-	WhenAnytime() BatchProjectConfigurator
-	WhenSomeday() BatchProjectConfigurator
-	Deadline(t time.Time) BatchProjectConfigurator
-	Tags(tags ...string) BatchProjectConfigurator
-	AddTags(tags ...string) BatchProjectConfigurator
-	Area(name string) BatchProjectConfigurator
-	AreaID(id string) BatchProjectConfigurator
-	Todos(configs ...func(BatchTodoConfigurator)) BatchProjectConfigurator
-	Completed(completed bool) BatchProjectConfigurator
-	Canceled(canceled bool) BatchProjectConfigurator
-	CreationDate(date time.Time) BatchProjectConfigurator
-	CompletionDate(date time.Time) BatchProjectConfigurator
-}
+type BatchProjectConfigurator = scheme.BatchProjectConfigurator

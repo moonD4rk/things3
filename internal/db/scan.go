@@ -13,71 +13,61 @@ const (
 )
 
 // scanTaskRow scans a sql.Rows into a TaskRow.
-//
-//nolint:gocyclo,funlen // Complexity is inherent to scanning many fields
 func scanTaskRow(rows *sql.Rows) (*TaskRow, error) {
-	var row TaskRow
-	var typeStr, statusStr sql.NullString
-	var trashed, tags, checklist sql.NullInt64
-	var areaUUID, areaTitle, projectUUID, projectTitle sql.NullString
-	var headingUUID, headingTitle, notes, start sql.NullString
-	var startDate, deadline, reminderTime, stopDate sql.NullString
-	var created, modified sql.NullString
-
+	var s taskScanRow
 	err := rows.Scan(
-		&row.UUID,
-		&typeStr,
-		&trashed,
-		&row.Title,
-		&statusStr,
-		&areaUUID,
-		&areaTitle,
-		&projectUUID,
-		&projectTitle,
-		&headingUUID,
-		&headingTitle,
-		&notes,
-		&tags,
-		&start,
-		&checklist,
-		&startDate,
-		&deadline,
-		&reminderTime,
-		&stopDate,
-		&created,
-		&modified,
-		&row.Index,
-		&row.TodayIndex,
+		&s.uuid, &s.typeStr, &s.trashed, &s.title, &s.statusStr,
+		&s.areaUUID, &s.areaTitle, &s.projectUUID, &s.projectTitle,
+		&s.headingUUID, &s.headingTitle, &s.notes, &s.tags, &s.start,
+		&s.checklist, &s.startDate, &s.deadline, &s.reminderTime,
+		&s.stopDate, &s.created, &s.modified, &s.index, &s.todayIndex,
 	)
 	if err != nil {
 		return nil, err
 	}
+	return s.toTaskRow(), nil
+}
 
-	row.Type = nullStringValue(typeStr)
-	row.Status = nullStringValue(statusStr)
-	row.Trashed = trashed.Valid && trashed.Int64 == 1
-	row.Notes = nullStringValue(notes)
-	row.Start = nullStringValue(start)
-	row.AreaUUID = nullString(areaUUID)
-	row.AreaTitle = nullString(areaTitle)
-	row.ProjectUUID = nullString(projectUUID)
-	row.ProjectTitle = nullString(projectTitle)
-	row.HeadingUUID = nullString(headingUUID)
-	row.HeadingTitle = nullString(headingTitle)
-	row.StartDate = parseDate(startDate)
-	row.Deadline = parseDate(deadline)
-	row.ReminderTime = parseTime(reminderTime)
-	row.StopDate = parseDateTime(stopDate)
-	if t := parseDateTime(created); t != nil {
-		row.Created = *t
-	}
-	if t := parseDateTime(modified); t != nil {
-		row.Modified = *t
-	}
-	row.HasTags = tags.Valid && tags.Int64 == 1
-	row.HasChecklist = checklist.Valid && checklist.Int64 == 1
+// taskScanRow holds raw SQL scan targets for a task query.
+type taskScanRow struct {
+	uuid, title                                    string
+	index, todayIndex                              int
+	typeStr, statusStr                             sql.NullString
+	trashed, tags, checklist                       sql.NullInt64
+	areaUUID, areaTitle, projectUUID, projectTitle sql.NullString
+	headingUUID, headingTitle, notes, start        sql.NullString
+	startDate, deadline, reminderTime, stopDate    sql.NullString
+	created, modified                              sql.NullString
+}
 
-	return &row, nil
+// toTaskRow converts raw scan values into a TaskRow.
+func (s *taskScanRow) toTaskRow() *TaskRow {
+	row := &TaskRow{
+		UUID:         s.uuid,
+		Type:         nullStringValue(s.typeStr),
+		Trashed:      nullBool(s.trashed),
+		Title:        s.title,
+		Status:       nullStringValue(s.statusStr),
+		AreaUUID:     nullString(s.areaUUID),
+		AreaTitle:    nullString(s.areaTitle),
+		ProjectUUID:  nullString(s.projectUUID),
+		ProjectTitle: nullString(s.projectTitle),
+		HeadingUUID:  nullString(s.headingUUID),
+		HeadingTitle: nullString(s.headingTitle),
+		Notes:        nullStringValue(s.notes),
+		HasTags:      nullBool(s.tags),
+		Start:        nullStringValue(s.start),
+		HasChecklist: nullBool(s.checklist),
+		StartDate:    parseDate(s.startDate),
+		Deadline:     parseDate(s.deadline),
+		ReminderTime: parseTime(s.reminderTime),
+		StopDate:     parseDateTime(s.stopDate),
+		Created:      parseDateTimeValue(s.created),
+		Modified:     parseDateTimeValue(s.modified),
+		Index:        s.index,
+		TodayIndex:   s.todayIndex,
+	}
+	return row
 }
 
 // scanAreaRow scans a sql.Rows into an AreaRow.
@@ -91,7 +81,7 @@ func scanAreaRow(rows *sql.Rows) (*AreaRow, error) {
 		return nil, err
 	}
 
-	row.HasTags = tags.Valid && tags.Int64 == 1
+	row.HasTags = nullBool(tags)
 
 	return &row, nil
 }
@@ -106,9 +96,7 @@ func scanTagRow(rows *sql.Rows) (*TagRow, error) {
 		return nil, err
 	}
 
-	if shortcut.Valid {
-		row.Shortcut = shortcut.String
-	}
+	row.Shortcut = nullStringValue(shortcut)
 
 	return &row, nil
 }
@@ -125,12 +113,8 @@ func scanChecklistItemRow(rows *sql.Rows) (*ChecklistItemRow, error) {
 	}
 
 	row.StopDate = parseDate(stopDate)
-	if t := parseDateTime(created); t != nil {
-		row.Created = *t
-	}
-	if t := parseDateTime(modified); t != nil {
-		row.Modified = *t
-	}
+	row.Created = parseDateTimeValue(created)
+	row.Modified = parseDateTimeValue(modified)
 
 	return &row, nil
 }
@@ -172,6 +156,19 @@ func parseTime(s sql.NullString) *time.Time {
 		return nil
 	}
 	return &t
+}
+
+// nullBool returns true if the value is valid and equals 1.
+func nullBool(n sql.NullInt64) bool {
+	return n.Valid && n.Int64 == 1
+}
+
+// parseDateTimeValue parses a datetime string, returning zero time on failure.
+func parseDateTimeValue(s sql.NullString) time.Time {
+	if t := parseDateTime(s); t != nil {
+		return *t
+	}
+	return time.Time{}
 }
 
 // nullString returns nil if NULL, otherwise returns pointer to string.

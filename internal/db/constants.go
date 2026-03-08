@@ -50,14 +50,16 @@ const (
 // Settings UUID for auth token.
 const settingsUUID = "RhAzEf6qDxCD5PmnZVtBZR"
 
-// Minimum supported database version.
-const MinDatabaseVersion = 21
+// minDatabaseVersion is the minimum supported database version.
+const minDatabaseVersion = 21
 
-// Environment variable name for custom database path.
+// EnvDatabasePath is the environment variable name for custom database path.
 const EnvDatabasePath = "THINGSDB"
 
 // Index column names for ordering.
 const (
+	// IndexDefault is the default ordering column.
 	IndexDefault = "index"
-	IndexToday   = "todayIndex"
+	// IndexToday is the Today view ordering column.
+	IndexToday = "todayIndex"
 )

@@ -50,46 +50,42 @@ func (w *whereBuilder) addRawf(format string, args ...any) {
 	*w = append(*w, fmt.Sprintf(format, args...))
 }
 
-// addEqual adds a column equality/existence condition.
-//   - bool true:  "column IS NOT NULL"
-//   - bool false: "column IS NULL"
-//   - string:     "column = 'escaped_value'"
-func (w *whereBuilder) addEqual(column string, value any) {
-	switch v := value.(type) {
-	case nil:
-		return
-	case bool:
-		if v {
-			*w = append(*w, column+" IS NOT NULL")
-		} else {
-			*w = append(*w, column+" IS NULL")
-		}
-	case string:
-		w.addRawf("%s = '%s'", column, escapeString(v))
-	default:
-		w.addRawf("%s = '%v'", column, v)
+// addStringEqual adds a string equality condition (skips nil).
+func (w *whereBuilder) addStringEqual(column string, value *string) {
+	if value != nil {
+		w.addRawf("%s = '%s'", column, escapeString(*value))
 	}
 }
 
-// addEqualOrHas adds a column filter with value-or-existence fallback.
-// If value is non-nil, adds an equality condition; otherwise if has is non-nil,
-// adds an existence check. This handles the common "specific value takes
-// precedence over has/no" pattern.
-func (w *whereBuilder) addEqualOrHas(column string, value *string, has *bool) {
-	if value != nil {
-		w.addEqual(column, *value)
-	} else if has != nil {
-		w.addEqual(column, *has)
+// addExists adds "column IS NOT NULL" (true) or "column IS NULL" (false).
+func (w *whereBuilder) addExists(column string, exists bool) {
+	if exists {
+		*w = append(*w, column+" IS NOT NULL")
+	} else {
+		*w = append(*w, column+" IS NULL")
 	}
 }
 
-// addOrEqualOrHas adds an OR condition across two columns with value-or-existence fallback.
-// Used when a filter must check multiple columns (e.g., direct project or heading's project).
-func (w *whereBuilder) addOrEqualOrHas(col1, col2 string, value *string, has *bool) {
+// addFilter adds a column filter: matches value if set, otherwise checks existence.
+// Handles the common "specific value takes precedence over has/no" pattern.
+func (w *whereBuilder) addFilter(column string, value *string, exists *bool) {
 	if value != nil {
-		w.addOr(equalSQL(col1, *value), equalSQL(col2, *value))
-	} else if has != nil {
-		w.addOr(equalSQL(col1, *has), equalSQL(col2, *has))
+		w.addStringEqual(column, value)
+	} else if exists != nil {
+		w.addExists(column, *exists)
+	}
+}
+
+// addOrFilter adds an OR filter across two columns with value-or-existence fallback.
+func (w *whereBuilder) addOrFilter(col1, col2 string, value *string, exists *bool) {
+	if value != nil {
+		escaped := escapeString(*value)
+		w.addOr(
+			fmt.Sprintf("%s = '%s'", col1, escaped),
+			fmt.Sprintf("%s = '%s'", col2, escaped),
+		)
+	} else if exists != nil {
+		w.addOr(existsSQL(col1, *exists), existsSQL(col2, *exists))
 	}
 }
 
@@ -166,11 +162,7 @@ func (w *whereBuilder) addDateFilter(column string, v *DateFilterValue, isThings
 
 	// Existence check (format-independent)
 	if v.HasDate != nil {
-		if *v.HasDate {
-			w.add(column + " IS NOT NULL")
-		} else {
-			w.add(column + " IS NULL")
-		}
+		w.addExists(column, *v.HasDate)
 		return
 	}
 
@@ -218,19 +210,12 @@ func formatDateValue(dateStr string, isThingsDate bool) (string, bool) {
 	return fmt.Sprintf("date('%s')", dateStr), true
 }
 
-// equalSQL returns an equality/existence SQL fragment (for use in addOr).
-func equalSQL(column string, value any) string {
-	switch v := value.(type) {
-	case bool:
-		if v {
-			return column + " IS NOT NULL"
-		}
-		return column + " IS NULL"
-	case string:
-		return fmt.Sprintf("%s = '%s'", column, escapeString(v))
-	default:
-		return ""
+// existsSQL returns "column IS [NOT] NULL" as a SQL fragment.
+func existsSQL(column string, exists bool) string {
+	if exists {
+		return column + " IS NOT NULL"
 	}
+	return column + " IS NULL"
 }
 
 // sql returns the combined SQL for all conditions.

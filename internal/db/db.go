@@ -208,7 +208,7 @@ func validateDatabaseVersion(sqlDB *sql.DB) error {
 		return err
 	}
 
-	if version <= MinDatabaseVersion {
+	if version <= minDatabaseVersion {
 		return fmt.Errorf("%w: got version %d", ErrDatabaseVersionTooOld, version)
 	}
 

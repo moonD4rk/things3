@@ -58,22 +58,20 @@ func (f *TaskFilter) buildWhere() string {
 	w.addIntEqual("TASK.start", f.Start)
 
 	// UUID filters
-	if f.UUID != nil {
-		w.addEqual("TASK.uuid", *f.UUID)
-	}
+	w.addStringEqual("TASK.uuid", f.UUID)
 	if f.UUIDPrefix != nil {
 		w.addLike("TASK.uuid", *f.UUIDPrefix+"%")
 	}
 
 	// Relation filters
-	w.addEqualOrHas("TASK.area", f.AreaUUID, f.HasArea)
-	w.addOrEqualOrHas("TASK.project", "PROJECT_OF_HEADING.uuid", f.ProjectUUID, f.HasProject)
-	w.addEqualOrHas("TASK.heading", f.HeadingUUID, f.HasHeading)
-	w.addEqualOrHas("TAG.title", f.TagTitle, f.HasTags)
+	w.addFilter("TASK.area", f.AreaUUID, f.HasArea)
+	w.addOrFilter("TASK.project", "PROJECT_OF_HEADING.uuid", f.ProjectUUID, f.HasProject)
+	w.addFilter("TASK.heading", f.HeadingUUID, f.HasHeading)
+	w.addFilter("TAG.title", f.TagTitle, f.HasTags)
 
 	// Deadline suppressed
 	if f.DeadlineSuppressed != nil {
-		w.addEqual("TASK.deadlineSuppressionDate", *f.DeadlineSuppressed)
+		w.addExists("TASK.deadlineSuppressionDate", *f.DeadlineSuppressed)
 	}
 
 	// Date filters
@@ -114,20 +112,10 @@ type AreaFilter struct {
 func (f *AreaFilter) buildWhere() string {
 	var w whereBuilder
 
-	if f.UUID != nil {
-		w.addEqual("AREA.uuid", *f.UUID)
-	}
-	if f.Title != nil {
-		w.addEqual("AREA.title", *f.Title)
-	}
+	w.addStringEqual("AREA.uuid", f.UUID)
+	w.addStringEqual("AREA.title", f.Title)
 	w.addTruthy("AREA.visible", f.Visible)
-
-	// Tag filter: specific title or has/no tags
-	if f.TagTitle != nil {
-		w.addEqual("TAG.title", *f.TagTitle)
-	} else if f.HasTag != nil {
-		w.addEqual("TAG.title", *f.HasTag)
-	}
+	w.addFilter("TAG.title", f.TagTitle, f.HasTag)
 
 	return w.sql()
 }
@@ -143,15 +131,9 @@ type TagFilter struct {
 func (f *TagFilter) buildWhere() string {
 	var w whereBuilder
 
-	if f.UUID != nil {
-		w.addEqual("uuid", *f.UUID)
-	}
-	if f.Title != nil {
-		w.addEqual("title", *f.Title)
-	}
-	if f.ParentUUID != nil {
-		w.addEqual("parent", *f.ParentUUID)
-	}
+	w.addStringEqual("uuid", f.UUID)
+	w.addStringEqual("title", f.Title)
+	w.addStringEqual("parent", f.ParentUUID)
 
 	return w.sql()
 }
@@ -160,7 +142,7 @@ func (f *TagFilter) buildWhere() string {
 func (d *DB) QueryTasks(ctx context.Context, f *TaskFilter) ([]TaskRow, error) {
 	where := f.buildWhere()
 	order := f.buildOrder()
-	query := BuildTasksSQL(where, order)
+	query := buildTasksSQL(where, order)
 
 	rows, err := d.ExecuteQuery(ctx, query)
 	if err != nil {
@@ -184,8 +166,8 @@ func (d *DB) QueryTasks(ctx context.Context, f *TaskFilter) ([]TaskRow, error) {
 func (d *DB) CountTasks(ctx context.Context, f *TaskFilter) (int, error) {
 	where := f.buildWhere()
 	order := f.buildOrder()
-	taskSQL := BuildTasksSQL(where, order)
-	countSQL := BuildCountSQL(taskSQL)
+	taskSQL := buildTasksSQL(where, order)
+	countSQL := buildCountSQL(taskSQL)
 
 	var count int
 	if err := d.ExecuteQueryRow(ctx, countSQL).Scan(&count); err != nil {
@@ -197,7 +179,7 @@ func (d *DB) CountTasks(ctx context.Context, f *TaskFilter) (int, error) {
 
 // QueryAreas executes an area query and returns matching rows.
 func (d *DB) QueryAreas(ctx context.Context, f AreaFilter) ([]AreaRow, error) {
-	query := BuildAreasSQL(f.buildWhere())
+	query := buildAreasSQL(f.buildWhere())
 	rows, err := d.ExecuteQuery(ctx, query)
 	if err != nil {
 		return nil, err
@@ -218,8 +200,8 @@ func (d *DB) QueryAreas(ctx context.Context, f AreaFilter) ([]AreaRow, error) {
 
 // CountAreas returns the count of areas matching the filter.
 func (d *DB) CountAreas(ctx context.Context, f AreaFilter) (int, error) {
-	areaSQL := BuildAreasSQL(f.buildWhere())
-	countSQL := BuildCountSQL(areaSQL)
+	areaSQL := buildAreasSQL(f.buildWhere())
+	countSQL := buildCountSQL(areaSQL)
 
 	var count int
 	if err := d.ExecuteQueryRow(ctx, countSQL).Scan(&count); err != nil {
@@ -231,7 +213,7 @@ func (d *DB) CountAreas(ctx context.Context, f AreaFilter) (int, error) {
 
 // QueryTags executes a tag query and returns matching rows.
 func (d *DB) QueryTags(ctx context.Context, f TagFilter) ([]TagRow, error) {
-	query := BuildTagsSQL(f.buildWhere())
+	query := buildTagsSQL(f.buildWhere())
 	rows, err := d.ExecuteQuery(ctx, query)
 	if err != nil {
 		return nil, err
@@ -252,7 +234,7 @@ func (d *DB) QueryTags(ctx context.Context, f TagFilter) ([]TagRow, error) {
 
 // TagsOfTask returns the tag titles for a task.
 func (d *DB) TagsOfTask(ctx context.Context, taskUUID string) ([]string, error) {
-	query := BuildTagsOfTaskSQL()
+	query := buildTagsOfTaskSQL()
 	rows, err := d.ExecuteQuery(ctx, query, taskUUID)
 	if err != nil {
 		return nil, err
@@ -273,7 +255,7 @@ func (d *DB) TagsOfTask(ctx context.Context, taskUUID string) ([]string, error) 
 
 // TagsOfArea returns the tag titles for an area.
 func (d *DB) TagsOfArea(ctx context.Context, areaUUID string) ([]string, error) {
-	query := BuildTagsOfAreaSQL()
+	query := buildTagsOfAreaSQL()
 	rows, err := d.ExecuteQuery(ctx, query, areaUUID)
 	if err != nil {
 		return nil, err
@@ -294,7 +276,7 @@ func (d *DB) TagsOfArea(ctx context.Context, areaUUID string) ([]string, error) 
 
 // QueryChecklistItems returns checklist items for a task.
 func (d *DB) QueryChecklistItems(ctx context.Context, taskUUID string) ([]ChecklistItemRow, error) {
-	query := BuildChecklistItemsSQL()
+	query := buildChecklistItemsSQL()
 	rows, err := d.ExecuteQuery(ctx, query, taskUUID)
 	if err != nil {
 		return nil, err
@@ -315,7 +297,7 @@ func (d *DB) QueryChecklistItems(ctx context.Context, taskUUID string) ([]Checkl
 
 // AuthToken returns the Things URL scheme authentication token.
 func (d *DB) AuthToken(ctx context.Context) (string, error) {
-	query := BuildAuthTokenSQL()
+	query := buildAuthTokenSQL()
 	var token sql.NullString
 	if err := d.ExecuteQueryRow(ctx, query).Scan(&token); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

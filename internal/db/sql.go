@@ -5,8 +5,8 @@ import "fmt"
 // sqlTrue is the default WHERE predicate.
 const sqlTrue = "TRUE"
 
-// BuildTasksSQL builds the SQL query for fetching tasks.
-func BuildTasksSQL(wherePredicate, orderPredicate string) string {
+// buildTasksSQL builds the SQL query for fetching tasks.
+func buildTasksSQL(wherePredicate, orderPredicate string) string {
 	if wherePredicate == "" {
 		wherePredicate = sqlTrue
 	}
@@ -106,8 +106,8 @@ func BuildTasksSQL(wherePredicate, orderPredicate string) string {
 	)
 }
 
-// BuildAreasSQL builds the SQL query for fetching areas.
-func BuildAreasSQL(wherePredicate string) string {
+// buildAreasSQL builds the SQL query for fetching areas.
+func buildAreasSQL(wherePredicate string) string {
 	if wherePredicate == "" {
 		wherePredicate = sqlTrue
 	}
@@ -132,8 +132,8 @@ func BuildAreasSQL(wherePredicate string) string {
 	`, tableArea, tableAreaTag, tableTag, wherePredicate)
 }
 
-// BuildTagsSQL builds the SQL query for fetching tags.
-func BuildTagsSQL(wherePredicate string) string {
+// buildTagsSQL builds the SQL query for fetching tags.
+func buildTagsSQL(wherePredicate string) string {
 	if wherePredicate == "" {
 		wherePredicate = sqlTrue
 	}
@@ -149,8 +149,8 @@ func BuildTagsSQL(wherePredicate string) string {
 	`, tableTag, wherePredicate)
 }
 
-// BuildChecklistItemsSQL builds the SQL query for fetching checklist items.
-func BuildChecklistItemsSQL() string {
+// buildChecklistItemsSQL builds the SQL query for fetching checklist items.
+func buildChecklistItemsSQL() string {
 	return fmt.Sprintf(`
 		SELECT
 			CHECKLIST_ITEM.title,
@@ -173,8 +173,8 @@ func BuildChecklistItemsSQL() string {
 		colCreationDate, colModificationDate, tableChecklistItem)
 }
 
-// BuildTagsOfTaskSQL builds the SQL query for fetching tags of a task.
-func BuildTagsOfTaskSQL() string {
+// buildTagsOfTaskSQL builds the SQL query for fetching tags of a task.
+func buildTagsOfTaskSQL() string {
 	return fmt.Sprintf(`
 		SELECT
 			TAG.title
@@ -188,8 +188,8 @@ func BuildTagsOfTaskSQL() string {
 	`, tableTaskTag, tableTag)
 }
 
-// BuildTagsOfAreaSQL builds the SQL query for fetching tags of an area.
-func BuildTagsOfAreaSQL() string {
+// buildTagsOfAreaSQL builds the SQL query for fetching tags of an area.
+func buildTagsOfAreaSQL() string {
 	return fmt.Sprintf(`
 		SELECT
 			TAG.title
@@ -203,13 +203,13 @@ func BuildTagsOfAreaSQL() string {
 	`, tableAreaTag, tableTag)
 }
 
-// BuildCountSQL wraps a SQL query to return only the count.
-func BuildCountSQL(sql string) string {
+// buildCountSQL wraps a SQL query to return only the count.
+func buildCountSQL(sql string) string {
 	return fmt.Sprintf("SELECT COUNT(uuid) FROM (\n%s\n)", sql)
 }
 
-// BuildAuthTokenSQL builds the SQL query for fetching the auth token.
-func BuildAuthTokenSQL() string {
+// buildAuthTokenSQL builds the SQL query for fetching the auth token.
+func buildAuthTokenSQL() string {
 	return fmt.Sprintf(`
 		SELECT uriSchemeAuthenticationToken
 		FROM %s

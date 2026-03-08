@@ -23,27 +23,90 @@ func TestWhereBuilder_addRawf(t *testing.T) {
 	assert.Equal(t, "type = 0\n            AND status = 3", w.sql())
 }
 
-func TestWhereBuilder_addEqual(t *testing.T) {
-	tests := []struct {
-		name   string
-		column string
-		value  any
-		want   string
-	}{
-		{"nil", "col", nil, "TRUE"},
-		{"bool true", "col", true, "col IS NOT NULL"},
-		{"bool false", "col", false, "col IS NULL"},
-		{"string", "col", "test", "col = 'test'"},
-		{"string with quote", "col", "it's", "col = 'it''s'"},
-		{"empty string", "col", "", "col = ''"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var w whereBuilder
-			w.addEqual(tt.column, tt.value)
-			assert.Equal(t, tt.want, w.sql())
-		})
-	}
+func TestWhereBuilder_addStringEqual(t *testing.T) {
+	var w whereBuilder
+	w.addStringEqual("col", ptr("test"))
+	assert.Equal(t, "col = 'test'", w.sql())
+
+	var w2 whereBuilder
+	w2.addStringEqual("col", ptr("it's"))
+	assert.Equal(t, "col = 'it''s'", w2.sql())
+
+	var w3 whereBuilder
+	w3.addStringEqual("col", nil)
+	assert.Equal(t, "TRUE", w3.sql())
+}
+
+func TestWhereBuilder_addIntEqual(t *testing.T) {
+	var w whereBuilder
+	w.addIntEqual("col", ptr(42))
+	assert.Equal(t, "col = 42", w.sql())
+
+	var w2 whereBuilder
+	w2.addIntEqual("col", nil)
+	assert.Equal(t, "TRUE", w2.sql())
+}
+
+func TestWhereBuilder_addExists(t *testing.T) {
+	var w whereBuilder
+	w.addExists("col", true)
+	assert.Equal(t, "col IS NOT NULL", w.sql())
+
+	var w2 whereBuilder
+	w2.addExists("col", false)
+	assert.Equal(t, "col IS NULL", w2.sql())
+}
+
+func TestWhereBuilder_addFilter(t *testing.T) {
+	t.Run("value takes precedence", func(t *testing.T) {
+		var w whereBuilder
+		w.addFilter("col", ptr("test"), ptr(true))
+		assert.Equal(t, "col = 'test'", w.sql())
+	})
+
+	t.Run("exists fallback", func(t *testing.T) {
+		var w whereBuilder
+		w.addFilter("col", nil, ptr(true))
+		assert.Equal(t, "col IS NOT NULL", w.sql())
+	})
+
+	t.Run("exists false", func(t *testing.T) {
+		var w whereBuilder
+		w.addFilter("col", nil, ptr(false))
+		assert.Equal(t, "col IS NULL", w.sql())
+	})
+
+	t.Run("both nil", func(t *testing.T) {
+		var w whereBuilder
+		w.addFilter("col", nil, nil)
+		assert.Equal(t, "TRUE", w.sql())
+	})
+}
+
+func TestWhereBuilder_addOrFilter(t *testing.T) {
+	t.Run("value", func(t *testing.T) {
+		var w whereBuilder
+		w.addOrFilter("a", "b", ptr("test"), nil)
+		assert.Equal(t, "(a = 'test' OR b = 'test')", w.sql())
+	})
+
+	t.Run("exists true", func(t *testing.T) {
+		var w whereBuilder
+		w.addOrFilter("a", "b", nil, ptr(true))
+		assert.Equal(t, "(a IS NOT NULL OR b IS NOT NULL)", w.sql())
+	})
+
+	t.Run("exists false", func(t *testing.T) {
+		var w whereBuilder
+		w.addOrFilter("a", "b", nil, ptr(false))
+		assert.Equal(t, "(a IS NULL OR b IS NULL)", w.sql())
+	})
+
+	t.Run("both nil", func(t *testing.T) {
+		var w whereBuilder
+		w.addOrFilter("a", "b", nil, nil)
+		assert.Equal(t, "TRUE", w.sql())
+	})
 }
 
 func TestWhereBuilder_addLike(t *testing.T) {
@@ -169,9 +232,7 @@ func TestWhereBuilder_empty(t *testing.T) {
 	assert.Equal(t, "TRUE", w.sql())
 }
 
-func TestEqualSQL(t *testing.T) {
-	assert.Equal(t, "col IS NOT NULL", equalSQL("col", true))
-	assert.Equal(t, "col IS NULL", equalSQL("col", false))
-	assert.Equal(t, "col = 'test'", equalSQL("col", "test"))
-	assert.Empty(t, equalSQL("col", nil))
+func TestExistsSQL(t *testing.T) {
+	assert.Equal(t, "col IS NOT NULL", existsSQL("col", true))
+	assert.Equal(t, "col IS NULL", existsSQL("col", false))
 }

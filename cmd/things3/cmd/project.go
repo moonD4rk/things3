@@ -9,8 +9,8 @@ import (
 // NewProjectCmd creates the project command for viewing a single project.
 func NewProjectCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "project <uuid-prefix>",
-		Short: "Show a project by UUID prefix or title",
+		Use:   "project <identifier>",
+		Short: "Show a project by UUID, title keyword, or search query",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := things3.NewClient()
@@ -30,7 +30,6 @@ func NewProjectCmd() *cobra.Command {
 			case bySearch:
 				q = client.Projects().Search(identifier).Status().Any()
 			default:
-				// Projects don't have WithUUIDPrefix, use WithUUID for exact match
 				q = client.Projects().WithUUID(identifier).Status().Any()
 			}
 
@@ -53,7 +52,7 @@ func NewProjectCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolP("title", "t", false, "match by exact title")
+	cmd.Flags().BoolP("title", "t", false, "match by title keyword")
 	cmd.Flags().BoolP("search", "s", false, "search in title, notes, and area")
 
 	return cmd

@@ -9,8 +9,8 @@ import (
 // NewTodoCmd creates the todo command for viewing a single todo.
 func NewTodoCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "todo <uuid-prefix>",
-		Short: "Show a todo by UUID prefix or title",
+		Use:   "todo <identifier>",
+		Short: "Show a todo by UUID prefix, title keyword, or search query",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := things3.NewClient()
@@ -33,7 +33,7 @@ func NewTodoCmd() *cobra.Command {
 				q = client.Todos().WithUUIDPrefix(identifier).Status().Any()
 			}
 
-			todos, err := q.All(cmd.Context())
+			todos, err := q.IncludeChecklist().All(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -45,7 +45,7 @@ func NewTodoCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolP("title", "t", false, "match by exact title")
+	cmd.Flags().BoolP("title", "t", false, "match by title keyword")
 	cmd.Flags().BoolP("search", "s", false, "search in title, notes, and area")
 
 	return cmd

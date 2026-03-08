@@ -27,11 +27,11 @@ things3
 |   +-- areas
 |   +-- tags
 |
-+-- todo <identifier>    (View todo by UUID prefix, title, or search)
++-- todo <identifier>    (View todo by UUID prefix, title keyword, or search)
 |   --title/-t           (Match by title keyword)
 |   --search/-s          (Search title + notes + area)
 |
-+-- project <identifier> (View project by UUID, title, or search)
++-- project <identifier> (View project by UUID, title keyword, or search)
 |   --title/-t           (Match by title keyword)
 |   --search/-s          (Search title + notes + area)
 |
@@ -71,7 +71,8 @@ Results are concatenated in order: regular, scheduled, overdue.
 ### Detail Commands (todo, project)
 
 Identifier resolution strategy:
-- Default: UUID prefix match via `WithUUIDPrefix()`
+- Default (todo): UUID prefix match via `WithUUIDPrefix()`
+- Default (project): Exact UUID match via `WithUUID()`
 - `--title/-t`: Title keyword match via `WithTitle()` (LIKE `%keyword%`)
 - `--search/-s`: Full-text search via `Search()` (title + notes + area)
 

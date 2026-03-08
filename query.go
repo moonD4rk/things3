@@ -2,41 +2,15 @@ package things3
 
 import (
 	"context"
-	"fmt"
 	"time"
+
+	idb "github.com/moond4rk/things3/internal/db"
 )
 
 // taskQuery provides a fluent interface for building task queries.
 type taskQuery struct {
-	database *db
-
-	// Filters
-	uuid               *string
-	uuidPrefix         *string
-	taskType           *TaskType
-	status             *Status
-	start              *StartBucket
-	areaUUID           *string // specific area UUID
-	hasArea            *bool   // true: has area, false: no area
-	projectUUID        *string // specific project UUID
-	hasProject         *bool   // true: has project, false: no project
-	headingUUID        *string // specific heading UUID
-	hasHeading         *bool   // true: has heading, false: no heading
-	tagTitle           *string // specific tag title
-	hasTags            *bool   // true: has tags, false: no tags
-	deadlineSuppressed *bool
-	trashed            *bool
-	contextTrashed     *bool
-	createdAfter       *time.Time
-	searchQuery        *string
-	index              string
-
-	// Date filters (new type-safe approach)
-	startDateFilter *dateFilterValue
-	stopDateFilter  *dateFilterValue
-	deadlineFilter  *dateFilterValue
-
-	// Options
+	database     *db
+	filter       idb.TaskFilter
 	includeItems bool
 }
 
@@ -44,19 +18,19 @@ type taskQuery struct {
 func (d *db) Tasks() *taskQuery {
 	return &taskQuery{
 		database: d,
-		index:    indexDefault,
+		filter:   idb.TaskFilter{Index: idb.IndexDefault},
 	}
 }
 
 // WithUUID filters tasks by UUID (exact match).
 func (q *taskQuery) WithUUID(uuid string) TaskQueryBuilder {
-	q.uuid = &uuid
+	q.filter.UUID = &uuid
 	return q
 }
 
 // WithUUIDPrefix filters tasks by UUID prefix (partial match).
 func (q *taskQuery) WithUUIDPrefix(prefix string) TaskQueryBuilder {
-	q.uuidPrefix = &prefix
+	q.filter.UUIDPrefix = &prefix
 	return q
 }
 
@@ -96,85 +70,85 @@ func (q *taskQuery) Deadline() DateFilterBuilder {
 
 // InArea filters tasks by a specific area UUID.
 func (q *taskQuery) InArea(uuid string) TaskQueryBuilder {
-	q.areaUUID = &uuid
+	q.filter.AreaUUID = &uuid
 	return q
 }
 
 // HasArea filters tasks by whether they have an area.
 func (q *taskQuery) HasArea(has bool) TaskQueryBuilder {
-	q.hasArea = &has
+	q.filter.HasArea = &has
 	return q
 }
 
 // InProject filters tasks by a specific project UUID.
 func (q *taskQuery) InProject(uuid string) TaskQueryBuilder {
-	q.projectUUID = &uuid
+	q.filter.ProjectUUID = &uuid
 	return q
 }
 
 // HasProject filters tasks by whether they have a project.
 func (q *taskQuery) HasProject(has bool) TaskQueryBuilder {
-	q.hasProject = &has
+	q.filter.HasProject = &has
 	return q
 }
 
 // InHeading filters tasks by a specific heading UUID.
 func (q *taskQuery) InHeading(uuid string) TaskQueryBuilder {
-	q.headingUUID = &uuid
+	q.filter.HeadingUUID = &uuid
 	return q
 }
 
 // HasHeading filters tasks by whether they have a heading.
 func (q *taskQuery) HasHeading(has bool) TaskQueryBuilder {
-	q.hasHeading = &has
+	q.filter.HasHeading = &has
 	return q
 }
 
 // InTag filters tasks by a specific tag title.
 func (q *taskQuery) InTag(title string) TaskQueryBuilder {
-	q.tagTitle = &title
+	q.filter.TagTitle = &title
 	return q
 }
 
 // HasTag filters tasks by whether they have any tags.
 func (q *taskQuery) HasTag(has bool) TaskQueryBuilder {
-	q.hasTags = &has
+	q.filter.HasTags = &has
 	return q
 }
 
 // WithDeadlineSuppressed filters tasks by deadline suppression status.
 func (q *taskQuery) WithDeadlineSuppressed(suppressed bool) TaskQueryBuilder {
-	q.deadlineSuppressed = &suppressed
+	q.filter.DeadlineSuppressed = &suppressed
 	return q
 }
 
 // Trashed filters tasks by trash status.
 func (q *taskQuery) Trashed(trashed bool) TaskQueryBuilder {
-	q.trashed = &trashed
+	q.filter.Trashed = &trashed
 	return q
 }
 
 // ContextTrashed filters tasks by the trash status of their context (project/heading).
 func (q *taskQuery) ContextTrashed(trashed bool) TaskQueryBuilder {
-	q.contextTrashed = &trashed
+	q.filter.ContextTrashed = &trashed
 	return q
 }
 
 // CreatedAfter filters tasks created after the specified time.
 func (q *taskQuery) CreatedAfter(t time.Time) TaskQueryBuilder {
-	q.createdAfter = &t
+	q.filter.CreatedAfter = &t
 	return q
 }
 
 // Search filters tasks by a search query.
 func (q *taskQuery) Search(query string) TaskQueryBuilder {
-	q.searchQuery = &query
+	q.filter.SearchQuery = &query
 	return q
 }
 
 // OrderByTodayIndex orders results by today index instead of default index.
 func (q *taskQuery) OrderByTodayIndex() TaskQueryBuilder {
-	q.index = indexToday
+	q.filter.Index = idb.IndexToday
 	return q
 }
 
@@ -184,160 +158,20 @@ func (q *taskQuery) IncludeItems(include bool) TaskQueryBuilder {
 	return q
 }
 
-// buildWhere builds the WHERE clause for the query using filterBuilder.
-//
-//nolint:gocyclo,funlen // complex but necessary for comprehensive filter handling
-func (q *taskQuery) buildWhere() string {
-	fb := newFilterBuilder()
-
-	// Always exclude recurring tasks
-	fb.addStatic("TASK." + filterIsNotRecurring)
-
-	// Trashed filter (default: not trashed)
-	if q.trashed != nil && *q.trashed {
-		fb.addStatic("TASK." + filterIsTrashed)
-	} else {
-		fb.addStatic("TASK." + filterIsNotTrashed)
-	}
-
-	// Context trashed filter
-	fb.addTruthy("PROJECT.trashed", q.contextTrashed)
-	fb.addTruthy("PROJECT_OF_HEADING.trashed", q.contextTrashed)
-
-	// Type filter
-	if q.taskType != nil {
-		switch *q.taskType {
-		case TaskTypeTodo:
-			fb.addStatic("TASK." + filterIsTodo)
-		case TaskTypeProject:
-			fb.addStatic("TASK." + filterIsProject)
-		case TaskTypeHeading:
-			fb.addStatic("TASK." + filterIsHeading)
-		}
-	}
-
-	// Status filter
-	if q.status != nil {
-		switch *q.status {
-		case StatusIncomplete:
-			fb.addStatic("TASK." + filterIsIncomplete)
-		case StatusCanceled:
-			fb.addStatic("TASK." + filterIsCanceled)
-		case StatusCompleted:
-			fb.addStatic("TASK." + filterIsCompleted)
-		}
-	}
-
-	// Start bucket filter
-	if q.start != nil {
-		switch *q.start {
-		case StartInbox:
-			fb.addStatic("TASK." + filterIsInbox)
-		case StartAnytime:
-			fb.addStatic("TASK." + filterIsAnytime)
-		case StartSomeday:
-			fb.addStatic("TASK." + filterIsSomeday)
-		}
-	}
-
-	// UUID filter
-	if q.uuid != nil {
-		fb.addEqual("TASK.uuid", *q.uuid)
-	}
-	if q.uuidPrefix != nil {
-		fb.addLike("TASK.uuid", *q.uuidPrefix+"%")
-	}
-
-	// Area filter: specific UUID or has/no area
-	if q.areaUUID != nil {
-		fb.addEqual("TASK.area", *q.areaUUID)
-	} else if q.hasArea != nil {
-		fb.addEqual("TASK.area", *q.hasArea)
-	}
-
-	// Project filter (also check PROJECT_OF_HEADING for tasks in headings)
-	if q.projectUUID != nil {
-		fb.addOr(
-			equal("TASK.project", *q.projectUUID),
-			equal("PROJECT_OF_HEADING.uuid", *q.projectUUID),
-		)
-	} else if q.hasProject != nil {
-		fb.addOr(
-			equal("TASK.project", *q.hasProject),
-			equal("PROJECT_OF_HEADING.uuid", *q.hasProject),
-		)
-	}
-
-	// Heading filter: specific UUID or has/no heading
-	if q.headingUUID != nil {
-		fb.addEqual("TASK.heading", *q.headingUUID)
-	} else if q.hasHeading != nil {
-		fb.addEqual("TASK.heading", *q.hasHeading)
-	}
-
-	// Tag filter: specific title or has/no tags
-	if q.tagTitle != nil {
-		fb.addEqual("TAG.title", *q.tagTitle)
-	} else if q.hasTags != nil {
-		fb.addEqual("TAG.title", *q.hasTags)
-	}
-
-	// Deadline suppressed filter
-	if q.deadlineSuppressed != nil {
-		fb.addEqual("TASK.deadlineSuppressionDate", *q.deadlineSuppressed)
-	}
-
-	// Date filters using new type-safe structure
-	if q.startDateFilter != nil {
-		fb.addDateFilterValue("TASK."+colStartDate, q.startDateFilter, true)
-	}
-	if q.stopDateFilter != nil {
-		fb.addDateFilterValue("TASK."+colStopDate, q.stopDateFilter, false)
-	}
-	if q.deadlineFilter != nil {
-		fb.addDateFilterValue("TASK."+colDeadline, q.deadlineFilter, true)
-	}
-
-	// CreatedAfter filter
-	if q.createdAfter != nil {
-		fb.addCreatedAfterFilter("TASK."+colCreationDate, *q.createdAfter)
-	}
-
-	// Search filter
-	if q.searchQuery != nil {
-		fb.addSearch(*q.searchQuery)
-	}
-
-	return fb.sql()
-}
-
-// buildOrder builds the ORDER BY clause.
-func (q *taskQuery) buildOrder() string {
-	return fmt.Sprintf("TASK.%q", q.index)
-}
-
 // All executes the query and returns all matching tasks.
 func (q *taskQuery) All(ctx context.Context) ([]Task, error) {
-	where := q.buildWhere()
-	order := q.buildOrder()
-	sql := buildTasksSQL(where, order)
-
-	rows, err := q.database.executeQuery(ctx, sql)
+	rows, err := q.database.inner.QueryTasks(ctx, &q.filter)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	var tasks []Task
-	for rows.Next() {
-		task, err := scanTask(rows)
-		if err != nil {
-			return nil, err
-		}
+	for i := range rows {
+		task := convertTaskRow(&rows[i])
 
 		// Load tags if present
-		if task.Tags != nil {
-			tags, err := q.database.getTagsOfTask(ctx, task.UUID)
+		if rows[i].HasTags {
+			tags, err := q.database.inner.TagsOfTask(ctx, rows[i].UUID)
 			if err != nil {
 				return nil, err
 			}
@@ -346,15 +180,15 @@ func (q *taskQuery) All(ctx context.Context) ([]Task, error) {
 
 		// Load nested items if requested
 		if q.includeItems {
-			if err := q.loadTaskItems(ctx, task); err != nil {
+			if err := q.loadTaskItems(ctx, &task); err != nil {
 				return nil, err
 			}
 		}
 
-		tasks = append(tasks, *task)
+		tasks = append(tasks, task)
 	}
 
-	return tasks, rows.Err()
+	return tasks, nil
 }
 
 // First executes the query and returns the first matching task.
@@ -374,16 +208,7 @@ func (q *taskQuery) First(ctx context.Context) (*Task, error) {
 
 // Count executes the query and returns the count of matching tasks.
 func (q *taskQuery) Count(ctx context.Context) (int, error) {
-	where := q.buildWhere()
-	order := q.buildOrder()
-	taskSQL := buildTasksSQL(where, order)
-	countSQL := buildCountSQL(taskSQL)
-
-	var count int
-	if err := q.database.executeQueryRow(ctx, countSQL).Scan(&count); err != nil {
-		return 0, err
-	}
-	return count, nil
+	return q.database.inner.CountTasks(ctx, &q.filter)
 }
 
 // loadTaskItems loads nested items for a task (checklist for to-dos, tasks for projects/headings).
@@ -391,11 +216,11 @@ func (q *taskQuery) loadTaskItems(ctx context.Context, task *Task) error {
 	switch task.Type {
 	case TaskTypeTodo:
 		if task.Checklist != nil {
-			items, err := q.database.getChecklistItems(ctx, task.UUID)
+			rows, err := q.database.inner.QueryChecklistItems(ctx, task.UUID)
 			if err != nil {
 				return err
 			}
-			task.Checklist = items
+			task.Checklist = convertChecklistItemRows(rows)
 		}
 	case TaskTypeProject:
 		items, err := q.database.Tasks().

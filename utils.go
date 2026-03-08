@@ -1,17 +1,9 @@
 package things3
 
 import (
-	"database/sql"
 	"net/url"
 	"strings"
 	"time"
-)
-
-// Time format constants used by Things 3 database.
-const (
-	dateFormat     = "2006-01-02"
-	dateTimeFormat = "2006-01-02 15:04:05"
-	timeFormat     = "15:04"
 )
 
 // comparePtrTimeCmp compares two *time.Time pointers for use with slices.SortFunc.
@@ -27,61 +19,6 @@ func comparePtrTimeCmp(a, b *time.Time) int {
 		return -1
 	}
 	return a.Compare(*b)
-}
-
-// parseDate parses a date string in "2006-01-02" format.
-// Returns nil if the string is empty or invalid.
-func parseDate(s sql.NullString) *time.Time {
-	if !s.Valid || s.String == "" {
-		return nil
-	}
-	t, err := time.Parse(dateFormat, s.String)
-	if err != nil {
-		return nil
-	}
-	return &t
-}
-
-// parseDateTime parses a datetime string in "2006-01-02 15:04:05" format.
-// Returns nil if the string is empty or invalid.
-func parseDateTime(s sql.NullString) *time.Time {
-	if !s.Valid || s.String == "" {
-		return nil
-	}
-	t, err := time.Parse(dateTimeFormat, s.String)
-	if err != nil {
-		return nil
-	}
-	return &t
-}
-
-// parseTime parses a time string in "15:04" format.
-// Returns nil if the string is empty or invalid.
-func parseTime(s sql.NullString) *time.Time {
-	if !s.Valid || s.String == "" {
-		return nil
-	}
-	t, err := time.Parse(timeFormat, s.String)
-	if err != nil {
-		return nil
-	}
-	return &t
-}
-
-// nullString returns nil if NULL, otherwise returns pointer to string.
-func nullString(s sql.NullString) *string {
-	if !s.Valid {
-		return nil
-	}
-	return &s.String
-}
-
-// nullStringValue returns empty string if NULL, otherwise returns the string value.
-func nullStringValue(s sql.NullString) string {
-	if !s.Valid {
-		return ""
-	}
-	return s.String
 }
 
 // encodeQuery encodes url.Values for Things URL scheme.

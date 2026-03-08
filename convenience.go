@@ -262,5 +262,9 @@ func (d *db) Get(ctx context.Context, uuid string) (any, error) {
 
 // ChecklistItems returns the checklist items for a to-do.
 func (d *db) ChecklistItems(ctx context.Context, todoUUID string) ([]ChecklistItem, error) {
-	return d.getChecklistItems(ctx, todoUUID)
+	rows, err := d.inner.QueryChecklistItems(ctx, todoUUID)
+	if err != nil {
+		return nil, err
+	}
+	return convertChecklistItemRows(rows), nil
 }

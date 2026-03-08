@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	idb "github.com/moond4rk/things3/internal/db"
 )
 
 // Client provides unified access to Things 3 database and URL scheme operations.
@@ -67,15 +69,6 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 		opt(options)
 	}
 
-	// Build DB options
-	var dbOpts []dbOption
-	if options.databasePath != "" {
-		dbOpts = append(dbOpts, withDBPath(options.databasePath))
-	}
-	if options.printSQL {
-		dbOpts = append(dbOpts, withDBPrintSQL(options.printSQL))
-	}
-
 	// Build Scheme options
 	var schemeOpts []schemeOption
 	if options.foreground {
@@ -83,6 +76,15 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 	}
 	if options.background {
 		schemeOpts = append(schemeOpts, withBackground())
+	}
+
+	// Build DB options
+	var dbOpts []idb.Option
+	if options.databasePath != "" {
+		dbOpts = append(dbOpts, idb.WithPath(options.databasePath))
+	}
+	if options.printSQL {
+		dbOpts = append(dbOpts, idb.WithPrintSQL(options.printSQL))
 	}
 
 	// Create DB connection

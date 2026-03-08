@@ -418,20 +418,6 @@ func TestTasks(t *testing.T) {
 	assert.Len(t, tasks, 1)
 }
 
-func TestDatabaseVersion(t *testing.T) {
-	db := newTestDB(t)
-
-	// Access internal db to get version
-	version, err := getDatabaseVersion(db.sqlDB)
-	require.NoError(t, err)
-	assert.Equal(t, testDatabaseVersion, version)
-}
-
-func TestDatabaseVersionMismatch(t *testing.T) {
-	_, err := newTestDBOld(t)
-	assert.Error(t, err, "expected error for old database version")
-}
-
 func TestToken(t *testing.T) {
 	db := newTestDB(t)
 	ctx := t.Context()

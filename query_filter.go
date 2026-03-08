@@ -1,19 +1,14 @@
 package things3
 
-import "time"
+import (
+	"time"
+
+	idb "github.com/moond4rk/things3/internal/db"
+)
 
 // =============================================================================
-// Date Filter Value
+// Date Filter Value Field
 // =============================================================================
-
-// dateFilterValue holds a parsed date filter configuration.
-// Only one field should be set at a time.
-type dateFilterValue struct {
-	hasDate  *bool      // true/false for existence check
-	relative string     // "future" or "past"
-	operator string     // "=", "<", "<=", ">", ">="
-	date     *time.Time // specific date for comparison
-}
 
 // dateField identifies which date field a DateFilter operates on.
 type dateField int
@@ -35,28 +30,28 @@ type statusFilter struct {
 
 // Incomplete filters for tasks with incomplete status.
 func (f *statusFilter) Incomplete() TaskQueryBuilder {
-	s := StatusIncomplete
-	f.query.status = &s
+	v := int(StatusIncomplete)
+	f.query.filter.Status = &v
 	return f.query
 }
 
 // Completed filters for tasks with completed status.
 func (f *statusFilter) Completed() TaskQueryBuilder {
-	s := StatusCompleted
-	f.query.status = &s
+	v := int(StatusCompleted)
+	f.query.filter.Status = &v
 	return f.query
 }
 
 // Canceled filters for tasks with canceled status.
 func (f *statusFilter) Canceled() TaskQueryBuilder {
-	s := StatusCanceled
-	f.query.status = &s
+	v := int(StatusCanceled)
+	f.query.filter.Status = &v
 	return f.query
 }
 
 // Any clears the status filter to include tasks of any status.
 func (f *statusFilter) Any() TaskQueryBuilder {
-	f.query.status = nil
+	f.query.filter.Status = nil
 	return f.query
 }
 
@@ -71,22 +66,22 @@ type startFilter struct {
 
 // Inbox filters for tasks in the Inbox.
 func (f *startFilter) Inbox() TaskQueryBuilder {
-	s := StartInbox
-	f.query.start = &s
+	v := int(StartInbox)
+	f.query.filter.Start = &v
 	return f.query
 }
 
 // Anytime filters for tasks scheduled as Anytime.
 func (f *startFilter) Anytime() TaskQueryBuilder {
-	s := StartAnytime
-	f.query.start = &s
+	v := int(StartAnytime)
+	f.query.filter.Start = &v
 	return f.query
 }
 
 // Someday filters for tasks scheduled as Someday.
 func (f *startFilter) Someday() TaskQueryBuilder {
-	s := StartSomeday
-	f.query.start = &s
+	v := int(StartSomeday)
+	f.query.filter.Start = &v
 	return f.query
 }
 
@@ -102,61 +97,61 @@ type dateFilter struct {
 
 // Exists filters by whether the date exists (is not null).
 func (f *dateFilter) Exists(has bool) TaskQueryBuilder {
-	f.setFilter(&dateFilterValue{hasDate: &has})
+	f.setFilter(&idb.DateFilterValue{HasDate: &has})
 	return f.query
 }
 
 // Future filters for dates in the future (after today).
 func (f *dateFilter) Future() TaskQueryBuilder {
-	f.setFilter(&dateFilterValue{relative: dateFuture})
+	f.setFilter(&idb.DateFilterValue{Relative: idb.DateFuture})
 	return f.query
 }
 
 // Past filters for dates in the past (today or earlier).
 func (f *dateFilter) Past() TaskQueryBuilder {
-	f.setFilter(&dateFilterValue{relative: datePast})
+	f.setFilter(&idb.DateFilterValue{Relative: idb.DatePast})
 	return f.query
 }
 
 // On filters for a specific date (equals).
 func (f *dateFilter) On(date time.Time) TaskQueryBuilder {
-	f.setFilter(&dateFilterValue{operator: "=", date: &date})
+	f.setFilter(&idb.DateFilterValue{Operator: "=", Date: &date})
 	return f.query
 }
 
 // Before filters for dates before the given date (exclusive).
 func (f *dateFilter) Before(date time.Time) TaskQueryBuilder {
-	f.setFilter(&dateFilterValue{operator: "<", date: &date})
+	f.setFilter(&idb.DateFilterValue{Operator: "<", Date: &date})
 	return f.query
 }
 
 // OnOrBefore filters for dates on or before the given date (inclusive).
 func (f *dateFilter) OnOrBefore(date time.Time) TaskQueryBuilder {
-	f.setFilter(&dateFilterValue{operator: "<=", date: &date})
+	f.setFilter(&idb.DateFilterValue{Operator: "<=", Date: &date})
 	return f.query
 }
 
 // After filters for dates after the given date (exclusive).
 func (f *dateFilter) After(date time.Time) TaskQueryBuilder {
-	f.setFilter(&dateFilterValue{operator: ">", date: &date})
+	f.setFilter(&idb.DateFilterValue{Operator: ">", Date: &date})
 	return f.query
 }
 
 // OnOrAfter filters for dates on or after the given date (inclusive).
 func (f *dateFilter) OnOrAfter(date time.Time) TaskQueryBuilder {
-	f.setFilter(&dateFilterValue{operator: ">=", date: &date})
+	f.setFilter(&idb.DateFilterValue{Operator: ">=", Date: &date})
 	return f.query
 }
 
 // setFilter sets the filter value on the appropriate field in the parent query.
-func (f *dateFilter) setFilter(v *dateFilterValue) {
+func (f *dateFilter) setFilter(v *idb.DateFilterValue) {
 	switch f.field {
 	case dateFieldStartDate:
-		f.query.startDateFilter = v
+		f.query.filter.StartDateFilter = v
 	case dateFieldStopDate:
-		f.query.stopDateFilter = v
+		f.query.filter.StopDateFilter = v
 	case dateFieldDeadline:
-		f.query.deadlineFilter = v
+		f.query.filter.DeadlineFilter = v
 	}
 }
 
@@ -171,21 +166,21 @@ type typeFilter struct {
 
 // Todo filters for to-do items only.
 func (f *typeFilter) Todo() TaskQueryBuilder {
-	t := TaskTypeTodo
-	f.query.taskType = &t
+	v := int(TaskTypeTodo)
+	f.query.filter.TaskType = &v
 	return f.query
 }
 
 // Project filters for projects only.
 func (f *typeFilter) Project() TaskQueryBuilder {
-	t := TaskTypeProject
-	f.query.taskType = &t
+	v := int(TaskTypeProject)
+	f.query.filter.TaskType = &v
 	return f.query
 }
 
 // Heading filters for headings only.
 func (f *typeFilter) Heading() TaskQueryBuilder {
-	t := TaskTypeHeading
-	f.query.taskType = &t
+	v := int(TaskTypeHeading)
+	f.query.filter.TaskType = &v
 	return f.query
 }

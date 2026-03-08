@@ -1,45 +1,17 @@
-package things3
+package db
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
-// SQL constant for default WHERE predicate.
+// sqlTrue is the default WHERE predicate.
 const sqlTrue = "TRUE"
 
-// escapeString escapes a string for safe use in SQL queries.
-// In SQLite, single quotes within strings are escaped by doubling them.
-func escapeString(s string) string {
-	return strings.ReplaceAll(s, "'", "''")
-}
-
-// thingsDateExpressionToISODate creates a SQL expression to convert Things date to ISO format.
-func thingsDateExpressionToISODate(expr string) string {
-	year := fmt.Sprintf("(%s & %d) >> 16", expr, yearMask)
-	month := fmt.Sprintf("(%s & %d) >> 12", expr, monthMask)
-	day := fmt.Sprintf("(%s & %d) >> 7", expr, dayMask)
-
-	isoDate := fmt.Sprintf("printf('%%d-%%02d-%%02d', %s, %s, %s)", year, month, day)
-	return fmt.Sprintf("CASE WHEN %s THEN %s ELSE %s END", expr, isoDate, expr)
-}
-
-// thingsTimeExpressionToISOTime creates a SQL expression to convert Things time to HH:MM format.
-func thingsTimeExpressionToISOTime(expr string) string {
-	hours := fmt.Sprintf("(%s & %d) >> 26", expr, hourMask)
-	minutes := fmt.Sprintf("(%s & %d) >> 20", expr, minuteMask)
-
-	isoTime := fmt.Sprintf("printf('%%02d:%%02d', %s, %s)", hours, minutes)
-	return fmt.Sprintf("CASE WHEN %s THEN %s ELSE %s END", expr, isoTime, expr)
-}
-
-// buildTasksSQL builds the SQL query for fetching tasks.
-func buildTasksSQL(wherePredicate, orderPredicate string) string {
+// BuildTasksSQL builds the SQL query for fetching tasks.
+func BuildTasksSQL(wherePredicate, orderPredicate string) string {
 	if wherePredicate == "" {
 		wherePredicate = sqlTrue
 	}
 	if orderPredicate == "" {
-		orderPredicate = fmt.Sprintf("TASK.%q", indexDefault)
+		orderPredicate = fmt.Sprintf("TASK.%q", IndexDefault)
 	}
 
 	startDateExpr := thingsDateExpressionToISODate("TASK." + colStartDate)
@@ -134,8 +106,8 @@ func buildTasksSQL(wherePredicate, orderPredicate string) string {
 	)
 }
 
-// buildAreasSQL builds the SQL query for fetching areas.
-func buildAreasSQL(wherePredicate string) string {
+// BuildAreasSQL builds the SQL query for fetching areas.
+func BuildAreasSQL(wherePredicate string) string {
 	if wherePredicate == "" {
 		wherePredicate = sqlTrue
 	}
@@ -160,8 +132,8 @@ func buildAreasSQL(wherePredicate string) string {
 	`, tableArea, tableAreaTag, tableTag, wherePredicate)
 }
 
-// buildTagsSQL builds the SQL query for fetching tags.
-func buildTagsSQL(wherePredicate string) string {
+// BuildTagsSQL builds the SQL query for fetching tags.
+func BuildTagsSQL(wherePredicate string) string {
 	if wherePredicate == "" {
 		wherePredicate = sqlTrue
 	}
@@ -177,8 +149,8 @@ func buildTagsSQL(wherePredicate string) string {
 	`, tableTag, wherePredicate)
 }
 
-// buildChecklistItemsSQL builds the SQL query for fetching checklist items.
-func buildChecklistItemsSQL() string {
+// BuildChecklistItemsSQL builds the SQL query for fetching checklist items.
+func BuildChecklistItemsSQL() string {
 	return fmt.Sprintf(`
 		SELECT
 			CHECKLIST_ITEM.title,
@@ -201,8 +173,8 @@ func buildChecklistItemsSQL() string {
 		colCreationDate, colModificationDate, tableChecklistItem)
 }
 
-// buildTagsOfTaskSQL builds the SQL query for fetching tags of a task.
-func buildTagsOfTaskSQL() string {
+// BuildTagsOfTaskSQL builds the SQL query for fetching tags of a task.
+func BuildTagsOfTaskSQL() string {
 	return fmt.Sprintf(`
 		SELECT
 			TAG.title
@@ -216,8 +188,8 @@ func buildTagsOfTaskSQL() string {
 	`, tableTaskTag, tableTag)
 }
 
-// buildTagsOfAreaSQL builds the SQL query for fetching tags of an area.
-func buildTagsOfAreaSQL() string {
+// BuildTagsOfAreaSQL builds the SQL query for fetching tags of an area.
+func BuildTagsOfAreaSQL() string {
 	return fmt.Sprintf(`
 		SELECT
 			TAG.title
@@ -231,13 +203,13 @@ func buildTagsOfAreaSQL() string {
 	`, tableAreaTag, tableTag)
 }
 
-// buildCountSQL wraps a SQL query to return only the count.
-func buildCountSQL(sql string) string {
+// BuildCountSQL wraps a SQL query to return only the count.
+func BuildCountSQL(sql string) string {
 	return fmt.Sprintf("SELECT COUNT(uuid) FROM (\n%s\n)", sql)
 }
 
-// buildAuthTokenSQL builds the SQL query for fetching the auth token.
-func buildAuthTokenSQL() string {
+// BuildAuthTokenSQL builds the SQL query for fetching the auth token.
+func BuildAuthTokenSQL() string {
 	return fmt.Sprintf(`
 		SELECT uriSchemeAuthenticationToken
 		FROM %s

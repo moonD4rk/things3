@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+
+	idb "github.com/moond4rk/things3/internal/db"
 )
 
 // Test database paths.
@@ -315,7 +317,7 @@ func extractChecklistUUIDs(items []ChecklistItem) []string {
 func newTestDB(t *testing.T) *db {
 	t.Helper()
 	initTestPaths()
-	database, err := newDB(withDBPath(testDatabasePath))
+	database, err := newDB(idb.WithPath(testDatabasePath))
 	if err != nil {
 		t.Fatalf("failed to create test db: %v", err)
 	}
@@ -328,5 +330,5 @@ func newTestDB(t *testing.T) *db {
 func newTestDBOld(t *testing.T) (*db, error) {
 	t.Helper()
 	initTestPaths()
-	return newDB(withDBPath(testDatabasePathOld))
+	return newDB(idb.WithPath(testDatabasePathOld))
 }

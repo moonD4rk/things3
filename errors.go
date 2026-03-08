@@ -1,13 +1,19 @@
 package things3
 
-import "errors"
+import (
+	"errors"
 
-// Database Errors
+	idb "github.com/moond4rk/things3/internal/db"
+)
+
+// Database Errors - aliased from internal/db so users can match with errors.Is.
 var (
 	// ErrDatabaseNotFound is returned when the Things database cannot be located.
-	ErrDatabaseNotFound = errors.New("things3: database not found")
+	ErrDatabaseNotFound = idb.ErrDatabaseNotFound
 	// ErrDatabaseVersionTooOld is returned when the database version is not supported.
-	ErrDatabaseVersionTooOld = errors.New("things3: database version too old (requires things3 version > 21)")
+	ErrDatabaseVersionTooOld = idb.ErrDatabaseVersionTooOld
+	// ErrAuthTokenNotFound is returned when the URL scheme auth token cannot be read.
+	ErrAuthTokenNotFound = idb.ErrAuthTokenNotFound
 )
 
 // Query Errors
@@ -24,8 +30,6 @@ var (
 
 // URL Scheme Errors
 var (
-	// ErrAuthTokenNotFound is returned when the URL scheme auth token cannot be read.
-	ErrAuthTokenNotFound = errors.New("things3: auth token not found")
 	// ErrEmptyToken is returned when an empty token is provided to WithToken.
 	ErrEmptyToken = errors.New("things3: empty token provided to WithToken")
 	// ErrIDRequired is returned when id is missing for an update operation.

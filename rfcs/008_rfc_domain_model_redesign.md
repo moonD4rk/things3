@@ -6,7 +6,7 @@ Date: 2026-02-24
 
 ## Summary
 
-Introduce a clean domain model layer between the SQLite database and the public API. The core changes are: (1) separate domain types for Todo, Project, Area, Tag, and ChecklistItem with consistent typing, (2) move all type conversion from SQL to Go, (3) structured hierarchical results for queries that return mixed types, and (4) a unified naming convention across the entire codebase.
+Introduce a clean domain model layer between the SQLite database and the public API, with physical separation via `internal/` sub-packages. The core changes are: (1) move database and SQL implementation into `internal/db`, (2) separate domain types for Todo, Project, Heading, Area, Tag, and ChecklistItem with consistent typing, (3) a conversion layer that transforms raw database rows into domain types, (4) move all type conversion from SQL to Go, and (5) a unified naming convention across the entire codebase.
 
 ## Motivation
 
@@ -21,7 +21,7 @@ Introduce a clean domain model layer between the SQLite database and the public 
 
 3. **Split conversion responsibility**: Type conversion is scattered between SQL (CASE expressions, printf bit manipulation) and Go (scanTask string-to-enum). Neither layer does a complete job.
 
-4. **Flat results hide structure**: Things 3 data is naturally hierarchical (Area > Project > Todo), but all queries return flat `[]Task` lists, forcing users to reconstruct the hierarchy themselves.
+4. **Flat file structure**: All 29 source files live in the root package. Internal implementation details (SQL building, filter primitives, date conversion, database connection) are mixed with public API types and interfaces.
 
 5. **Type-unsafe containers**: `Tag.Items` is `[]any`, requiring type assertions at every use site.
 
@@ -30,9 +30,9 @@ Introduce a clean domain model layer between the SQLite database and the public 
 ### Goals
 
 - Each domain concept has its own Go type with only relevant fields
-- All type conversion happens in one place (Go scan layer)
+- All type conversion happens in one place (Go conversion layer)
 - SQL only does data retrieval, not formatting
-- Queries can return both flat typed results and structured hierarchical results
+- Internal implementation is physically separated from public API via `internal/`
 - Zero use of `any` in public model types
 
 ## Naming Convention
@@ -58,7 +58,7 @@ A unified naming convention across all layers of the codebase. The canonical ter
 
 2. **`taskType` is unexported**: After the type split, `TaskType` becomes `taskType` (unexported). Users distinguish types through Go's type system (`Todo`, `Project`, `Heading`), not through an enum. The enum remains internally for scan-layer routing.
 
-3. **`client.Tasks()` is removed**: No generic "task" query entry point. Users choose `client.Todos()` or `client.Projects()` explicitly. Mixed-type results come from structured result types like `SearchResult`.
+3. **`client.Tasks()` is removed**: No generic "task" query entry point. Users choose `client.Todos()` or `client.Projects()` explicitly. Mixed-type results come from convenience methods with appropriate return types (TBD).
 
 4. **`Todos()` is a builder entry point**: `client.Todos()` returns `TodoQueryBuilder` (no ctx parameter). The convenience shorthand `client.Todos(ctx)` (returning `[]Todo` directly) is removed. Use `client.Todos().All(ctx)` instead.
 
@@ -77,9 +77,86 @@ Task.Type TaskType                  (removed, Go type is the type)
 client.Tasks() TaskQueryBuilder     (removed)
 client.Todos(ctx) []Task            client.Todos() TodoQueryBuilder
 "a to-do item" (in comments)       "a todo item"
+29 files in root package            root (~18) + internal/ (~11)
 ```
 
 ## Design
+
+### File Structure
+
+Physical separation of public API and internal implementation:
+
+```
+things3/
+|
+| -- Public API (user-facing) --------------------------
+|-- doc.go                # package documentation
+|-- client.go             # Client, NewClient
+|-- client_options.go     # ClientOption
+|-- models.go             # Todo, Project, Heading, Area, Tag, ChecklistItem
+|-- types.go              # Status, StartBucket, Command, ListID
+|-- interfaces.go         # all exported interfaces
+|-- errors.go             # ErrTaskNotFound...
+|-- time_helpers.go       # DaysAgo() etc.
+|
+| -- Conversion Layer ------------------------------------
+|-- convert.go            # RawTask -> Todo/Project/Heading, RawArea -> Area...
+|
+| -- Query Builders (implement exported interfaces) ------
+|-- query.go              # todoQuery, projectQuery
+|-- query_area.go         # areaQuery
+|-- query_tag.go          # tagQuery
+|-- query_filter.go       # typeFilter, statusFilter, startFilter, dateFilter
+|-- convenience.go        # Inbox(), Today(), Logbook()...
+|
+| -- URL Scheme Builders (implement exported interfaces) -
+|-- scheme_builder.go     # addTodoBuilder, addProjectBuilder
+|-- scheme_update.go      # updateTodoBuilder, updateProjectBuilder
+|-- scheme_show.go        # showBuilder
+|-- scheme_json.go        # batchBuilder
+|
+| -- Internal: Database Layer ----------------------------
+|-- internal/
+|   |-- db/
+|   |   |-- db.go         # DB connection, execute, scan raw rows
+|   |   |-- raw.go        # RawTask, RawArea, RawTag, RawChecklistItem
+|   |   |-- sql.go        # SQL building (buildTasksSQL...)
+|   |   |-- filter.go     # FilterBuilder, all filter primitives
+|   |   |-- constants.go  # table names, column names, filter expressions
+|   |   |-- date.go       # Things binary date <-> time.Time
+|   |   +-- options.go    # DB options
+|   |
+|   +-- scheme/
+|       |-- scheme.go     # URL execution (open command)
+|       |-- attrs.go      # URL parameter building
+|       |-- constants.go  # URL scheme constants
+|       +-- options.go    # scheme options
+|
+| -- Test Support ----------------------------------------
+|-- thingstest/           # public test utilities
+|   +-- thingstest.go
+|-- testdata/
+|   +-- main.sqlite
++-- *_test.go
+```
+
+Files moved from root to `internal/`:
+
+| Current file | Moved to | Reason |
+|-------------|----------|--------|
+| `database.go` | `internal/db/db.go` | connection, path discovery |
+| `db.go` | `internal/db/db.go` | execute, scan (merged) |
+| `db_options.go` | `internal/db/options.go` | internal options |
+| `sql.go` | `internal/db/sql.go` | SQL building |
+| `filter.go` | `internal/db/filter.go` | filter primitives |
+| `constants.go` | `internal/db/constants.go` | table/column names |
+| `date.go` | `internal/db/date.go` | binary date conversion |
+| `scheme.go` | `internal/scheme/scheme.go` | URL execution |
+| `scheme_attrs.go` | `internal/scheme/attrs.go` | URL params |
+| `scheme_constants.go` | `internal/scheme/constants.go` | URL constants |
+| `scheme_options.go` | `internal/scheme/options.go` | scheme options |
+
+Root package: **29 files -> ~18 files**. Internal implementation hidden in `internal/`.
 
 ### Layer Architecture
 
@@ -87,130 +164,123 @@ client.Todos(ctx) []Task            client.Todos() TodoQueryBuilder
 SQLite Database (TMTask, TMArea, TMTag, TMChecklistItem)
         |
         v
-    SQL Layer          SELECT raw columns (no CASE, no printf)
+    internal/db             SQL building + execution (raw columns, no CASE/printf)
         |
         v
-    Scan Layer         scanTask() reads raw values, converts to Go types
+    internal/db.RawTask     raw struct, maps 1:1 to database row
         |
         v
-    Internal task      unexported struct, maps 1:1 to TMTask row
-        |
+    things3/convert.go      rawTaskToTodo(), rawTaskToProject(), rawTaskToHeading()
+        |                   int -> enum, binary date -> time.Time, flat -> grouped
         v
-    Conversion         taskToTodo(), taskToProject(), taskToHeading()
-        |
-        v
-    Domain Types       Todo, Project, Heading, Area, Tag, ChecklistItem (exported)
+    things3.Todo/Project    exported domain types (user-facing)
 ```
 
 ### Domain Types
 
+Relationship fields use flat `string` values (empty string = no relationship, `omitempty` hides in JSON). No separate reference type is needed since users only read these fields for display or lookup.
+
 ```go
 // Todo represents an actionable todo item.
 type Todo struct {
-    UUID   string
-    Title  string
-    Status Status
-    Notes  string
-    Start  *StartBucket
+    UUID   string       `json:"uuid"`
+    Title  string       `json:"title"`
+    Status Status       `json:"status"`
+    Notes  string       `json:"notes,omitempty"`
+    Start  *StartBucket `json:"start,omitempty"`
 
-    // Relationships
-    AreaUUID     *string
-    AreaTitle    *string
-    ProjectUUID  *string
-    ProjectTitle *string
-    HeadingUUID  *string
-    HeadingTitle *string
+    // Relationships (empty string = no relationship)
+    AreaUUID     string `json:"area_uuid,omitempty"`
+    AreaTitle    string `json:"area_title,omitempty"`
+    ProjectUUID  string `json:"project_uuid,omitempty"`
+    ProjectTitle string `json:"project_title,omitempty"`
+    HeadingUUID  string `json:"heading_uuid,omitempty"`
+    HeadingTitle string `json:"heading_title,omitempty"`
 
     // Dates
-    StartDate    *time.Time
-    Deadline     *time.Time
-    ReminderTime *time.Time   // Only Todo has reminders
-    StopDate     *time.Time
-    Created      time.Time
-    Modified     time.Time
+    StartDate    *time.Time `json:"start_date,omitempty"`
+    Deadline     *time.Time `json:"deadline,omitempty"`
+    ReminderTime *time.Time `json:"reminder_time,omitempty"`
+    StopDate     *time.Time `json:"stop_date,omitempty"`
+    Created      time.Time  `json:"created"`
+    Modified     time.Time  `json:"modified"`
 
     // Nested items
-    Tags      []string
-    Checklist []ChecklistItem  // Only Todo has checklist
+    Tags      []string        `json:"tags,omitempty"`
+    Checklist []ChecklistItem `json:"checklist,omitempty"`
 
-    // Ordering
-    Index      int
-    TodayIndex int
-
-    Trashed bool
+    Trashed bool `json:"trashed,omitempty"`
 }
 
 // Project represents a container for organizing todos.
 type Project struct {
-    UUID   string
-    Title  string
-    Status Status
-    Notes  string
-    Start  *StartBucket
+    UUID   string       `json:"uuid"`
+    Title  string       `json:"title"`
+    Status Status       `json:"status"`
+    Notes  string       `json:"notes,omitempty"`
+    Start  *StartBucket `json:"start,omitempty"`
 
     // Relationships
-    AreaUUID  *string
-    AreaTitle *string
+    AreaUUID  string `json:"area_uuid,omitempty"`
+    AreaTitle string `json:"area_title,omitempty"`
 
     // Dates
-    StartDate *time.Time
-    Deadline  *time.Time
-    StopDate  *time.Time
-    Created   time.Time
-    Modified  time.Time
+    StartDate *time.Time `json:"start_date,omitempty"`
+    Deadline  *time.Time `json:"deadline,omitempty"`
+    StopDate  *time.Time `json:"stop_date,omitempty"`
+    Created   time.Time  `json:"created"`
+    Modified  time.Time  `json:"modified"`
 
     // Nested items
-    Tags  []string
-    Todos []Todo      // Only Project has child todos
+    Tags  []string `json:"tags,omitempty"`
+    Items []Todo   `json:"items,omitempty"`
 
-    // Ordering
-    Index int
-
-    Trashed bool
+    Trashed bool `json:"trashed,omitempty"`
 }
 
 // Heading represents a grouping label within a project.
 // Headings are organizational only and have no status or dates.
 type Heading struct {
-    UUID  string
-    Title string
+    UUID  string `json:"uuid"`
+    Title string `json:"title"`
 
     // Parent
-    ProjectUUID  *string
-    ProjectTitle *string
+    ProjectUUID  string `json:"project_uuid,omitempty"`
+    ProjectTitle string `json:"project_title,omitempty"`
 
     // Nested items
-    Todos []Todo
-
-    // Ordering
-    Index int
+    Todos []Todo `json:"todos,omitempty"`
 }
 
 // Area represents a high-level responsibility area.
 type Area struct {
-    UUID  string
-    Title string
-    Tags  []string
+    UUID  string `json:"uuid"`
+    Title string `json:"title"`
+
+    Tags     []string  `json:"tags,omitempty"`
+    Todos    []Todo    `json:"todos,omitempty"`
+    Projects []Project `json:"projects,omitempty"`
 }
 
 // Tag represents a label for categorizing items.
 type Tag struct {
-    UUID     string
-    Title    string
-    Shortcut string
-    Todos    []Todo     // Tagged todos
-    Projects []Project  // Tagged projects
-    Areas    []Area     // Tagged areas
+    UUID     string `json:"uuid"`
+    Title    string `json:"title"`
+    Shortcut string `json:"shortcut,omitempty"`
+
+    Todos    []Todo    `json:"todos,omitempty"`
+    Projects []Project `json:"projects,omitempty"`
+    Areas    []Area    `json:"areas,omitempty"`
 }
 
 // ChecklistItem represents a sub-item within a todo.
 type ChecklistItem struct {
-    UUID     string
-    Title    string
-    Status   Status       // Same enum as Todo/Project, not string
-    StopDate *time.Time
-    Created  time.Time
-    Modified time.Time
+    UUID     string     `json:"uuid"`
+    Title    string     `json:"title"`
+    Status   Status     `json:"status"`
+    StopDate *time.Time `json:"stop_date,omitempty"`
+    Created  time.Time  `json:"created"`
+    Modified time.Time  `json:"modified"`
 }
 ```
 
@@ -224,228 +294,175 @@ Key differences from current `Task`:
 | ProjectUUID | always present | yes | no | no |
 | HeadingUUID | always present | yes | no | no |
 | Status | always present | yes | yes | no |
-| Type field | `TaskType` enum (exported) | not needed (Go type is the type) | not needed | not needed |
+| Index/TodayIndex | exposed | internal only | internal only | internal only |
+| Type field | `TaskType` enum | not needed | not needed | not needed |
+| Relationship fields | `*string` (nullable) | `string` (omitempty) | `string` (omitempty) | `string` (omitempty) |
 
-### Structured Results
+### Internal Raw Types
 
-For queries that naturally return mixed types, provide hierarchical result types
-that reflect the real Things 3 data hierarchy: Area > Project > Todo.
-
-#### Data Relationships
-
-A todo's area comes from two possible paths:
-
-```
-Path 1: Todo directly in Area (no project)
-    Todo.AreaUUID = "area-1"
-    Todo.ProjectUUID = nil
-
-Path 2: Todo inherits Area from Project
-    Todo.ProjectUUID = "proj-1"
-    Project.AreaUUID = "area-1"    (area inherited through project)
-
-Path 3: Todo with no Area and no Project (standalone)
-    Todo.AreaUUID = nil
-    Todo.ProjectUUID = nil
-```
-
-#### Hierarchical Result Types
+Located in `internal/db/raw.go`. Map 1:1 to database rows with raw values:
 
 ```go
-// AreaGroup contains all items within one area.
-// Each area appears exactly once. Items are further grouped by project.
-type AreaGroup struct {
-    Area     *Area          // nil for items without an area
-    Projects []ProjectGroup // projects that contain matching todos
-    Todos    []Todo         // standalone todos directly in this area (no project)
+package db
+
+// RawTask maps 1:1 to a TMTask row. All values are raw database types.
+type RawTask struct {
+    UUID             string
+    Type             int       // 0=todo, 1=project, 2=heading
+    Status           int       // 0=incomplete, 2=canceled, 3=completed
+    Title            string
+    Notes            string
+    Start            int       // 0=inbox, 1=anytime, 2=someday
+    Trashed          bool
+
+    // Relationships (raw UUIDs and titles from JOINs)
+    AreaUUID         *string
+    AreaTitle        *string
+    ProjectUUID      *string
+    ProjectTitle     *string
+    HeadingUUID      *string
+    HeadingTitle     *string
+
+    // Dates (raw database values, no conversion)
+    StartDate        *int64    // Things binary date format
+    Deadline         *int64    // Things binary date format
+    ReminderTime     *int64    // Things binary time format
+    StopDate         *int64    // Unix timestamp
+    CreationDate     int64     // Unix timestamp
+    ModificationDate int64     // Unix timestamp
+
+    // Ordering (internal use only, not exposed in domain types)
+    Index            int
+    TodayIndex       int
+
+    // Presence flags (from SQL JOINs, for lazy loading)
+    HasTags          bool
+    HasChecklist     bool
 }
 
-// ProjectGroup contains a project and its matching todos.
-type ProjectGroup struct {
-    Project Project
-    Todos   []Todo
+// RawArea maps to a TMArea row.
+type RawArea struct {
+    UUID    string
+    Title   string
+    HasTags bool
 }
 
-// TodayResult contains today's items organized as Area > Project > Todo.
-type TodayResult struct {
-    Groups []AreaGroup
+// RawTag maps to a TMTag row.
+type RawTag struct {
+    UUID     string
+    Title    string
+    Shortcut string
 }
 
-// SearchResult contains search matches organized by type.
-type SearchResult struct {
-    Todos    []Todo
-    Projects []Project
-    Areas    []Area
-    Tags     []Tag
+// RawChecklistItem maps to a TMChecklistItem row.
+type RawChecklistItem struct {
+    UUID             string
+    Title            string
+    Status           int       // raw integer
+    StopDate         *int64    // Unix timestamp
+    CreationDate     int64
+    ModificationDate int64
 }
 ```
 
-#### Concrete Example
+### Conversion Layer
 
-Given today's items:
-
-```
-Area "Work"
-+-- Project "Release v1.0"
-|   +-- Todo "Write tests"
-|   +-- Todo "Fix bug #123"
-+-- Todo "Reply to email"          (standalone, directly in area)
-
-Area "Personal"
-+-- Todo "Buy groceries"           (standalone)
-
-(No Area)
-+-- Project "Side Project"
-|   +-- Todo "Design logo"
-+-- Todo "Random idea"             (standalone, no area, no project)
-```
-
-The `TodayResult` structure:
+Located in `things3/convert.go`. Bridges `internal/db` raw types and public domain types:
 
 ```go
-TodayResult{
-    Groups: []AreaGroup{
-        {
-            Area: &Area{Title: "Work"},
-            Projects: []ProjectGroup{
-                {
-                    Project: Project{Title: "Release v1.0"},
-                    Todos:   []Todo{
-                        {Title: "Write tests"},
-                        {Title: "Fix bug #123"},
-                    },
-                },
-            },
-            Todos: []Todo{
-                {Title: "Reply to email"},
-            },
-        },
-        {
-            Area: &Area{Title: "Personal"},
-            Projects: nil,
-            Todos: []Todo{
-                {Title: "Buy groceries"},
-            },
-        },
-        {
-            Area: nil,  // no area
-            Projects: []ProjectGroup{
-                {
-                    Project: Project{Title: "Side Project"},
-                    Todos:   []Todo{
-                        {Title: "Design logo"},
-                    },
-                },
-            },
-            Todos: []Todo{
-                {Title: "Random idea"},
-            },
-        },
-    },
-}
-```
+package things3
 
-#### Traversal
+import "github.com/moond4rk/things3/internal/db"
 
-```go
-result, _ := client.Today(ctx)
-
-for _, group := range result.Groups {
-    if group.Area != nil {
-        fmt.Printf("Area: %s\n", group.Area.Title)
-    } else {
-        fmt.Println("No Area")
-    }
-
-    for _, pg := range group.Projects {
-        fmt.Printf("  Project: %s\n", pg.Project.Title)
-        for _, todo := range pg.Todos {
-            fmt.Printf("    - %s\n", todo.Title)
-        }
-    }
-
-    for _, todo := range group.Todos {
-        fmt.Printf("  - %s (standalone)\n", todo.Title)
+func rawTaskToTodo(raw db.RawTask) Todo {
+    return Todo{
+        UUID:         raw.UUID,
+        Title:        raw.Title,
+        Status:       Status(raw.Status),
+        Notes:        raw.Notes,
+        Start:        toStartBucketPtr(raw.Start),
+        AreaUUID:     ptrToString(raw.AreaUUID),
+        AreaTitle:    ptrToString(raw.AreaTitle),
+        ProjectUUID:  ptrToString(raw.ProjectUUID),
+        ProjectTitle: ptrToString(raw.ProjectTitle),
+        HeadingUUID:  ptrToString(raw.HeadingUUID),
+        HeadingTitle: ptrToString(raw.HeadingTitle),
+        StartDate:    db.ThingsDateToTime(raw.StartDate),
+        Deadline:     db.ThingsDateToTime(raw.Deadline),
+        ReminderTime: db.ThingsTimeToTime(raw.ReminderTime),
+        StopDate:     unixToTimePtr(raw.StopDate),
+        Created:      time.Unix(raw.CreationDate, 0),
+        Modified:     time.Unix(raw.ModificationDate, 0),
+        Trashed:      raw.Trashed,
     }
 }
 
-// Output:
-// Area: Work
-//   Project: Release v1.0
-//     - Write tests
-//     - Fix bug #123
-//   - Reply to email (standalone)
-// Area: Personal
-//   - Buy groceries (standalone)
-// No Area
-//   Project: Side Project
-//     - Design logo
-//   - Random idea (standalone)
-```
-
-### API Design
-
-```go
-client, _ := things3.NewClient()
-defer client.Close()
-
-// --- Builder queries (primary API) ---
-// Todos() and Projects() are builder entry points, not convenience methods.
-// No client.Tasks() — users choose the type explicitly.
-
-todos, _ := client.Todos().All(ctx)                        // []Todo - all incomplete
-todos, _ := client.Todos().InArea(uuid).All(ctx)           // []Todo
-todos, _ := client.Todos().Status().Completed().All(ctx)   // []Todo
-projects, _ := client.Projects().All(ctx)                  // []Project
-projects, _ := client.Projects().InArea(uuid).All(ctx)     // []Project
-
-// Area and Tag queries
-areas, _ := client.Areas().All(ctx)                        // []Area
-tags, _ := client.Tags().All(ctx)                          // []Tag
-
-// Search through builders
-todos, _ := client.Todos().Search("keyword").All(ctx)      // []Todo
-projects, _ := client.Projects().Search("keyword").All(ctx) // []Project
-areas, _ := client.Areas().Search("keyword").All(ctx)       // []Area
-
-// --- Convenience methods (common use cases) ---
-// TBD: exact list of convenience methods and their return types.
-
-result, _ := client.Today(ctx)                     // TodayResult (Area > Project > Todo)
-for _, group := range result.Groups {
-    // group.Area      - which area (nil = no area)
-    // group.Projects  - projects with their todos
-    // group.Todos     - standalone todos in this area
+func rawTaskToProject(raw db.RawTask) Project {
+    return Project{
+        UUID:      raw.UUID,
+        Title:     raw.Title,
+        Status:    Status(raw.Status),
+        Notes:     raw.Notes,
+        Start:     toStartBucketPtr(raw.Start),
+        AreaUUID:  ptrToString(raw.AreaUUID),
+        AreaTitle: ptrToString(raw.AreaTitle),
+        StartDate: db.ThingsDateToTime(raw.StartDate),
+        Deadline:  db.ThingsDateToTime(raw.Deadline),
+        StopDate:  unixToTimePtr(raw.StopDate),
+        Created:   time.Unix(raw.CreationDate, 0),
+        Modified:  time.Unix(raw.ModificationDate, 0),
+        Trashed:   raw.Trashed,
+    }
 }
 
-results, _ := client.Search(ctx, "keyword")        // SearchResult
-// results.Todos, results.Projects, results.Areas, results.Tags
-```
-
-### Internal Implementation
-
-The internal `task` type (unexported) maps directly to TMTask:
-
-```go
-// task is the internal database row representation.
-// Not exported; converted to Todo/Project/Heading before returning to users.
-type task struct {
-    uuid     string
-    typ      taskType     // unexported enum: taskTypeTodo, taskTypeProject, taskTypeHeading
-    status   Status
-    title    string
-    notes    string
-    start    *StartBucket
-    // ... all fields from TMTask
+func rawTaskToHeading(raw db.RawTask) Heading {
+    return Heading{
+        UUID:         raw.UUID,
+        Title:        raw.Title,
+        ProjectUUID:  ptrToString(raw.ProjectUUID),
+        ProjectTitle: ptrToString(raw.ProjectTitle),
+    }
 }
-```
 
-Conversion functions:
+func rawAreaToArea(raw db.RawArea) Area {
+    return Area{UUID: raw.UUID, Title: raw.Title}
+}
 
-```go
-func taskToTodo(t task) Todo { ... }
-func taskToProject(t task, todos []Todo) Project { ... }
-func taskToHeading(t task, todos []Todo) Heading { ... }
+func rawTagToTag(raw db.RawTag) Tag {
+    return Tag{UUID: raw.UUID, Title: raw.Title, Shortcut: raw.Shortcut}
+}
+
+func rawChecklistToItem(raw db.RawChecklistItem) ChecklistItem {
+    return ChecklistItem{
+        UUID:     raw.UUID,
+        Title:    raw.Title,
+        Status:   Status(raw.Status),
+        StopDate: unixToTimePtr(raw.StopDate),
+        Created:  time.Unix(raw.CreationDate, 0),
+        Modified: time.Unix(raw.ModificationDate, 0),
+    }
+}
+
+// Helper functions
+func ptrToString(p *string) string {
+    if p == nil {
+        return ""
+    }
+    return *p
+}
+
+func toStartBucketPtr(raw int) *StartBucket {
+    s := StartBucket(raw)
+    return &s
+}
+
+func unixToTimePtr(ts *int64) *time.Time {
+    if ts == nil {
+        return nil
+    }
+    t := time.Unix(*ts, 0)
+    return &t
+}
 ```
 
 ### SQL Simplification
@@ -487,7 +504,35 @@ TASK.startDate AS start_date,
 TASK.creationDate AS created,
 ```
 
-All conversion moves to Go scan layer using existing functions (`thingsDateToTime()`, `time.Unix()`, etc.).
+All conversion moves to `convert.go` using existing functions (`ThingsDateToTime()`, `time.Unix()`, etc.).
+
+### API Design
+
+```go
+client, _ := things3.NewClient()
+defer client.Close()
+
+// --- Builder queries (primary API) ---
+// Todos() and Projects() are builder entry points.
+// No client.Tasks() -- users choose the type explicitly.
+
+todos, _ := client.Todos().All(ctx)                        // []Todo
+todos, _ := client.Todos().InArea(uuid).All(ctx)           // []Todo
+todos, _ := client.Todos().Status().Completed().All(ctx)   // []Todo
+projects, _ := client.Projects().All(ctx)                  // []Project
+projects, _ := client.Projects().InArea(uuid).All(ctx)     // []Project
+
+// Area and Tag queries
+areas, _ := client.Areas().All(ctx)                        // []Area
+tags, _ := client.Tags().All(ctx)                          // []Tag
+
+// --- Convenience methods (common use cases) ---
+// Return types for mixed-type convenience methods are TBD.
+// The exact container type will be decided in a later phase.
+items, _ := client.Inbox(ctx)
+items, _ := client.Today(ctx)
+items, _ := client.Logbook(ctx)
+```
 
 ### Type Consistency Fixes
 
@@ -502,50 +547,64 @@ All conversion moves to Go scan layer using existing functions (`thingsDateToTim
 | `ChecklistItem.Type` | `string` (always "checklist-item") | removed |
 | `Tag.Items` | `[]any` | `Todos []Todo` + `Projects []Project` + `Areas []Area` |
 | `StartBucket` JSON | no marshaler | `MarshalJSON` / `UnmarshalJSON` (like `Status`) |
+| `Task.Index` / `Task.TodayIndex` | exposed in public model | internal only (in `RawTask`) |
+| Relationship fields | `*string` (nullable pointer) | `string` with `omitempty` |
+
+## Decided Questions
+
+1. **Heading as a type vs inline**: Heading is a standalone domain type. In flat queries, each Todo carries `HeadingUUID`/`HeadingTitle` to indicate its grouping. In Project items, Heading grouping is expressed through the Todo's heading fields (flat), not through nested `Heading` containers. No independent `client.Headings()` builder since headings only exist within projects. **Decision: standalone type, flat items in Project.**
+
+2. **Builder separation**: `Todos()` and `Projects()` have separate public interfaces (`TodoQueryBuilder`, `ProjectQueryBuilder`) with typed return values. Internally they share the same `taskQuery` implementation -- the builder auto-sets the type filter and converts results via `rawTaskToTodo()`/`rawTaskToProject()` in terminal methods (`All`, `First`, `Count`). **Decision: separate interfaces, shared implementation.**
+
+3. **JSON serialization**: The `Type` fields (`Area.Type`, `Tag.Type`, `ChecklistItem.Type`) are removed. No JSON compatibility with Python things.py is maintained. Go types themselves express the type information. **Decision: drop Type fields.**
+
+4. **File structure**: Internal implementation (database, SQL, filters, date conversion, URL execution) moves to `internal/` sub-packages. Public API stays in root. **Decision: `internal/db` + `internal/scheme`.**
+
+5. **Relationship fields**: Use flat `string` fields with `omitempty` instead of a separate reference type. Users access fields directly (`todo.AreaTitle`), no nil check needed (empty string = no relationship). **Decision: flat string fields, no Ref type.**
+
+6. **Index/TodayIndex**: Internal ordering fields used for SQL `ORDER BY` and convenience method sorting. Not exposed in public domain types. Stay in `RawTask` only. **Decision: internal only.**
+
+7. **Trashed**: Kept in public domain types (at the end of struct, with `omitempty`). Useful for `Get()` results where query context is not available. **Decision: keep, low priority placement.**
+
+8. **Start field**: `*StartBucket` exposed in public domain types. Useful for display (e.g., CLI showing `[Inbox]` / `[Someday]` labels). **Decision: keep.**
 
 ## Open Questions
 
-These items require further discussion before implementation:
+1. **Mixed-type convenience method returns**: Convenience methods like `Inbox()`, `Today()`, `Logbook()`, `Trash()` currently return `[]Task` (mixed todos and projects). After the type split, they need a container type. A candidate is `Items { Todos []Todo; Projects []Project }`, but the exact naming and structure are TBD. This will be decided when implementing the public API layer. **Deferred.**
 
-1. **Heading as a type vs inline**: Heading is a standalone domain type. Project has `Todos []Todo` (standalone) and `Headings []Heading` (each with its own Todos). Todo retains `HeadingUUID`/`HeadingTitle` for context in flat queries. No independent `client.Headings()` builder needed since headings only exist within projects. **Decision: standalone type.**
-
-2. **Builder separation**: `Todos()` and `Projects()` have separate public interfaces (`TodoQueryBuilder`, `ProjectQueryBuilder`) with typed return values. Internally they share the same `taskQuery` implementation — the builder auto-sets the type filter and converts results via `taskToTodo()`/`taskToProject()` in terminal methods (`All`, `First`, `Count`). **Decision: separate interfaces, shared implementation.**
-
-3. **Structured result scope**: Which convenience methods return structured results vs flat lists? Candidates for structured: `Today()`, `Search()`. Candidates for flat: `Inbox()`, `Logbook()`, `Trash()`.
-
-4. **JSON serialization**: The `Type` fields (`Area.Type`, `Tag.Type`, `ChecklistItem.Type`) are removed. No JSON compatibility with Python things.py is maintained — things.py is an inspiration source, not an upstream dependency. Go types themselves express the type information. If CLI or other consumers need a `"type"` field in JSON output, it should be handled in the serialization layer, not in the domain model. **Decision: drop Type fields, no things.py compatibility.**
-
-5. **Migration path**: Should this be done in one large refactor or incrementally? Incremental approach: (1) SQL simplification, (2) type consistency, (3) type split, (4) structured results.
+2. **Structured hierarchical results**: `TodayResult`, `SearchResult`, `AreaGroup`, `ProjectGroup` for hierarchical views (Area > Project > Todo). Not in scope for the initial implementation. Can be added as a separate RFC when there is concrete demand. **Deferred to future RFC.**
 
 ## Implementation Notes
 
-### Phase 1: Foundation (no API changes)
-- Simplify SQL to return raw values (remove all CASE expressions)
-- Unify scan layer to do all type conversion in Go
+### Phase 1: Internal Restructure (no API changes)
+
+Move internal implementation to `internal/` sub-packages:
+
+- Create `internal/db/`: move database connection, SQL building, filter primitives, date conversion, constants, scan functions
+- Create `internal/scheme/`: move URL execution, parameter building, scheme constants
+- Define `RawTask`, `RawArea`, `RawTag`, `RawChecklistItem` in `internal/db/raw.go`
+- Simplify SQL to return raw values (remove all CASE expressions and printf)
+- Root package wraps `internal/db` for query execution
+- Public API stays the same (still returns `Task`) -- this is a pure internal refactor
+
+### Phase 2: Type Split and Conversion Layer
+
+- Add `convert.go` with `rawTaskToTodo()`, `rawTaskToProject()`, `rawTaskToHeading()` etc.
+- Add `Todo`, `Project`, `Heading` as exported types in `models.go`
 - Fix `ChecklistItem.Status` to use `Status` enum
 - Add `MarshalJSON`/`UnmarshalJSON` to `StartBucket`
+- Introduce unexported `taskType` (demote from `TaskType`)
 - Change `taskTypeStringTodo` from `"to-do"` to `"todo"`
-- These changes are internal; public API stays the same temporarily
-
-### Phase 2: Type Split and Naming
-- Introduce unexported `task` and `taskType` as internal types
-- Demote `TaskType` to unexported `taskType`
-- Add `Todo`, `Project`, `Heading` as exported types
-- Add conversion functions (`taskToTodo`, `taskToProject`, `taskToHeading`)
 - Remove `client.Tasks()` entry point
 - Add typed builder entry points: `client.Todos()` -> `TodoQueryBuilder`, `client.Projects()` -> `ProjectQueryBuilder`
 - Update all comments and docs to use "todo" (not "to-do")
 
-### Phase 3: Structured Results
-- Add `AreaGroup`, `ProjectGroup`, `TodayResult`, `SearchResult` types
-- Implement grouping logic (group todos by area, then by project within each area)
-- Handle area inheritance: todos inherit area from their project when not set directly
-- Update `Today()`, `Search()` to return structured results
-- Add `Areas().Search()`, `Tags().Search()` methods
+### Phase 3: Cleanup
 
-### Phase 4: Cleanup
 - Remove exported `Task` type (replaced by Todo/Project/Heading)
 - Remove exported `TaskType` enum (replaced by unexported `taskType`)
 - Remove redundant `Type` fields from Area, Tag, ChecklistItem
+- Remove `Index`/`TodayIndex` from public model
 - Split `Tag.Items []any` into typed fields (`Todos`, `Projects`, `Areas`)
+- Change relationship fields from `*string` to `string` with `omitempty`
 - Update all tests

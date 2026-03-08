@@ -2,15 +2,14 @@ package things3
 
 import (
 	"context"
+
+	idb "github.com/moond4rk/things3/internal/db"
 )
 
 // tagQuery provides a fluent interface for building tag queries.
 type tagQuery struct {
-	database *db
-
-	uuid         *string
-	title        *string
-	parentUUID   *string
+	database     *db
+	filter       idb.TagFilter
 	includeItems bool
 }
 
@@ -23,20 +22,20 @@ func (d *db) Tags() *tagQuery {
 
 // WithUUID filters tags by UUID.
 func (q *tagQuery) WithUUID(uuid string) TagQueryBuilder {
-	q.uuid = &uuid
+	q.filter.UUID = &uuid
 	return q
 }
 
 // WithTitle filters tags by title.
 func (q *tagQuery) WithTitle(title string) TagQueryBuilder {
-	q.title = &title
+	q.filter.Title = &title
 	return q
 }
 
 // WithParent filters tags by parent tag UUID.
 // Use this to find child tags of a specific parent tag.
 func (q *tagQuery) WithParent(parentUUID string) TagQueryBuilder {
-	q.parentUUID = &parentUUID
+	q.filter.ParentUUID = &parentUUID
 	return q
 }
 
@@ -46,38 +45,16 @@ func (q *tagQuery) IncludeItems(include bool) TagQueryBuilder {
 	return q
 }
 
-// buildWhere builds the WHERE clause for the tag query using filterBuilder.
-func (q *tagQuery) buildWhere() string {
-	fb := newFilterBuilder()
-
-	if q.uuid != nil {
-		fb.addEqual("uuid", *q.uuid)
-	}
-	if q.title != nil {
-		fb.addEqual("title", *q.title)
-	}
-	if q.parentUUID != nil {
-		fb.addEqual("parent", *q.parentUUID)
-	}
-
-	return fb.sql()
-}
-
 // All executes the query and returns all matching tags.
 func (q *tagQuery) All(ctx context.Context) ([]Tag, error) {
-	sql := buildTagsSQL(q.buildWhere())
-	rows, err := q.database.executeQuery(ctx, sql)
+	rows, err := q.database.inner.QueryTags(ctx, q.filter)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	var tags []Tag
-	for rows.Next() {
-		tag, err := scanTag(rows)
-		if err != nil {
-			return nil, err
-		}
+	for _, row := range rows {
+		tag := convertTagRow(row)
 
 		// Load items if requested
 		if q.includeItems {
@@ -100,10 +77,10 @@ func (q *tagQuery) All(ctx context.Context) ([]Tag, error) {
 			tag.Items = items
 		}
 
-		tags = append(tags, *tag)
+		tags = append(tags, tag)
 	}
 
-	return tags, rows.Err()
+	return tags, nil
 }
 
 // First executes the query and returns the first matching tag.

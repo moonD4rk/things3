@@ -1,43 +1,54 @@
 package things3
 
-import "errors"
+import (
+	"errors"
 
-// Database Errors
+	"github.com/moond4rk/things3/internal/database"
+	"github.com/moond4rk/things3/internal/scheme"
+)
+
+// Database Errors - aliased from internal/database so users can match with errors.Is.
 var (
 	// ErrDatabaseNotFound is returned when the Things database cannot be located.
-	ErrDatabaseNotFound = errors.New("things3: database not found")
+	ErrDatabaseNotFound = database.ErrDatabaseNotFound
 	// ErrDatabaseVersionTooOld is returned when the database version is not supported.
-	ErrDatabaseVersionTooOld = errors.New("things3: database version too old (requires things3 version > 21)")
+	ErrDatabaseVersionTooOld = database.ErrDatabaseVersionTooOld
+	// ErrAuthTokenNotFound is returned when the URL scheme auth token cannot be read.
+	ErrAuthTokenNotFound = database.ErrAuthTokenNotFound
 )
 
 // Query Errors
 var (
-	// ErrTaskNotFound is returned when a task with the specified UUID does not exist.
-	ErrTaskNotFound = errors.New("things3: task not found")
+	// ErrTodoNotFound is returned when a todo with the specified UUID does not exist.
+	ErrTodoNotFound = errors.New("things3: todo not found")
+	// ErrProjectNotFound is returned when a project with the specified UUID does not exist.
+	ErrProjectNotFound = errors.New("things3: project not found")
+	// ErrHeadingNotFound is returned when a heading with the specified UUID does not exist.
+	ErrHeadingNotFound = errors.New("things3: heading not found")
 	// ErrAreaNotFound is returned when an area with the specified UUID does not exist.
 	ErrAreaNotFound = errors.New("things3: area not found")
 	// ErrTagNotFound is returned when a tag with the specified title does not exist.
 	ErrTagNotFound = errors.New("things3: tag not found")
-	// ErrInvalidParameter is returned when an invalid parameter value is provided.
-	ErrInvalidParameter = errors.New("things3: invalid parameter")
 )
 
-// URL Scheme Errors
+// URL Scheme Validation Errors - aliased from internal/scheme.
 var (
-	// ErrAuthTokenNotFound is returned when the URL scheme auth token cannot be read.
-	ErrAuthTokenNotFound = errors.New("things3: auth token not found")
-	// ErrEmptyToken is returned when an empty token is provided to WithToken.
-	ErrEmptyToken = errors.New("things3: empty token provided to WithToken")
-	// ErrIDRequired is returned when id is missing for an update operation.
-	ErrIDRequired = errors.New("things3: id required for update operation")
-	// ErrTitleTooLong is returned when title exceeds 4,000 character limit.
-	ErrTitleTooLong = errors.New("things3: title exceeds 4,000 character limit")
-	// ErrNotesTooLong is returned when notes exceed 10,000 character limit.
-	ErrNotesTooLong = errors.New("things3: notes exceed 10,000 character limit")
-	// ErrTooManyChecklistItems is returned when checklist exceeds 100 item limit.
-	ErrTooManyChecklistItems = errors.New("things3: checklist exceeds 100 item limit")
-	// ErrNoJSONItems is returned when building a JSON URL with no items.
-	ErrNoJSONItems = errors.New("things3: no items provided for JSON operation")
+	// ErrTitleTooLong is returned when title exceeds the character limit.
+	ErrTitleTooLong = scheme.ErrTitleTooLong
+	// ErrNotesTooLong is returned when notes exceed the character limit.
+	ErrNotesTooLong = scheme.ErrNotesTooLong
+	// ErrTooManyChecklistItems is returned when checklist exceeds the item limit.
+	ErrTooManyChecklistItems = scheme.ErrTooManyChecklistItems
 	// ErrInvalidReminderTime is returned when reminder hour or minute is out of range.
-	ErrInvalidReminderTime = errors.New("things3: invalid reminder time (hour must be 0-23, minute must be 0-59)")
+	ErrInvalidReminderTime = scheme.ErrInvalidReminderTime
+)
+
+// URL Scheme Operation Errors - aliased from internal/scheme.
+var (
+	// ErrEmptyToken is returned when an empty token is provided to WithToken.
+	ErrEmptyToken = scheme.ErrEmptyToken
+	// ErrIDRequired is returned when id is missing for an update operation.
+	ErrIDRequired = scheme.ErrIDRequired
+	// ErrNoJSONItems is returned when building a JSON URL with no items.
+	ErrNoJSONItems = scheme.ErrNoJSONItems
 )

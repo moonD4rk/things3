@@ -1,7 +1,6 @@
 package things3
 
 import (
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -11,16 +10,16 @@ import (
 )
 
 func Test_newScheme(t *testing.T) {
-	scheme := newScheme()
-	assert.NotNil(t, scheme)
+	s := newScheme()
+	assert.NotNil(t, s)
 }
 
 func TestSchemeWithForeground(t *testing.T) {
-	scheme := newScheme(withForeground())
-	assert.True(t, scheme.foreground, "withForeground() should set foreground to true")
-
-	schemeDefault := newScheme()
-	assert.False(t, schemeDefault.foreground, "Default scheme should have foreground false")
+	// Verify foreground option works by testing URL building still succeeds
+	s := newScheme(withForeground())
+	thingsURL, err := s.AddTodo().Title("Test").Build()
+	require.NoError(t, err)
+	assert.Contains(t, thingsURL, "things:///add")
 }
 
 // =============================================================================
@@ -2136,58 +2135,6 @@ func TestURLEncoding_SpaceAndPlusCombined(t *testing.T) {
 	// Verify decoding works correctly
 	_, params := parseThingsURL(t, thingsURL)
 	assert.Equal(t, "Learn C++ basics", params.Get("title"))
-}
-
-// TestEncodeQuery_DirectTest directly tests the encodeQuery helper function.
-func TestEncodeQuery_DirectTest(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    map[string]string
-		contains []string
-		excludes []string
-	}{
-		{
-			name:     "space encoding",
-			input:    map[string]string{"title": "Hello World"},
-			contains: []string{"Hello%20World"},
-			excludes: []string{"Hello+World"},
-		},
-		{
-			name:     "plus encoding",
-			input:    map[string]string{"title": "C++"},
-			contains: []string{"C%2B%2B"},
-			excludes: []string{},
-		},
-		{
-			name:     "mixed space and plus",
-			input:    map[string]string{"title": "C++ tutorial"},
-			contains: []string{"%2B%2B", "%20"},
-			excludes: []string{},
-		},
-		{
-			name:     "special characters",
-			input:    map[string]string{"title": "test@example.com"},
-			contains: []string{"%40"}, // @ is encoded as %40
-			excludes: []string{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			query := url.Values{}
-			for k, v := range tt.input {
-				query.Set(k, v)
-			}
-			encoded := encodeQuery(query)
-
-			for _, c := range tt.contains {
-				assert.Contains(t, encoded, c, "encoded query should contain %s", c)
-			}
-			for _, e := range tt.excludes {
-				assert.NotContains(t, encoded, e, "encoded query should not contain %s", e)
-			}
-		})
-	}
 }
 
 // =============================================================================

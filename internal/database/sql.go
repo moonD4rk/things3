@@ -1,52 +1,24 @@
-package things3
+package database
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
-// SQL constant for default WHERE predicate.
+// sqlTrue is the default WHERE predicate.
 const sqlTrue = "TRUE"
 
-// escapeString escapes a string for safe use in SQL queries.
-// In SQLite, single quotes within strings are escaped by doubling them.
-func escapeString(s string) string {
-	return strings.ReplaceAll(s, "'", "''")
-}
-
-// thingsDateExpressionToISODate creates a SQL expression to convert Things date to ISO format.
-func thingsDateExpressionToISODate(expr string) string {
-	year := fmt.Sprintf("(%s & %d) >> 16", expr, yearMask)
-	month := fmt.Sprintf("(%s & %d) >> 12", expr, monthMask)
-	day := fmt.Sprintf("(%s & %d) >> 7", expr, dayMask)
-
-	isoDate := fmt.Sprintf("printf('%%d-%%02d-%%02d', %s, %s, %s)", year, month, day)
-	return fmt.Sprintf("CASE WHEN %s THEN %s ELSE %s END", expr, isoDate, expr)
-}
-
-// thingsTimeExpressionToISOTime creates a SQL expression to convert Things time to HH:MM format.
-func thingsTimeExpressionToISOTime(expr string) string {
-	hours := fmt.Sprintf("(%s & %d) >> 26", expr, hourMask)
-	minutes := fmt.Sprintf("(%s & %d) >> 20", expr, minuteMask)
-
-	isoTime := fmt.Sprintf("printf('%%02d:%%02d', %s, %s)", hours, minutes)
-	return fmt.Sprintf("CASE WHEN %s THEN %s ELSE %s END", expr, isoTime, expr)
-}
-
 // buildTasksSQL builds the SQL query for fetching tasks.
-func buildTasksSQL(wherePredicate, orderPredicate string) string {
+func buildTasksSQL(wherePredicate, orderPredicate string, limit *int) string {
 	if wherePredicate == "" {
 		wherePredicate = sqlTrue
 	}
 	if orderPredicate == "" {
-		orderPredicate = fmt.Sprintf("TASK.%q", indexDefault)
+		orderPredicate = fmt.Sprintf("TASK.%q", IndexDefault)
 	}
 
-	startDateExpr := thingsDateExpressionToISODate(fmt.Sprintf("TASK.%s", colStartDate))
-	deadlineExpr := thingsDateExpressionToISODate(fmt.Sprintf("TASK.%s", colDeadline))
-	reminderTimeExpr := thingsTimeExpressionToISOTime(fmt.Sprintf("TASK.%s", colReminderTime))
+	startDateExpr := thingsDateExpressionToISODate("TASK." + colStartDate)
+	deadlineExpr := thingsDateExpressionToISODate("TASK." + colDeadline)
+	reminderTimeExpr := thingsTimeExpressionToISOTime("TASK." + colReminderTime)
 
-	return fmt.Sprintf(`
+	sql := fmt.Sprintf(`
 		SELECT DISTINCT
 			TASK.uuid,
 			CASE
@@ -132,6 +104,12 @@ func buildTasksSQL(wherePredicate, orderPredicate string) string {
 		tableTaskTag, tableTag, tableChecklistItem,
 		wherePredicate, orderPredicate,
 	)
+
+	if limit != nil && *limit > 0 {
+		sql += fmt.Sprintf(" LIMIT %d", *limit)
+	}
+
+	return sql
 }
 
 // buildAreasSQL builds the SQL query for fetching areas.

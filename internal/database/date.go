@@ -1,4 +1,4 @@
-package things3
+package database
 
 import (
 	"fmt"
@@ -112,4 +112,23 @@ func todayThingsDateSQL() string {
 	return "((strftime('%Y', date('now', 'localtime')) << 16) | " +
 		"(strftime('%m', date('now', 'localtime')) << 12) | " +
 		"(strftime('%d', date('now', 'localtime')) << 7))"
+}
+
+// thingsDateExpressionToISODate creates a SQL expression to convert Things date to ISO format.
+func thingsDateExpressionToISODate(expr string) string {
+	year := fmt.Sprintf("(%s & %d) >> 16", expr, yearMask)
+	month := fmt.Sprintf("(%s & %d) >> 12", expr, monthMask)
+	day := fmt.Sprintf("(%s & %d) >> 7", expr, dayMask)
+
+	isoDate := fmt.Sprintf("printf('%%d-%%02d-%%02d', %s, %s, %s)", year, month, day)
+	return fmt.Sprintf("CASE WHEN %s THEN %s ELSE %s END", expr, isoDate, expr)
+}
+
+// thingsTimeExpressionToISOTime creates a SQL expression to convert Things time to HH:MM format.
+func thingsTimeExpressionToISOTime(expr string) string {
+	hours := fmt.Sprintf("(%s & %d) >> 26", expr, hourMask)
+	minutes := fmt.Sprintf("(%s & %d) >> 20", expr, minuteMask)
+
+	isoTime := fmt.Sprintf("printf('%%02d:%%02d', %s, %s)", hours, minutes)
+	return fmt.Sprintf("CASE WHEN %s THEN %s ELSE %s END", expr, isoTime, expr)
 }

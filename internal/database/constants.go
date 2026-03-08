@@ -1,4 +1,4 @@
-package things3
+package database
 
 // Database table names.
 const (
@@ -50,24 +50,16 @@ const (
 // Settings UUID for auth token.
 const settingsUUID = "RhAzEf6qDxCD5PmnZVtBZR"
 
-// Minimum supported database version.
+// minDatabaseVersion is the minimum supported database version.
 const minDatabaseVersion = 21
 
-// Environment variable name for custom database path.
-const envDatabasePath = "THINGSDB"
+// EnvDatabasePath is the environment variable name for custom database path.
+const EnvDatabasePath = "THINGSDB"
 
 // Index column names for ordering.
 const (
-	indexDefault = "index"
-	indexToday   = "todayIndex"
-)
-
-// URL Scheme limits.
-const (
-	// maxTitleLength is the maximum allowed length for titles in Things URL scheme.
-	maxTitleLength = 4000
-	// maxNotesLength is the maximum allowed length for notes in Things URL scheme.
-	maxNotesLength = 10000
-	// maxChecklistItems is the maximum allowed number of checklist items.
-	maxChecklistItems = 100
+	// IndexDefault is the default ordering column.
+	IndexDefault = "index"
+	// IndexToday is the Today view ordering column.
+	IndexToday = "todayIndex"
 )

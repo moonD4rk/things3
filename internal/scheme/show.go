@@ -1,4 +1,4 @@
-package things3
+package scheme
 
 import (
 	"context"
@@ -9,32 +9,37 @@ import (
 
 // showBuilder builds URLs for navigating to items or lists via the show command.
 type showBuilder struct {
-	scheme *scheme
+	scheme *Scheme
 	params map[string]string
+}
+
+// NewShowNavigator creates a new ShowNavigator for navigation operations.
+func NewShowNavigator(s *Scheme) ShowNavigator {
+	return &showBuilder{scheme: s, params: make(map[string]string)}
 }
 
 // ID sets the target item UUID or built-in list ID.
 func (b *showBuilder) ID(id string) ShowNavigator {
-	b.params[keyID] = id
+	b.params[KeyID] = id
 	return b
 }
 
 // List sets the target to a built-in Things list.
 func (b *showBuilder) List(list ListID) ShowNavigator {
-	b.params[keyID] = string(list)
+	b.params[KeyID] = string(list)
 	return b
 }
 
 // Query searches for an area, project, or tag by name.
 // Note: Tasks cannot be shown using query; use ID instead.
 func (b *showBuilder) Query(query string) ShowNavigator {
-	b.params[keyQuery] = query
+	b.params[KeyQuery] = query
 	return b
 }
 
 // Filter filters the displayed items by tags.
 func (b *showBuilder) Filter(tags ...string) ShowNavigator {
-	b.params[keyFilter] = strings.Join(tags, ",")
+	b.params[KeyFilter] = strings.Join(tags, ",")
 	return b
 }
 
@@ -48,7 +53,7 @@ func (b *showBuilder) Build() (string, error) {
 	if len(query) == 0 {
 		return fmt.Sprintf("things:///%s", CommandShow), nil
 	}
-	return fmt.Sprintf("things:///%s?%s", CommandShow, encodeQuery(query)), nil
+	return fmt.Sprintf("things:///%s?%s", CommandShow, EncodeQuery(query)), nil
 }
 
 // Execute builds and executes the show URL.
@@ -59,5 +64,5 @@ func (b *showBuilder) Execute(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return b.scheme.executeNavigation(ctx, uri)
+	return b.scheme.ExecuteNavigation(ctx, uri)
 }

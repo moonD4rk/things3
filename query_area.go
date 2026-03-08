@@ -2,18 +2,14 @@ package things3
 
 import (
 	"context"
+
+	"github.com/moond4rk/things3/internal/database"
 )
 
 // areaQuery provides a fluent interface for building area queries.
 type areaQuery struct {
 	database *db
-
-	uuid         *string
-	title        *string
-	visible      *bool
-	tagTitle     *string // specific tag title
-	hasTag       *bool   // true: has tags, false: no tags
-	includeItems bool
+	filter   database.AreaFilter
 }
 
 // Areas creates a new areaQuery for querying areas.
@@ -25,13 +21,13 @@ func (d *db) Areas() *areaQuery {
 
 // WithUUID filters areas by UUID.
 func (q *areaQuery) WithUUID(uuid string) AreaQueryBuilder {
-	q.uuid = &uuid
+	q.filter.UUID = &uuid
 	return q
 }
 
 // WithTitle filters areas by title.
 func (q *areaQuery) WithTitle(title string) AreaQueryBuilder {
-	q.title = &title
+	q.filter.Title = &title
 	return q
 }
 
@@ -39,94 +35,46 @@ func (q *areaQuery) WithTitle(title string) AreaQueryBuilder {
 // Pass true to include only visible areas.
 // Pass false to include only hidden areas.
 func (q *areaQuery) Visible(visible bool) AreaQueryBuilder {
-	q.visible = &visible
+	q.filter.Visible = &visible
 	return q
 }
 
 // InTag filters areas by a specific tag title.
 func (q *areaQuery) InTag(title string) AreaQueryBuilder {
-	q.tagTitle = &title
+	q.filter.TagTitle = &title
 	return q
 }
 
 // HasTag filters areas by whether they have any tags.
 func (q *areaQuery) HasTag(has bool) AreaQueryBuilder {
-	q.hasTag = &has
+	q.filter.HasTag = &has
 	return q
-}
-
-// IncludeItems includes tasks in each area.
-func (q *areaQuery) IncludeItems(include bool) AreaQueryBuilder {
-	q.includeItems = include
-	return q
-}
-
-// buildWhere builds the WHERE clause for the area query using filterBuilder.
-func (q *areaQuery) buildWhere() string {
-	fb := newFilterBuilder()
-
-	if q.uuid != nil {
-		fb.addEqual("AREA.uuid", *q.uuid)
-	}
-	if q.title != nil {
-		fb.addEqual("AREA.title", *q.title)
-	}
-	if q.visible != nil {
-		fb.addTruthy("AREA.visible", q.visible)
-	}
-
-	// Tag filter: specific title or has/no tags
-	if q.tagTitle != nil {
-		fb.addEqual("TAG.title", *q.tagTitle)
-	} else if q.hasTag != nil {
-		fb.addEqual("TAG.title", *q.hasTag)
-	}
-
-	return fb.sql()
 }
 
 // All executes the query and returns all matching areas.
 func (q *areaQuery) All(ctx context.Context) ([]Area, error) {
-	sql := buildAreasSQL(q.buildWhere())
-	rows, err := q.database.executeQuery(ctx, sql)
+	rows, err := q.database.inner.QueryAreas(ctx, q.filter)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	var areas []Area
-	for rows.Next() {
-		area, err := scanArea(rows)
-		if err != nil {
-			return nil, err
-		}
+	for _, row := range rows {
+		area := convertAreaRow(row)
 
 		// Load tags if present
-		if area.Tags != nil {
-			tags, err := q.database.getTagsOfArea(ctx, area.UUID)
+		if row.HasTags {
+			tags, err := q.database.inner.TagsOfArea(ctx, row.UUID)
 			if err != nil {
 				return nil, err
 			}
 			area.Tags = tags
 		}
 
-		// Load items if requested
-		if q.includeItems {
-			items, err := q.database.Tasks().
-				InArea(area.UUID).
-				ContextTrashed(false).
-				IncludeItems(true).
-				All(ctx)
-			if err != nil {
-				return nil, err
-			}
-			area.Items = items
-		}
-
-		areas = append(areas, *area)
+		areas = append(areas, area)
 	}
 
-	return areas, rows.Err()
+	return areas, nil
 }
 
 // First executes the query and returns the first matching area.
@@ -143,12 +91,5 @@ func (q *areaQuery) First(ctx context.Context) (*Area, error) {
 
 // Count executes the query and returns the count of matching areas.
 func (q *areaQuery) Count(ctx context.Context) (int, error) {
-	areaSQL := buildAreasSQL(q.buildWhere())
-	countSQL := buildCountSQL(areaSQL)
-
-	var count int
-	if err := q.database.executeQueryRow(ctx, countSQL).Scan(&count); err != nil {
-		return 0, err
-	}
-	return count, nil
+	return q.database.inner.CountAreas(ctx, q.filter)
 }

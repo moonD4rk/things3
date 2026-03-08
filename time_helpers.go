@@ -3,69 +3,69 @@ package things3
 import "time"
 
 // Today returns today's date at midnight (00:00:00) in local timezone.
-// This is useful for scheduling tasks with When().
+// This is useful for scheduling todos with When().
 //
 // Example:
 //
-//	scheme.Todo().Title("Morning task").When(things3.Today())
+//	client.AddTodo().Title("Morning task").When(things3.Today())
 func Today() time.Time {
 	now := time.Now()
 	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 }
 
 // Tomorrow returns tomorrow's date at midnight (00:00:00) in local timezone.
-// This is useful for scheduling tasks with When().
+// This is useful for scheduling todos with When().
 //
 // Example:
 //
-//	scheme.Todo().Title("Task for tomorrow").When(things3.Tomorrow())
+//	client.AddTodo().Title("Todo for tomorrow").When(things3.Tomorrow())
 func Tomorrow() time.Time {
 	return Today().AddDate(0, 0, 1)
 }
 
 // DaysAgo returns the time n days before now.
-// This is useful for filtering tasks by creation date.
+// This is useful for filtering todos by creation date.
 //
 // Example:
 //
-//	db.Tasks().CreatedAfter(things3.DaysAgo(7)).All(ctx) // tasks from last 7 days
+//	client.Todos().CreatedAfter(things3.DaysAgo(7)).All(ctx) // todos from last 7 days
 func DaysAgo(n int) time.Time {
 	return time.Now().AddDate(0, 0, -n)
 }
 
 // WeeksAgo returns the time n weeks before now.
-// This is useful for filtering tasks by creation date.
+// This is useful for filtering todos by creation date.
 //
 // Example:
 //
-//	db.Tasks().CreatedAfter(things3.WeeksAgo(2)).All(ctx) // tasks from last 2 weeks
+//	client.Todos().CreatedAfter(things3.WeeksAgo(2)).All(ctx) // todos from last 2 weeks
 func WeeksAgo(n int) time.Time {
 	return time.Now().AddDate(0, 0, -n*7)
 }
 
 // MonthsAgo returns the time n months before now.
-// This is useful for filtering tasks by creation date.
+// This is useful for filtering todos by creation date.
 //
 // Example:
 //
-//	db.Tasks().CreatedAfter(things3.MonthsAgo(1)).All(ctx) // tasks from last month
+//	client.Todos().CreatedAfter(things3.MonthsAgo(1)).All(ctx) // todos from last month
 func MonthsAgo(n int) time.Time {
 	return time.Now().AddDate(0, -n, 0)
 }
 
 // YearsAgo returns the time n years before now.
-// This is useful for filtering tasks by creation date.
+// This is useful for filtering todos by creation date.
 //
 // Example:
 //
-//	db.Tasks().CreatedAfter(things3.YearsAgo(1)).All(ctx) // tasks from last year
+//	client.Todos().CreatedAfter(things3.YearsAgo(1)).All(ctx) // todos from last year
 func YearsAgo(n int) time.Time {
 	return time.Now().AddDate(-n, 0, 0)
 }
 
 // WhenScheduler is implemented by builders that support scheduling.
-// All builder types (TodoBuilder, ProjectBuilder, UpdateTodoBuilder,
-// UpdateProjectBuilder, JSONTodoBuilder, JSONProjectBuilder) satisfy this interface.
+// All builder types (TodoAdder, ProjectAdder, TodoUpdater,
+// ProjectUpdater, BatchTodoConfigurator, BatchProjectConfigurator) satisfy this interface.
 type WhenScheduler[T any] interface {
 	When(t time.Time) T
 	WhenEvening() T
@@ -86,7 +86,7 @@ type WhenScheduler[T any] interface {
 //
 // Example:
 //
-//	todo := scheme.Todo().Title("Task")
+//	todo := client.AddTodo().Title("Buy milk")
 //	todo = things3.ApplyWhen(todo, "today")
 //	todo = things3.ApplyWhen(todo, "2024-12-25")
 func ApplyWhen[T WhenScheduler[T]](b T, when string) T {

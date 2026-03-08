@@ -2,171 +2,107 @@ package things3
 
 import "time"
 
-// Task type string constants.
-const (
-	taskTypeStringTodo    = "to-do"
-	taskTypeStringProject = "project"
-	taskTypeStringHeading = "heading"
-)
+// Todo represents an actionable todo item in Things 3.
+type Todo struct {
+	UUID   string      `json:"uuid"`
+	Title  string      `json:"title"`
+	Status Status      `json:"status"`
+	Notes  string      `json:"notes,omitempty"`
+	Start  StartBucket `json:"start"`
 
-// Status string constants for ChecklistItem.
-const (
-	statusStringIncomplete = "incomplete"
-	statusStringCompleted  = "completed"
-	statusStringCanceled   = "canceled"
-)
+	// Relationships (empty string = no relationship)
+	AreaUUID     string `json:"area_uuid,omitempty"`
+	AreaTitle    string `json:"area_title,omitempty"`
+	ProjectUUID  string `json:"project_uuid,omitempty"`
+	ProjectTitle string `json:"project_title,omitempty"`
+	HeadingUUID  string `json:"heading_uuid,omitempty"`
+	HeadingTitle string `json:"heading_title,omitempty"`
 
-// Task represents a task in Things 3, which can be a to-do, project, or heading.
-type Task struct {
-	UUID   string   `json:"uuid" yaml:"uuid"`
-	Type   TaskType `json:"type" yaml:"type"`
-	Title  string   `json:"title" yaml:"title"`
-	Status Status   `json:"status" yaml:"status"`
-	Notes  string   `json:"notes,omitempty" yaml:"notes,omitempty"`
-	Start  string   `json:"start,omitempty" yaml:"start,omitempty"` // "Inbox", "Anytime", or "Someday"
+	// Attributes
+	Tags      []string        `json:"tags,omitempty"`
+	Checklist []ChecklistItem `json:"checklist,omitempty"`
 
-	// Trashed indicates whether the task is in the trash.
-	Trashed bool `json:"trashed,omitempty" yaml:"trashed,omitempty"`
+	// Dates (date only, no time component)
+	StartDate *time.Time `json:"start_date,omitempty"`
+	Deadline  *time.Time `json:"deadline,omitempty"`
+
+	// Time (time only, date component is zero value)
+	Reminder *time.Time `json:"reminder,omitempty"`
+
+	// Timestamps
+	CreatedAt   time.Time  `json:"created_at"`
+	ModifiedAt  time.Time  `json:"modified_at"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	CanceledAt  *time.Time `json:"canceled_at,omitempty"`
+
+	Trashed bool `json:"trashed,omitempty"`
+}
+
+// Project represents a container for organizing todos in Things 3.
+type Project struct {
+	UUID   string      `json:"uuid"`
+	Title  string      `json:"title"`
+	Status Status      `json:"status"`
+	Notes  string      `json:"notes,omitempty"`
+	Start  StartBucket `json:"start"`
 
 	// Relationships
-	AreaUUID     *string `json:"area_uuid,omitempty" yaml:"area_uuid,omitempty"`
-	AreaTitle    *string `json:"area_title,omitempty" yaml:"area_title,omitempty"`
-	ProjectUUID  *string `json:"project_uuid,omitempty" yaml:"project_uuid,omitempty"`
-	ProjectTitle *string `json:"project_title,omitempty" yaml:"project_title,omitempty"`
-	HeadingUUID  *string `json:"heading_uuid,omitempty" yaml:"heading_uuid,omitempty"`
-	HeadingTitle *string `json:"heading_title,omitempty" yaml:"heading_title,omitempty"`
+	AreaUUID  string `json:"area_uuid,omitempty"`
+	AreaTitle string `json:"area_title,omitempty"`
 
-	// Dates
-	// All date/time fields are converted from SQLite string formats to time.Time.
-	//
-	// StartDate: scheduled start date.
-	//   Database: "2024-01-15" (date only, format "YYYY-MM-DD")
-	//   Parsed:   time.Time with zero time component
-	StartDate *time.Time `json:"start_date,omitempty" yaml:"start_date,omitempty"`
-	// Deadline: task deadline date.
-	//   Database: "2024-01-15" (date only, format "YYYY-MM-DD")
-	//   Parsed:   time.Time with zero time component
-	Deadline *time.Time `json:"deadline,omitempty" yaml:"deadline,omitempty"`
-	// ReminderTime: time-only reminder (date component is zero value).
-	//   Database: "14:30" (time only, format "HH:MM")
-	//   Parsed:   time.Time with zero date (0000-01-01), only Hour/Minute meaningful
-	ReminderTime *time.Time `json:"reminder_time,omitempty" yaml:"reminder_time,omitempty"`
-	// StopDate: completion or cancellation timestamp.
-	//   Database: "2024-01-15 10:30:45" (datetime, format "YYYY-MM-DD HH:MM:SS")
-	//   Parsed:   time.Time with full date and time
-	StopDate *time.Time `json:"stop_date,omitempty" yaml:"stop_date,omitempty"`
-	// Created: task creation timestamp.
-	//   Database: "2024-01-15 10:30:45" (datetime, format "YYYY-MM-DD HH:MM:SS")
-	//   Parsed:   time.Time with full date and time
-	Created time.Time `json:"created" yaml:"created"`
-	// Modified: last modification timestamp.
-	//   Database: "2024-01-15 10:30:45" (datetime, format "YYYY-MM-DD HH:MM:SS")
-	//   Parsed:   time.Time with full date and time
-	Modified time.Time `json:"modified" yaml:"modified"`
+	// Attributes
+	Tags []string `json:"tags,omitempty"`
 
-	// Index values for ordering
-	Index      int `json:"index" yaml:"index"`
-	TodayIndex int `json:"today_index" yaml:"today_index"`
+	// Dates (date only, no time component)
+	StartDate *time.Time `json:"start_date,omitempty"`
+	Deadline  *time.Time `json:"deadline,omitempty"`
 
-	// Nested items (populated when include_items=true)
-	Tags      []string        `json:"tags,omitempty" yaml:"tags,omitempty"`
-	Checklist []ChecklistItem `json:"checklist,omitempty" yaml:"checklist,omitempty"`
-	Items     []Task          `json:"items,omitempty" yaml:"items,omitempty"` // For projects and headings
+	// Time (time only, date component is zero value)
+	Reminder *time.Time `json:"reminder,omitempty"`
+
+	// Timestamps
+	CreatedAt   time.Time  `json:"created_at"`
+	ModifiedAt  time.Time  `json:"modified_at"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	CanceledAt  *time.Time `json:"canceled_at,omitempty"`
+
+	Trashed bool `json:"trashed,omitempty"`
 }
 
-// IsTodo returns true if the task is a to-do item.
-func (t *Task) IsTodo() bool {
-	return t.Type == TaskTypeTodo
+// Heading represents a grouping label within a project.
+// Headings are organizational only and carry no status, dates, or notes.
+type Heading struct {
+	UUID  string `json:"uuid"`
+	Title string `json:"title"`
+
+	// Parent project
+	ProjectUUID  string `json:"project_uuid,omitempty"`
+	ProjectTitle string `json:"project_title,omitempty"`
 }
 
-// IsProject returns true if the task is a project.
-func (t *Task) IsProject() bool {
-	return t.Type == TaskTypeProject
-}
-
-// IsHeading returns true if the task is a heading.
-func (t *Task) IsHeading() bool {
-	return t.Type == TaskTypeHeading
-}
-
-// IsIncomplete returns true if the task status is incomplete.
-func (t *Task) IsIncomplete() bool {
-	return t.Status == StatusIncomplete
-}
-
-// IsCompleted returns true if the task status is completed.
-func (t *Task) IsCompleted() bool {
-	return t.Status == StatusCompleted
-}
-
-// IsCanceled returns true if the task status is canceled.
-func (t *Task) IsCanceled() bool {
-	return t.Status == StatusCanceled
-}
-
-// HasTags returns true if the task has any tags.
-func (t *Task) HasTags() bool {
-	return len(t.Tags) > 0
-}
-
-// HasChecklist returns true if the task has a checklist.
-func (t *Task) HasChecklist() bool {
-	return len(t.Checklist) > 0
-}
-
-// Area represents an area in Things 3.
+// Area represents a high-level responsibility area in Things 3.
 type Area struct {
-	UUID  string `json:"uuid" yaml:"uuid"`
-	Type  string `json:"type" yaml:"type"` // Always "area"
-	Title string `json:"title" yaml:"title"`
-
-	// Nested items (populated when include_items=true)
-	Tags  []string `json:"tags,omitempty" yaml:"tags,omitempty"`
-	Items []Task   `json:"items,omitempty" yaml:"items,omitempty"`
+	UUID  string   `json:"uuid"`
+	Title string   `json:"title"`
+	Tags  []string `json:"tags,omitempty"`
 }
 
-// Tag represents a tag in Things 3.
+// Tag represents a label for categorizing items in Things 3.
 type Tag struct {
-	UUID     string `json:"uuid" yaml:"uuid"`
-	Type     string `json:"type" yaml:"type"` // Always "tag"
-	Title    string `json:"title" yaml:"title"`
-	Shortcut string `json:"shortcut,omitempty" yaml:"shortcut,omitempty"`
-
-	// Nested items (populated when include_items=true)
-	Items []any `json:"items,omitempty" yaml:"items,omitempty"` // Can contain Area or Task
+	UUID     string `json:"uuid"`
+	Title    string `json:"title"`
+	Shortcut string `json:"shortcut,omitempty"`
 }
 
-// ChecklistItem represents a checklist item within a to-do.
+// ChecklistItem represents a sub-item within a todo.
 type ChecklistItem struct {
-	UUID   string `json:"uuid" yaml:"uuid"`
-	Type   string `json:"type" yaml:"type"` // Always "checklist-item"
-	Title  string `json:"title" yaml:"title"`
-	Status string `json:"status" yaml:"status"` // "incomplete", "completed", or "canceled"
-	// StopDate: completion date.
-	//   Database: "2024-01-15" (date only, format "YYYY-MM-DD")
-	//   Parsed:   time.Time with zero time component
-	StopDate *time.Time `json:"stop_date,omitempty" yaml:"stop_date,omitempty"`
-	// Created: item creation timestamp.
-	//   Database: "2024-01-15 10:30:45" (datetime, format "YYYY-MM-DD HH:MM:SS")
-	//   Parsed:   time.Time with full date and time
-	Created time.Time `json:"created" yaml:"created"`
-	// Modified: last modification timestamp.
-	//   Database: "2024-01-15 10:30:45" (datetime, format "YYYY-MM-DD HH:MM:SS")
-	//   Parsed:   time.Time with full date and time
-	Modified time.Time `json:"modified" yaml:"modified"`
-}
+	UUID   string `json:"uuid"`
+	Title  string `json:"title"`
+	Status Status `json:"status"`
 
-// IsIncomplete returns true if the checklist item is incomplete.
-func (c *ChecklistItem) IsIncomplete() bool {
-	return c.Status == statusStringIncomplete
-}
-
-// IsCompleted returns true if the checklist item is completed.
-func (c *ChecklistItem) IsCompleted() bool {
-	return c.Status == statusStringCompleted
-}
-
-// IsCanceled returns true if the checklist item is canceled.
-func (c *ChecklistItem) IsCanceled() bool {
-	return c.Status == statusStringCanceled
+	// Timestamps
+	CreatedAt   time.Time  `json:"created_at"`
+	ModifiedAt  time.Time  `json:"modified_at"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	CanceledAt  *time.Time `json:"canceled_at,omitempty"`
 }

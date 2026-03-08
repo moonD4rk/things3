@@ -1,4 +1,4 @@
-package things3
+package database
 
 import (
 	"fmt"
@@ -240,8 +240,7 @@ func Test_unixToTime(t *testing.T) {
 // Round-Trip Tests - Verify data integrity through conversions
 // =============================================================================
 
-func Test_RoundTrip_TimeToThingsDateAndBack(t *testing.T) {
-	// Test that time -> ThingsDate -> time preserves date information
+func Test_RoundTrip_timeToThingsDateAndBack(t *testing.T) {
 	tests := []struct {
 		name  string
 		year  int
@@ -277,8 +276,7 @@ func Test_RoundTrip_TimeToThingsDateAndBack(t *testing.T) {
 	}
 }
 
-func Test_RoundTrip_StringToThingsDateAndBack(t *testing.T) {
-	// Test that string -> ThingsDate -> string preserves date string
+func Test_RoundTrip_stringToThingsDateAndBack(t *testing.T) {
 	tests := []struct {
 		isoDate string
 	}{
@@ -305,8 +303,7 @@ func Test_RoundTrip_StringToThingsDateAndBack(t *testing.T) {
 	}
 }
 
-func Test_RoundTrip_ThingsDateToTimeAndBack(t *testing.T) {
-	// Test that ThingsDate -> time -> ThingsDate preserves value
+func Test_RoundTrip_thingsDateToTimeAndBack(t *testing.T) {
 	tests := []struct {
 		name       string
 		thingsDate int64
@@ -445,7 +442,6 @@ func Test_stringToThingsDate_InvalidInputs(t *testing.T) {
 // =============================================================================
 
 func Test_ThingsDate_LocalTimezone(t *testing.T) {
-	// Verify that ThingsDate uses local timezone consistently
 	original := time.Date(2024, time.June, 15, 0, 0, 0, 0, time.Local)
 	thingsDate := timeToThingsDate(original)
 	converted := thingsDateToTime(thingsDate)
@@ -460,12 +456,10 @@ func Test_ThingsDate_LocalTimezone(t *testing.T) {
 	assert.Equal(t, 0, converted.Second())
 }
 
-func Test_UnixToTime_LocalTimezone(t *testing.T) {
-	// Unix timestamp is UTC-based, result should be in Local
+func Test_unixToTime_LocalTimezone(t *testing.T) {
 	unixTime := float64(1718438400) // 2024-06-15 00:00:00 UTC
 	result := unixToTime(unixTime)
 
-	// Should return Local timezone
 	assert.Equal(t, time.Local, result.Location(),
 		"unixToTime should return Local timezone")
 	assert.False(t, result.IsZero())
@@ -492,14 +486,12 @@ func Test_LeapYear_Dates(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.isLeap {
-				// Should be able to create and convert Feb 29
 				thingsDate, err := stringToThingsDate(tt.feb29Date)
 				require.NoError(t, err, "leap year should allow Feb 29")
 
 				result := thingsDateToString(thingsDate)
 				assert.Equal(t, tt.feb29Date, result)
 			} else {
-				// Feb 29 should fail for non-leap years
 				invalidDate := fmt.Sprintf("%d-02-29", tt.year)
 				_, err := stringToThingsDate(invalidDate)
 				assert.Error(t, err, "non-leap year should reject Feb 29")
@@ -509,7 +501,6 @@ func Test_LeapYear_Dates(t *testing.T) {
 }
 
 func Test_MonthEnd_Dates(t *testing.T) {
-	// Test that month-end dates are correctly handled
 	monthEnds := []struct {
 		month   time.Month
 		lastDay int
@@ -547,7 +538,6 @@ func Test_MonthEnd_Dates(t *testing.T) {
 func Test_todayThingsDateSQL_Format(t *testing.T) {
 	sql := todayThingsDateSQL()
 
-	// Verify SQL structure
 	assert.Contains(t, sql, "strftime('%Y'", "should extract year")
 	assert.Contains(t, sql, "strftime('%m'", "should extract month")
 	assert.Contains(t, sql, "strftime('%d'", "should extract day")

@@ -3,89 +3,30 @@ package things3
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/moond4rk/things3/internal/scheme"
 )
 
 // String constant for unknown enum values.
 const unknownString = "unknown"
 
-// TaskType represents the kind of task in Things 3.
-// Tasks can be to-dos, projects, or headings within projects.
-type TaskType int
-
+// Status string constants.
 const (
-	// TaskTypeTodo represents a regular to-do item.
-	TaskTypeTodo TaskType = 0
-	// TaskTypeProject represents a project containing tasks.
-	TaskTypeProject TaskType = 1
-	// TaskTypeHeading represents a heading within a project.
-	TaskTypeHeading TaskType = 2
+	statusStringIncomplete = "incomplete"
+	statusStringCompleted  = "completed"
+	statusStringCanceled   = "canceled"
 )
 
-// String returns the string representation of the TaskType.
-func (t TaskType) String() string {
-	switch t {
-	case TaskTypeTodo:
-		return taskTypeStringTodo
-	case TaskTypeProject:
-		return taskTypeStringProject
-	case TaskTypeHeading:
-		return taskTypeStringHeading
-	default:
-		return unknownString
-	}
-}
+// taskType represents the kind of task in the Things 3 database.
+// Users distinguish types through Go's type system (Todo, Project, Heading),
+// not through this enum. It remains internal for query filter routing.
+type taskType int
 
-// MarshalJSON implements json.Marshaler for TaskType.
-func (t TaskType) MarshalJSON() ([]byte, error) {
-	return json.Marshal(t.String())
-}
-
-// MarshalYAML implements yaml.Marshaler for TaskType.
-func (t TaskType) MarshalYAML() (any, error) {
-	return t.String(), nil
-}
-
-// UnmarshalJSON implements json.Unmarshaler for TaskType.
-func (t *TaskType) UnmarshalJSON(data []byte) error {
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
-		return err
-	}
-	v, err := parseTaskType(s)
-	if err != nil {
-		return err
-	}
-	*t = v
-	return nil
-}
-
-// UnmarshalYAML implements yaml.Unmarshaler for TaskType.
-func (t *TaskType) UnmarshalYAML(unmarshal func(any) error) error {
-	var s string
-	if err := unmarshal(&s); err != nil {
-		return err
-	}
-	v, err := parseTaskType(s)
-	if err != nil {
-		return err
-	}
-	*t = v
-	return nil
-}
-
-// parseTaskType converts a string to TaskType.
-func parseTaskType(s string) (TaskType, error) {
-	switch s {
-	case taskTypeStringTodo:
-		return TaskTypeTodo, nil
-	case taskTypeStringProject:
-		return TaskTypeProject, nil
-	case taskTypeStringHeading:
-		return TaskTypeHeading, nil
-	default:
-		return 0, fmt.Errorf("things3: unknown task type %q", s)
-	}
-}
+const (
+	taskTypeTodo    taskType = 0
+	taskTypeProject taskType = 1
+	taskTypeHeading taskType = 2
+)
 
 // Status represents the completion status of a task.
 type Status int
@@ -187,163 +128,129 @@ const (
 	StartSomeday StartBucket = 2
 )
 
+// Start bucket string constants.
+const (
+	startBucketStringInbox   = "inbox"
+	startBucketStringAnytime = "anytime"
+	startBucketStringSomeday = "someday"
+)
+
 // String returns the string representation of the StartBucket.
 func (s StartBucket) String() string {
 	switch s {
 	case StartInbox:
-		return "Inbox"
+		return startBucketStringInbox
 	case StartAnytime:
-		return "Anytime"
+		return startBucketStringAnytime
 	case StartSomeday:
-		return "Someday"
+		return startBucketStringSomeday
 	default:
 		return unknownString
 	}
 }
 
-// dateOp represents comparison operators for date-based queries.
-type dateOp int
+// MarshalJSON implements json.Marshaler for StartBucket.
+func (s StartBucket) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
+}
 
-const (
-	// dateOpExists checks if a date value exists (is not null).
-	dateOpExists dateOp = iota
-	// dateOpNotExists checks if a date value does not exist (is null).
-	dateOpNotExists
-	// dateOpEqual checks if a date equals a given value (=).
-	dateOpEqual
-	// dateOpBefore checks if a date is before a given value (<).
-	dateOpBefore
-	// dateOpBeforeEq checks if a date is before or equal to a given value (<=).
-	dateOpBeforeEq
-	// dateOpAfter checks if a date is after a given value (>).
-	dateOpAfter
-	// dateOpAfterEq checks if a date is after or equal to a given value (>=).
-	dateOpAfterEq
-	// dateOpFuture checks if a date is in the future (> today).
-	dateOpFuture
-	// dateOpPast checks if a date is in the past (<= today).
-	dateOpPast
-)
+// MarshalYAML implements yaml.Marshaler for StartBucket.
+func (s StartBucket) MarshalYAML() (any, error) {
+	return s.String(), nil
+}
 
-// SQLOperator returns the SQL operator for comparison operations.
-// Returns empty string for non-comparison operations like Exists/Future/Past.
-func (d dateOp) SQLOperator() string {
-	switch d {
-	case dateOpEqual:
-		return "="
-	case dateOpBefore:
-		return "<"
-	case dateOpBeforeEq:
-		return "<="
-	case dateOpAfter:
-		return ">"
-	case dateOpAfterEq:
-		return ">="
+// UnmarshalJSON implements json.Unmarshaler for StartBucket.
+func (s *StartBucket) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+	v, err := parseStartBucket(str)
+	if err != nil {
+		return err
+	}
+	*s = v
+	return nil
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler for StartBucket.
+func (s *StartBucket) UnmarshalYAML(unmarshal func(any) error) error {
+	var str string
+	if err := unmarshal(&str); err != nil {
+		return err
+	}
+	v, err := parseStartBucket(str)
+	if err != nil {
+		return err
+	}
+	*s = v
+	return nil
+}
+
+// parseStartBucket converts a string to StartBucket.
+func parseStartBucket(s string) (StartBucket, error) {
+	switch s {
+	case startBucketStringInbox:
+		return StartInbox, nil
+	case startBucketStringAnytime:
+		return StartAnytime, nil
+	case startBucketStringSomeday:
+		return StartSomeday, nil
 	default:
-		return ""
+		return 0, fmt.Errorf("things3: unknown start bucket %q", s)
 	}
 }
 
-// String returns the string representation of the dateOp.
-func (d dateOp) String() string {
-	switch d {
-	case dateOpExists:
-		return "exists"
-	case dateOpNotExists:
-		return "not_exists"
-	case dateOpEqual:
-		return "equal"
-	case dateOpBefore:
-		return "before"
-	case dateOpBeforeEq:
-		return "before_eq"
-	case dateOpAfter:
-		return "after"
-	case dateOpAfterEq:
-		return "after_eq"
-	case dateOpFuture:
-		return "future"
-	case dateOpPast:
-		return "past"
-	default:
-		return unknownString
-	}
-}
+// Command represents Things URL scheme commands (aliased from internal/scheme).
+type Command = scheme.Command
 
-// =============================================================================
-// URL Scheme Types
-// =============================================================================
-
-// Command represents Things URL scheme commands.
-type Command string
-
+// Command constants for Things URL scheme.
 const (
-	// CommandShow opens and shows an item.
-	CommandShow Command = "show"
-	// CommandAdd creates a new to-do.
-	CommandAdd Command = "add"
-	// CommandAddProject creates a new project.
-	CommandAddProject Command = "add-project"
-	// CommandUpdate updates an existing item (requires auth token).
-	CommandUpdate Command = "update"
-	// CommandUpdateProject updates an existing project (requires auth token).
-	CommandUpdateProject Command = "update-project"
-	// CommandSearch performs a search.
-	CommandSearch Command = "search"
-	// CommandVersion returns Things version information.
-	CommandVersion Command = "version"
-	// CommandJSON enables advanced JSON-based operations.
-	CommandJSON Command = "json"
+	CommandShow          = scheme.CommandShow
+	CommandAdd           = scheme.CommandAdd
+	CommandAddProject    = scheme.CommandAddProject
+	CommandUpdate        = scheme.CommandUpdate
+	CommandUpdateProject = scheme.CommandUpdateProject
+	CommandSearch        = scheme.CommandSearch
+	CommandVersion       = scheme.CommandVersion
+	CommandJSON          = scheme.CommandJSON
 )
 
-// String returns the string representation of the Command.
-func (c Command) String() string {
-	return string(c)
-}
+// ListID represents built-in Things list identifiers (aliased from internal/scheme).
+type ListID = scheme.ListID
 
-// when represents scheduling values for the "when" parameter in URL scheme.
-// This is a private type; use When(time.Time) for dates or WhenEvening(),
-// WhenAnytime(), WhenSomeday() methods for Things 3-specific concepts.
-type when string
-
+// ListID constants for built-in Things lists.
 const (
-	// whenEvening schedules for this evening.
-	whenEvening when = "evening"
-	// whenAnytime schedules for anytime.
-	whenAnytime when = "anytime"
-	// whenSomeday schedules for someday.
-	whenSomeday when = "someday"
+	ListInbox          = scheme.ListInbox
+	ListToday          = scheme.ListToday
+	ListAnytime        = scheme.ListAnytime
+	ListUpcoming       = scheme.ListUpcoming
+	ListSomeday        = scheme.ListSomeday
+	ListLogbook        = scheme.ListLogbook
+	ListTomorrow       = scheme.ListTomorrow
+	ListDeadlines      = scheme.ListDeadlines
+	ListRepeating      = scheme.ListRepeating
+	ListAllProjects    = scheme.ListAllProjects
+	ListLoggedProjects = scheme.ListLoggedProjects
 )
 
-// ListID represents built-in Things list identifiers for the show command.
-type ListID string
-
-const (
-	// ListInbox is the Inbox list.
-	ListInbox ListID = "inbox"
-	// ListToday is the Today list.
-	ListToday ListID = "today"
-	// ListAnytime is the Anytime list.
-	ListAnytime ListID = "anytime"
-	// ListUpcoming is the Upcoming list.
-	ListUpcoming ListID = "upcoming"
-	// ListSomeday is the Someday list.
-	ListSomeday ListID = "someday"
-	// ListLogbook is the Logbook list.
-	ListLogbook ListID = "logbook"
-	// ListTomorrow is the Tomorrow list.
-	ListTomorrow ListID = "tomorrow"
-	// ListDeadlines is the Deadlines list.
-	ListDeadlines ListID = "deadlines"
-	// ListRepeating is the Repeating list.
-	ListRepeating ListID = "repeating"
-	// ListAllProjects is the All Projects list.
-	ListAllProjects ListID = "all-projects"
-	// ListLoggedProjects is the Logged Projects list.
-	ListLoggedProjects ListID = "logged-projects"
+// JSON batch operation types (aliased from internal/scheme).
+type (
+	JSONOperation = scheme.JSONOperation
+	JSONItemType  = scheme.JSONItemType
+	JSONItem      = scheme.JSONItem
 )
 
-// String returns the string representation of the ListID.
-func (l ListID) String() string {
-	return string(l)
+// JSON operation constants.
+const (
+	JSONOperationCreate = scheme.JSONOperationCreate
+	JSONOperationUpdate = scheme.JSONOperationUpdate
+	JSONItemTypeTodo    = scheme.JSONItemTypeTodo
+	JSONItemTypeProject = scheme.JSONItemTypeProject
+)
+
+// Headings creates heading entries for a project's items.
+// Used within BatchProjectConfigurator.Todos to organize todos under headings.
+func Headings(headings ...string) string {
+	return scheme.Headings(headings...)
 }

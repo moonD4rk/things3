@@ -1,7 +1,6 @@
 package things3
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -39,93 +38,30 @@ func TestNewClient(t *testing.T) {
 	})
 }
 
-func TestClientConvenienceMethods(t *testing.T) {
-	client := newTestClient(t)
-	ctx := context.Background()
-
-	t.Run("Inbox", func(t *testing.T) {
-		tasks, err := client.Inbox(ctx)
-		require.NoError(t, err)
-		assert.ElementsMatch(t, testInboxUUIDs, extractUUIDs(tasks))
-	})
-
-	t.Run("Today", func(t *testing.T) {
-		tasks, err := client.Today(ctx)
-		require.NoError(t, err)
-		assert.Len(t, tasks, testToday)
-	})
-
-	t.Run("Todos", func(t *testing.T) {
-		tasks, err := client.Todos(ctx)
-		require.NoError(t, err)
-		assert.ElementsMatch(t, testTodosIncompleteUUIDs, extractUUIDs(tasks))
-	})
-
-	t.Run("Projects", func(t *testing.T) {
-		tasks, err := client.Projects(ctx)
-		require.NoError(t, err)
-		assert.ElementsMatch(t, testProjectsNotTrashedUUIDs, extractUUIDs(tasks))
-	})
-
-	t.Run("Upcoming", func(t *testing.T) {
-		tasks, err := client.Upcoming(ctx)
-		require.NoError(t, err)
-		assert.Len(t, tasks, testUpcoming)
-	})
-
-	t.Run("Anytime", func(t *testing.T) {
-		tasks, err := client.Anytime(ctx)
-		require.NoError(t, err)
-		assert.ElementsMatch(t, testAnytimeUUIDs, extractUUIDs(tasks))
-	})
-
-	t.Run("Someday", func(t *testing.T) {
-		tasks, err := client.Someday(ctx)
-		require.NoError(t, err)
-		assert.ElementsMatch(t, testSomedayUUIDs, extractUUIDs(tasks))
-	})
-
-	t.Run("Logbook", func(t *testing.T) {
-		tasks, err := client.Logbook(ctx)
-		require.NoError(t, err)
-		assert.Len(t, tasks, testLogbook)
-	})
-
-	t.Run("Trash", func(t *testing.T) {
-		tasks, err := client.Trash(ctx)
-		require.NoError(t, err)
-		assert.ElementsMatch(t, testTrashedUUIDs, extractUUIDs(tasks))
-	})
-
-	t.Run("Completed", func(t *testing.T) {
-		tasks, err := client.Completed(ctx)
-		require.NoError(t, err)
-		assert.ElementsMatch(t, testCompletedUUIDs, extractUUIDs(tasks))
-	})
-
-	t.Run("Canceled", func(t *testing.T) {
-		tasks, err := client.Canceled(ctx)
-		require.NoError(t, err)
-		assert.ElementsMatch(t, testCanceledUUIDs, extractUUIDs(tasks))
-	})
-
-	t.Run("Deadlines", func(t *testing.T) {
-		tasks, err := client.Deadlines(ctx)
-		require.NoError(t, err)
-		assert.Len(t, tasks, testDeadlines)
-	})
-}
-
 func TestClientQueryBuilders(t *testing.T) {
 	client := newTestClient(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
-	t.Run("Tasks builder", func(t *testing.T) {
-		count, err := client.Tasks().
+	t.Run("Todos builder", func(t *testing.T) {
+		count, err := client.Todos().
 			Status().Incomplete().
 			Count(ctx)
 		require.NoError(t, err)
-		assert.Equal(t, testTasksIncomplete, count)
+		assert.Equal(t, testTodosIncomplete, count)
+	})
+
+	t.Run("Projects builder", func(t *testing.T) {
+		projects, err := client.Projects().
+			Status().Incomplete().
+			All(ctx)
+		require.NoError(t, err)
+		assert.NotEmpty(t, projects)
+	})
+
+	t.Run("Headings builder", func(t *testing.T) {
+		headings, err := client.Headings().All(ctx)
+		require.NoError(t, err)
+		assert.NotEmpty(t, headings)
 	})
 
 	t.Run("Areas builder", func(t *testing.T) {
@@ -141,65 +77,9 @@ func TestClientQueryBuilders(t *testing.T) {
 	})
 }
 
-func TestClientGet(t *testing.T) {
-	client := newTestClient(t)
-	ctx := context.Background()
-
-	t.Run("task", func(t *testing.T) {
-		result, err := client.Get(ctx, testUUIDTodoInbox)
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		task, ok := result.(*Task)
-		require.True(t, ok, "expected *Task, got %T", result)
-		assert.Equal(t, testUUIDTodoInbox, task.UUID)
-	})
-
-	t.Run("area", func(t *testing.T) {
-		result, err := client.Get(ctx, testUUIDArea1)
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		area, ok := result.(*Area)
-		require.True(t, ok, "expected *Area, got %T", result)
-		assert.Equal(t, testUUIDArea1, area.UUID)
-	})
-
-	t.Run("tag", func(t *testing.T) {
-		result, err := client.Get(ctx, testUUIDTagOffice)
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		tag, ok := result.(*Tag)
-		require.True(t, ok, "expected *Tag, got %T", result)
-		assert.Equal(t, testUUIDTagOffice, tag.UUID)
-	})
-
-	t.Run("not found", func(t *testing.T) {
-		result, err := client.Get(ctx, "nonexistent-uuid")
-		require.NoError(t, err)
-		assert.Nil(t, result)
-	})
-}
-
-func TestClientSearch(t *testing.T) {
-	client := newTestClient(t)
-	ctx := context.Background()
-
-	tasks, err := client.Search(ctx, "To-Do in Today")
-	require.NoError(t, err)
-	assert.NotEmpty(t, tasks)
-}
-
-func TestClientChecklistItems(t *testing.T) {
-	client := newTestClient(t)
-	ctx := context.Background()
-
-	items, err := client.ChecklistItems(ctx, testUUIDTodoInboxChecklist)
-	require.NoError(t, err)
-	assert.ElementsMatch(t, testChecklistUUIDs, extractChecklistUUIDs(items))
-}
-
 func TestClientToken(t *testing.T) {
 	client := newTestClient(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	token, err := client.Token(ctx)
 	require.NoError(t, err)

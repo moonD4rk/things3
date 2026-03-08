@@ -2,8 +2,12 @@ package things3
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 	"sync"
-	"time"
+
+	"github.com/moond4rk/things3/internal/database"
+	"github.com/moond4rk/things3/internal/scheme"
 )
 
 // Client provides unified access to Things 3 database and URL scheme operations.
@@ -20,8 +24,7 @@ import (
 //
 // Query operations read from the Things 3 database:
 //
-//	tasks, _ := client.Inbox(ctx)
-//	tasks, _ := client.Tasks().Status().Incomplete().All(ctx)
+//	todos, _ := client.Todos().Status().Incomplete().All(ctx)
 //
 // Add operations create new items via URL scheme:
 //
@@ -36,7 +39,7 @@ import (
 //	client.Show(ctx, uuid)
 type Client struct {
 	database *db
-	scheme   *scheme
+	scheme   *scheme.Scheme
 
 	// Token management with mutex (not sync.Once to allow retry on transient failures)
 	tokenMu    sync.Mutex
@@ -67,42 +70,42 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 		opt(options)
 	}
 
-	// Build DB options
-	var dbOpts []dbOption
-	if options.databasePath != "" {
-		dbOpts = append(dbOpts, withDBPath(options.databasePath))
-	}
-	if options.printSQL {
-		dbOpts = append(dbOpts, withDBPrintSQL(options.printSQL))
-	}
-
 	// Build Scheme options
-	var schemeOpts []schemeOption
+	var schemeOpts []scheme.Option
 	if options.foreground {
-		schemeOpts = append(schemeOpts, withForeground())
+		schemeOpts = append(schemeOpts, scheme.WithForeground())
 	}
 	if options.background {
-		schemeOpts = append(schemeOpts, withBackground())
+		schemeOpts = append(schemeOpts, scheme.WithBackground())
+	}
+
+	// Build DB options
+	var dbOpts []database.Option
+	if options.databasePath != "" {
+		dbOpts = append(dbOpts, database.WithPath(options.databasePath))
+	}
+	if options.printSQL {
+		dbOpts = append(dbOpts, database.WithPrintSQL(options.printSQL))
 	}
 
 	// Create DB connection
-	database, err := newDB(dbOpts...)
+	d, err := newDB(dbOpts...)
 	if err != nil {
 		return nil, err
 	}
 
 	// Create Scheme
-	s := newScheme(schemeOpts...)
+	s := scheme.New(schemeOpts...)
 
 	client := &Client{
-		database: database,
+		database: d,
 		scheme:   s,
 	}
 
 	// Preload token if requested
 	if options.preloadToken {
 		if _, err := client.Token(context.Background()); err != nil {
-			database.Close()
+			d.Close()
 			return nil, err
 		}
 	}
@@ -152,81 +155,22 @@ func (c *Client) Token(ctx context.Context) (string, error) {
 }
 
 // ============================================================================
-// Query Operations - Convenience Methods
-// ============================================================================
-
-// Inbox returns all tasks in the Inbox.
-func (c *Client) Inbox(ctx context.Context) ([]Task, error) {
-	return c.database.Inbox(ctx)
-}
-
-// Today returns tasks that would appear in Today view.
-func (c *Client) Today(ctx context.Context) ([]Task, error) {
-	return c.database.Today(ctx)
-}
-
-// Todos returns all incomplete to-do items.
-func (c *Client) Todos(ctx context.Context) ([]Task, error) {
-	return c.database.Todos(ctx)
-}
-
-// Projects returns all incomplete projects.
-func (c *Client) Projects(ctx context.Context) ([]Task, error) {
-	return c.database.Projects(ctx)
-}
-
-// Upcoming returns tasks scheduled for future dates.
-func (c *Client) Upcoming(ctx context.Context) ([]Task, error) {
-	return c.database.Upcoming(ctx)
-}
-
-// Anytime returns tasks in the Anytime list.
-func (c *Client) Anytime(ctx context.Context) ([]Task, error) {
-	return c.database.Anytime(ctx)
-}
-
-// Someday returns tasks in the Someday list.
-func (c *Client) Someday(ctx context.Context) ([]Task, error) {
-	return c.database.Someday(ctx)
-}
-
-// Logbook returns completed and canceled tasks.
-func (c *Client) Logbook(ctx context.Context) ([]Task, error) {
-	return c.database.Logbook(ctx)
-}
-
-// Trash returns trashed tasks.
-func (c *Client) Trash(ctx context.Context) ([]Task, error) {
-	return c.database.Trash(ctx)
-}
-
-// Completed returns completed tasks.
-func (c *Client) Completed(ctx context.Context) ([]Task, error) {
-	return c.database.Completed(ctx)
-}
-
-// Canceled returns canceled tasks.
-func (c *Client) Canceled(ctx context.Context) ([]Task, error) {
-	return c.database.Canceled(ctx)
-}
-
-// Deadlines returns tasks with deadlines, sorted by deadline.
-func (c *Client) Deadlines(ctx context.Context) ([]Task, error) {
-	return c.database.Deadlines(ctx)
-}
-
-// CreatedWithin returns tasks created after the specified time.
-func (c *Client) CreatedWithin(ctx context.Context, since time.Time) ([]Task, error) {
-	return c.database.CreatedWithin(ctx, since)
-}
-
-// ============================================================================
 // Query Operations - Query Builders
 // ============================================================================
 
-// Tasks creates a new TaskQueryBuilder for querying tasks.
-func (c *Client) Tasks() TaskQueryBuilder {
-	return c.database.Tasks()
+// Todos creates a new TodoQueryBuilder for querying todos.
+func (c *Client) Todos() TodoQueryBuilder {
+	return c.database.Todos()
+}
+
+// Projects creates a new ProjectQueryBuilder for querying projects.
+func (c *Client) Projects() ProjectQueryBuilder {
+	return c.database.Projects()
+}
+
+// Headings creates a new HeadingQueryBuilder for querying headings.
+func (c *Client) Headings() HeadingQueryBuilder {
+	return c.database.Headings()
 }
 
 // Areas creates a new AreaQueryBuilder for querying areas.
@@ -240,31 +184,10 @@ func (c *Client) Tags() TagQueryBuilder {
 }
 
 // ============================================================================
-// Query Operations - Utilities
-// ============================================================================
-
-// Get retrieves an object by UUID.
-// Returns a Task, Area, or Tag depending on what is found.
-// Returns nil if not found.
-func (c *Client) Get(ctx context.Context, uuid string) (any, error) {
-	return c.database.Get(ctx, uuid)
-}
-
-// Search searches for tasks matching the query.
-func (c *Client) Search(ctx context.Context, query string) ([]Task, error) {
-	return c.database.Search(ctx, query)
-}
-
-// ChecklistItems returns the checklist items for a to-do.
-func (c *Client) ChecklistItems(ctx context.Context, todoUUID string) ([]ChecklistItem, error) {
-	return c.database.ChecklistItems(ctx, todoUUID)
-}
-
-// ============================================================================
 // Add Operations
 // ============================================================================
 
-// AddTodo returns a TodoAdder for creating a new to-do.
+// AddTodo returns a TodoAdder for creating a new todo.
 //
 // Example:
 //
@@ -274,7 +197,7 @@ func (c *Client) ChecklistItems(ctx context.Context, todoUUID string) ([]Checkli
 //	    When(things3.Today()).
 //	    Execute(ctx)
 func (c *Client) AddTodo() TodoAdder {
-	return c.scheme.AddTodo()
+	return scheme.NewTodoAdder(c.scheme)
 }
 
 // AddProject returns a ProjectAdder for creating a new project.
@@ -286,7 +209,7 @@ func (c *Client) AddTodo() TodoAdder {
 //	    Notes("Kitchen and bathroom").
 //	    Execute(ctx)
 func (c *Client) AddProject() ProjectAdder {
-	return c.scheme.AddProject()
+	return scheme.NewProjectAdder(c.scheme)
 }
 
 // Batch returns a BatchCreator for batch create operations.
@@ -294,15 +217,15 @@ func (c *Client) AddProject() ProjectAdder {
 // Example:
 //
 //	client.Batch().
-//	    AddTodo(func(b BatchTodoConfigurator) {
+//	    AddTodo(func(b things3.BatchTodoConfigurator) {
 //	        b.Title("Task 1")
 //	    }).
-//	    AddTodo(func(b BatchTodoConfigurator) {
+//	    AddTodo(func(b things3.BatchTodoConfigurator) {
 //	        b.Title("Task 2")
 //	    }).
 //	    Execute(ctx)
 func (c *Client) Batch() BatchCreator {
-	return c.scheme.Batch()
+	return scheme.NewBatch(c.scheme)
 }
 
 // AuthBatch returns an AuthBatchCreator for batch operations including updates.
@@ -311,26 +234,22 @@ func (c *Client) Batch() BatchCreator {
 // Example:
 //
 //	client.AuthBatch().
-//	    AddTodo(func(b BatchTodoConfigurator) {
+//	    AddTodo(func(b things3.BatchTodoConfigurator) {
 //	        b.Title("New task")
 //	    }).
-//	    UpdateTodo("uuid", func(b BatchTodoConfigurator) {
+//	    UpdateTodo("uuid", func(b things3.BatchTodoConfigurator) {
 //	        b.Completed(true)
 //	    }).
 //	    Execute(ctx)
 func (c *Client) AuthBatch() AuthBatchCreator {
-	return &authBatchBuilder{
-		scheme:    c.scheme,
-		tokenFunc: c.ensureToken,
-		items:     make([]JSONItem, 0),
-	}
+	return scheme.NewAuthBatch(c.scheme, c.ensureToken)
 }
 
 // ============================================================================
 // Update Operations
 // ============================================================================
 
-// UpdateTodo returns a TodoUpdater for modifying an existing to-do.
+// UpdateTodo returns a TodoUpdater for modifying an existing todo.
 // The authentication token is fetched automatically on first use.
 //
 // Example:
@@ -339,12 +258,7 @@ func (c *Client) AuthBatch() AuthBatchCreator {
 //	    Completed(true).
 //	    Execute(ctx)
 func (c *Client) UpdateTodo(id string) TodoUpdater {
-	return &updateTodoBuilder{
-		scheme:    c.scheme,
-		tokenFunc: c.ensureToken,
-		id:        id,
-		attrs:     urlAttrs{params: make(map[string]string)},
-	}
+	return scheme.NewTodoUpdater(c.scheme, c.ensureToken, id)
 }
 
 // UpdateProject returns a ProjectUpdater for modifying an existing project.
@@ -356,12 +270,7 @@ func (c *Client) UpdateTodo(id string) TodoUpdater {
 //	    Title("Renamed Project").
 //	    Execute(ctx)
 func (c *Client) UpdateProject(id string) ProjectUpdater {
-	return &updateProjectBuilder{
-		scheme:    c.scheme,
-		tokenFunc: c.ensureToken,
-		id:        id,
-		attrs:     urlAttrs{params: make(map[string]string)},
-	}
+	return scheme.NewProjectUpdater(c.scheme, c.ensureToken, id)
 }
 
 // ============================================================================
@@ -372,7 +281,12 @@ func (c *Client) UpdateProject(id string) ProjectUpdater {
 // By default, brings Things to foreground since the user wants to view the item.
 // Use WithBackgroundNavigation() option to run in background without stealing focus.
 func (c *Client) Show(ctx context.Context, uuid string) error {
-	return c.scheme.Show(ctx, uuid)
+	sb := scheme.NewShowNavigator(c.scheme)
+	uri, err := sb.ID(uuid).Build()
+	if err != nil {
+		return err
+	}
+	return c.scheme.ExecuteNavigation(ctx, uri)
 }
 
 // ShowList opens Things and displays the specified list.
@@ -382,20 +296,24 @@ func (c *Client) Show(ctx context.Context, uuid string) error {
 //
 //	client.ShowList(ctx, things3.ListToday)
 func (c *Client) ShowList(ctx context.Context, list ListID) error {
-	uri, err := c.scheme.ShowBuilder().List(list).Build()
+	sb := scheme.NewShowNavigator(c.scheme)
+	uri, err := sb.List(list).Build()
 	if err != nil {
 		return err
 	}
-	return c.scheme.executeNavigation(ctx, uri)
+	return c.scheme.ExecuteNavigation(ctx, uri)
 }
 
 // ShowSearch opens Things and performs a search for the given query.
 // By default, brings Things to foreground since the user wants to view results.
 func (c *Client) ShowSearch(ctx context.Context, query string) error {
-	return c.scheme.Search(ctx, query)
+	q := url.Values{}
+	q.Set("query", query)
+	uri := fmt.Sprintf("things:///%s?%s", CommandSearch, scheme.EncodeQuery(q))
+	return c.scheme.ExecuteNavigation(ctx, uri)
 }
 
 // ShowBuilder returns a ShowNavigator for complex navigation operations.
 func (c *Client) ShowBuilder() ShowNavigator {
-	return c.scheme.ShowBuilder()
+	return scheme.NewShowNavigator(c.scheme)
 }

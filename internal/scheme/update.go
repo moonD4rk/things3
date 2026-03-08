@@ -1,4 +1,4 @@
-package things3
+package scheme
 
 import (
 	"context"
@@ -13,7 +13,7 @@ func buildUpdateURL(
 	token *string,
 	tokenFunc func(context.Context) (string, error),
 	id string,
-	attrs *urlAttrs,
+	attrs *URLAttrs,
 	command Command,
 	validateFn func() error,
 ) (string, error) {
@@ -34,166 +34,176 @@ func buildUpdateURL(
 	attrs.FinalizeWhen()
 
 	query := url.Values{}
-	query.Set(keyID, id)
-	query.Set(keyAuthToken, *token)
-	for k, v := range attrs.params {
+	query.Set(KeyID, id)
+	query.Set(KeyAuthToken, *token)
+	for k, v := range attrs.Params {
 		query.Set(k, v)
 	}
 
-	return fmt.Sprintf("things:///%s?%s", command, encodeQuery(query)), nil
+	return fmt.Sprintf("things:///%s?%s", command, EncodeQuery(query)), nil
 }
 
-// updateTodoBuilder builds URLs for updating existing to-dos via the update command.
+// updateTodoBuilder builds URLs for updating existing todos via the update command.
 // Requires authentication token (obtained via authScheme or Client).
 type updateTodoBuilder struct {
-	scheme    *scheme
+	scheme    *Scheme
 	token     string
 	tokenFunc func(context.Context) (string, error) // Optional lazy token loader
 	id        string
-	attrs     urlAttrs
+	attrs     URLAttrs
 	err       error
 }
 
-// getStore returns the attribute store for the builder.
-func (b *updateTodoBuilder) getStore() attrStore { return &b.attrs }
-
-// setErr sets the error field for the builder.
-func (b *updateTodoBuilder) setErr(err error) { b.err = err }
-
-// Title replaces the to-do title.
-func (b *updateTodoBuilder) Title(title string) TodoUpdater {
-	return setStr(b, titleParam, title)
+// NewTodoUpdater creates a new TodoUpdater for updating an existing todo.
+func NewTodoUpdater(s *Scheme, tokenFunc func(context.Context) (string, error), id string) TodoUpdater {
+	return &updateTodoBuilder{
+		scheme:    s,
+		tokenFunc: tokenFunc,
+		id:        id,
+		attrs:     NewURLAttrs(),
+	}
 }
 
-// Notes replaces the to-do notes.
+// GetStore returns the attribute store for the builder.
+func (b *updateTodoBuilder) GetStore() AttrStore { return &b.attrs }
+
+// SetErr sets the error field for the builder.
+func (b *updateTodoBuilder) SetErr(err error) { b.err = err }
+
+// Title replaces the todo title.
+func (b *updateTodoBuilder) Title(title string) TodoUpdater {
+	return SetStr(b, TitleParam, title)
+}
+
+// Notes replaces the todo notes.
 func (b *updateTodoBuilder) Notes(notes string) TodoUpdater {
-	return setStr(b, notesParam, notes)
+	return SetStr(b, NotesParam, notes)
 }
 
 // PrependNotes prepends text to existing notes.
 func (b *updateTodoBuilder) PrependNotes(notes string) TodoUpdater {
-	return setStr(b, prependNotesParam, notes)
+	return SetStr(b, PrependNotesParam, notes)
 }
 
 // AppendNotes appends text to existing notes.
 func (b *updateTodoBuilder) AppendNotes(notes string) TodoUpdater {
-	return setStr(b, appendNotesParam, notes)
+	return SetStr(b, AppendNotesParam, notes)
 }
 
 // When sets the scheduling date using a time.Time value.
 // The date portion is used; time-of-day is ignored.
 func (b *updateTodoBuilder) When(t time.Time) TodoUpdater {
-	return setWhenTime(b, t)
+	return SetWhenTime(b, t)
 }
 
-// WhenEvening schedules the to-do for this evening.
+// WhenEvening schedules the todo for this evening.
 func (b *updateTodoBuilder) WhenEvening() TodoUpdater {
-	return setWhenStr(b, whenEvening)
+	return SetWhenStr(b, WhenEvening)
 }
 
-// WhenAnytime schedules the to-do for anytime (no specific time).
+// WhenAnytime schedules the todo for anytime (no specific time).
 func (b *updateTodoBuilder) WhenAnytime() TodoUpdater {
-	return setWhenStr(b, whenAnytime)
+	return SetWhenStr(b, WhenAnytime)
 }
 
-// WhenSomeday schedules the to-do for someday (indefinite future).
+// WhenSomeday schedules the todo for someday (indefinite future).
 func (b *updateTodoBuilder) WhenSomeday() TodoUpdater {
-	return setWhenStr(b, whenSomeday)
+	return SetWhenStr(b, WhenSomeday)
 }
 
-// Reminder sets a reminder time for the to-do.
+// Reminder sets a reminder time for the todo.
 // The reminder is combined with the scheduling date (When).
 // If no scheduling date is set, defaults to "today".
 // Hour must be 0-23, minute must be 0-59.
 func (b *updateTodoBuilder) Reminder(hour, minute int) TodoUpdater {
-	return setReminder(b, hour, minute)
+	return SetReminder(b, hour, minute)
 }
 
 // Deadline sets the deadline date using a time.Time value.
 // The date portion is used; time-of-day is ignored.
 func (b *updateTodoBuilder) Deadline(t time.Time) TodoUpdater {
-	return setDeadlineTime(b, t)
+	return SetDeadlineTime(b, t)
 }
 
 // ClearDeadline removes the deadline.
 func (b *updateTodoBuilder) ClearDeadline() TodoUpdater {
-	b.attrs.SetString(keyDeadline, "")
+	b.attrs.SetString(KeyDeadline, "")
 	return b
 }
 
 // Tags replaces all tags.
 func (b *updateTodoBuilder) Tags(tags ...string) TodoUpdater {
-	return setStrs(b, tagsParam, tags)
+	return SetStrs(b, TagsParam, tags)
 }
 
 // AddTags adds tags without replacing existing ones.
 func (b *updateTodoBuilder) AddTags(tags ...string) TodoUpdater {
-	return setStrs(b, addTagsParam, tags)
+	return SetStrs(b, AddTagsParam, tags)
 }
 
 // ChecklistItems replaces all checklist items.
 func (b *updateTodoBuilder) ChecklistItems(items ...string) TodoUpdater {
-	return setStrs(b, checklistItemsParam, items)
+	return SetStrs(b, ChecklistItemsParam, items)
 }
 
 // PrependChecklistItems prepends checklist items.
 func (b *updateTodoBuilder) PrependChecklistItems(items ...string) TodoUpdater {
-	return setStrs(b, prependChecklistParam, items)
+	return SetStrs(b, PrependChecklistParam, items)
 }
 
 // AppendChecklistItems appends checklist items.
 func (b *updateTodoBuilder) AppendChecklistItems(items ...string) TodoUpdater {
-	return setStrs(b, appendChecklistParam, items)
+	return SetStrs(b, AppendChecklistParam, items)
 }
 
-// List moves the to-do to a project or area by name.
+// List moves the todo to a project or area by name.
 func (b *updateTodoBuilder) List(name string) TodoUpdater {
-	return setStr(b, listParam, name)
+	return SetStr(b, ListParam, name)
 }
 
-// ListID moves the to-do to a project or area by UUID.
+// ListID moves the todo to a project or area by UUID.
 func (b *updateTodoBuilder) ListID(id string) TodoUpdater {
-	return setStr(b, listIDParam, id)
+	return SetStr(b, ListIDParam, id)
 }
 
-// Heading moves the to-do to a heading by name.
+// Heading moves the todo to a heading by name.
 func (b *updateTodoBuilder) Heading(name string) TodoUpdater {
-	return setStr(b, headingParam, name)
+	return SetStr(b, HeadingParam, name)
 }
 
-// HeadingID moves the to-do to a heading by UUID.
+// HeadingID moves the todo to a heading by UUID.
 func (b *updateTodoBuilder) HeadingID(id string) TodoUpdater {
-	return setStr(b, headingIDParam, id)
+	return SetStr(b, HeadingIDParam, id)
 }
 
 // Completed sets the completion status.
 func (b *updateTodoBuilder) Completed(completed bool) TodoUpdater {
-	return setBool(b, completedParam, completed)
+	return SetBool(b, CompletedParam, completed)
 }
 
 // Canceled sets the canceled status.
 func (b *updateTodoBuilder) Canceled(canceled bool) TodoUpdater {
-	return setBool(b, canceledParam, canceled)
+	return SetBool(b, CanceledParam, canceled)
 }
 
-// Duplicate duplicates the to-do before updating.
+// Duplicate duplicates the todo before updating.
 func (b *updateTodoBuilder) Duplicate(duplicate bool) TodoUpdater {
-	return setBool(b, duplicateParam, duplicate)
+	return SetBool(b, DuplicateParam, duplicate)
 }
 
-// Reveal navigates to the to-do after updating.
+// Reveal navigates to the todo after updating.
 func (b *updateTodoBuilder) Reveal(reveal bool) TodoUpdater {
-	return setBool(b, revealParam, reveal)
+	return SetBool(b, RevealParam, reveal)
 }
 
 // CreationDate sets the creation timestamp.
 func (b *updateTodoBuilder) CreationDate(date time.Time) TodoUpdater {
-	return setTime(b, creationDateParam, date)
+	return SetTime(b, CreationDateParam, date)
 }
 
 // CompletionDate sets the completion timestamp.
 func (b *updateTodoBuilder) CompletionDate(date time.Time) TodoUpdater {
-	return setTime(b, completionDateParam, date)
+	return SetTime(b, CompletionDateParam, date)
 }
 
 // validate checks all builder requirements before building the URL.
@@ -210,7 +220,7 @@ func (b *updateTodoBuilder) validate() error {
 	return nil
 }
 
-// Build returns the Things URL for updating the to-do.
+// Build returns the Things URL for updating the todo.
 // If token is not set but tokenFunc is provided, it will fetch the token using context.Background().
 // For explicit context control, use Execute() instead.
 func (b *updateTodoBuilder) Build() (string, error) {
@@ -233,65 +243,75 @@ func (b *updateTodoBuilder) Execute(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return b.scheme.execute(ctx, uri)
+	return b.scheme.Execute(ctx, uri)
 }
 
 // updateProjectBuilder builds URLs for updating existing projects via the update-project command.
 // Requires authentication token (obtained via authScheme or Client).
 type updateProjectBuilder struct {
-	scheme    *scheme
+	scheme    *Scheme
 	token     string
 	tokenFunc func(context.Context) (string, error) // Optional lazy token loader
 	id        string
-	attrs     urlAttrs
+	attrs     URLAttrs
 	err       error
 }
 
-// getStore returns the attribute store for the builder.
-func (b *updateProjectBuilder) getStore() attrStore { return &b.attrs }
+// NewProjectUpdater creates a new ProjectUpdater for updating an existing project.
+func NewProjectUpdater(s *Scheme, tokenFunc func(context.Context) (string, error), id string) ProjectUpdater {
+	return &updateProjectBuilder{
+		scheme:    s,
+		tokenFunc: tokenFunc,
+		id:        id,
+		attrs:     NewURLAttrs(),
+	}
+}
 
-// setErr sets the error field for the builder.
-func (b *updateProjectBuilder) setErr(err error) { b.err = err }
+// GetStore returns the attribute store for the builder.
+func (b *updateProjectBuilder) GetStore() AttrStore { return &b.attrs }
+
+// SetErr sets the error field for the builder.
+func (b *updateProjectBuilder) SetErr(err error) { b.err = err }
 
 // Title replaces the project title.
 func (b *updateProjectBuilder) Title(title string) ProjectUpdater {
-	return setStr(b, titleParam, title)
+	return SetStr(b, TitleParam, title)
 }
 
 // Notes replaces the project notes.
 func (b *updateProjectBuilder) Notes(notes string) ProjectUpdater {
-	return setStr(b, notesParam, notes)
+	return SetStr(b, NotesParam, notes)
 }
 
 // PrependNotes prepends text to existing notes.
 func (b *updateProjectBuilder) PrependNotes(notes string) ProjectUpdater {
-	return setStr(b, prependNotesParam, notes)
+	return SetStr(b, PrependNotesParam, notes)
 }
 
 // AppendNotes appends text to existing notes.
 func (b *updateProjectBuilder) AppendNotes(notes string) ProjectUpdater {
-	return setStr(b, appendNotesParam, notes)
+	return SetStr(b, AppendNotesParam, notes)
 }
 
 // When sets the scheduling date using a time.Time value.
 // The date portion is used; time-of-day is ignored.
 func (b *updateProjectBuilder) When(t time.Time) ProjectUpdater {
-	return setWhenTime(b, t)
+	return SetWhenTime(b, t)
 }
 
 // WhenEvening schedules the project for this evening.
 func (b *updateProjectBuilder) WhenEvening() ProjectUpdater {
-	return setWhenStr(b, whenEvening)
+	return SetWhenStr(b, WhenEvening)
 }
 
 // WhenAnytime schedules the project for anytime (no specific time).
 func (b *updateProjectBuilder) WhenAnytime() ProjectUpdater {
-	return setWhenStr(b, whenAnytime)
+	return SetWhenStr(b, WhenAnytime)
 }
 
 // WhenSomeday schedules the project for someday (indefinite future).
 func (b *updateProjectBuilder) WhenSomeday() ProjectUpdater {
-	return setWhenStr(b, whenSomeday)
+	return SetWhenStr(b, WhenSomeday)
 }
 
 // Reminder sets a reminder time for the project.
@@ -299,56 +319,56 @@ func (b *updateProjectBuilder) WhenSomeday() ProjectUpdater {
 // If no scheduling date is set, defaults to "today".
 // Hour must be 0-23, minute must be 0-59.
 func (b *updateProjectBuilder) Reminder(hour, minute int) ProjectUpdater {
-	return setReminder(b, hour, minute)
+	return SetReminder(b, hour, minute)
 }
 
 // Deadline sets the deadline date using a time.Time value.
 // The date portion is used; time-of-day is ignored.
 func (b *updateProjectBuilder) Deadline(t time.Time) ProjectUpdater {
-	return setDeadlineTime(b, t)
+	return SetDeadlineTime(b, t)
 }
 
 // ClearDeadline removes the deadline.
 func (b *updateProjectBuilder) ClearDeadline() ProjectUpdater {
-	b.attrs.SetString(keyDeadline, "")
+	b.attrs.SetString(KeyDeadline, "")
 	return b
 }
 
 // Tags replaces all tags.
 func (b *updateProjectBuilder) Tags(tags ...string) ProjectUpdater {
-	return setStrs(b, tagsParam, tags)
+	return SetStrs(b, TagsParam, tags)
 }
 
 // AddTags adds tags without replacing existing ones.
 func (b *updateProjectBuilder) AddTags(tags ...string) ProjectUpdater {
-	return setStrs(b, addTagsParam, tags)
+	return SetStrs(b, AddTagsParam, tags)
 }
 
 // Area moves the project to an area by name.
 func (b *updateProjectBuilder) Area(name string) ProjectUpdater {
-	return setStr(b, areaParam, name)
+	return SetStr(b, AreaParam, name)
 }
 
 // AreaID moves the project to an area by UUID.
 func (b *updateProjectBuilder) AreaID(id string) ProjectUpdater {
-	return setStr(b, areaIDParam, id)
+	return SetStr(b, AreaIDParam, id)
 }
 
 // Completed sets the completion status.
-// Note: Setting completed=true is ignored unless all child to-dos
+// Note: Setting completed=true is ignored unless all child todos
 // are completed or canceled and all headings are archived.
 func (b *updateProjectBuilder) Completed(completed bool) ProjectUpdater {
-	return setBool(b, completedParam, completed)
+	return SetBool(b, CompletedParam, completed)
 }
 
 // Canceled sets the canceled status.
 func (b *updateProjectBuilder) Canceled(canceled bool) ProjectUpdater {
-	return setBool(b, canceledParam, canceled)
+	return SetBool(b, CanceledParam, canceled)
 }
 
 // Reveal navigates to the project after updating.
 func (b *updateProjectBuilder) Reveal(reveal bool) ProjectUpdater {
-	return setBool(b, revealParam, reveal)
+	return SetBool(b, RevealParam, reveal)
 }
 
 // validate checks all builder requirements before building the URL.
@@ -388,5 +408,5 @@ func (b *updateProjectBuilder) Execute(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return b.scheme.execute(ctx, uri)
+	return b.scheme.Execute(ctx, uri)
 }

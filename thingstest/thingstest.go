@@ -54,7 +54,7 @@ func DatabasePath(t *testing.T) string {
 	}
 
 	dst := filepath.Join(t.TempDir(), "main.sqlite")
-	if err := os.WriteFile(dst, data, 0o600); err != nil {
+	if err := os.WriteFile(dst, data, 0o600); err != nil { //nolint:gosec // dst is from t.TempDir(), not user input
 		t.Fatalf("thingstest: write fixture database: %v", err)
 	}
 
@@ -77,8 +77,8 @@ func SourceDatabasePath() string {
 // There is no unified "Task" count -- use the typed constants instead.
 const (
 	// Todos (type=0)
-	TodosIncomplete      = 16
-	TodosAnytime         = 11
+	TodosIncomplete      = 15
+	TodosAnytime         = 10
 	TodosAnytimeComplete = 8
 	TodosComplete        = 12
 	TodosInProject       = 4

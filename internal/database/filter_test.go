@@ -25,11 +25,11 @@ func TestWhereBuilder_addRawf(t *testing.T) {
 
 func TestWhereBuilder_addStringEqual(t *testing.T) {
 	var w whereBuilder
-	w.addStringEqual("col", ptr("test"))
+	w.addStringEqual("col", new("test"))
 	assert.Equal(t, "col = 'test'", w.sql())
 
 	var w2 whereBuilder
-	w2.addStringEqual("col", ptr("it's"))
+	w2.addStringEqual("col", new("it's"))
 	assert.Equal(t, "col = 'it''s'", w2.sql())
 
 	var w3 whereBuilder
@@ -39,7 +39,7 @@ func TestWhereBuilder_addStringEqual(t *testing.T) {
 
 func TestWhereBuilder_addIntEqual(t *testing.T) {
 	var w whereBuilder
-	w.addIntEqual("col", ptr(42))
+	w.addIntEqual("col", new(42))
 	assert.Equal(t, "col = 42", w.sql())
 
 	var w2 whereBuilder
@@ -60,19 +60,19 @@ func TestWhereBuilder_addExists(t *testing.T) {
 func TestWhereBuilder_addFilter(t *testing.T) {
 	t.Run("value takes precedence", func(t *testing.T) {
 		var w whereBuilder
-		w.addFilter("col", ptr("test"), ptr(true))
+		w.addFilter("col", new("test"), new(true))
 		assert.Equal(t, "col = 'test'", w.sql())
 	})
 
 	t.Run("exists fallback", func(t *testing.T) {
 		var w whereBuilder
-		w.addFilter("col", nil, ptr(true))
+		w.addFilter("col", nil, new(true))
 		assert.Equal(t, "col IS NOT NULL", w.sql())
 	})
 
 	t.Run("exists false", func(t *testing.T) {
 		var w whereBuilder
-		w.addFilter("col", nil, ptr(false))
+		w.addFilter("col", nil, new(false))
 		assert.Equal(t, "col IS NULL", w.sql())
 	})
 
@@ -86,19 +86,19 @@ func TestWhereBuilder_addFilter(t *testing.T) {
 func TestWhereBuilder_addOrFilter(t *testing.T) {
 	t.Run("value", func(t *testing.T) {
 		var w whereBuilder
-		w.addOrFilter("a", "b", ptr("test"), nil)
+		w.addOrFilter("a", "b", new("test"), nil)
 		assert.Equal(t, "(a = 'test' OR b = 'test')", w.sql())
 	})
 
 	t.Run("exists true", func(t *testing.T) {
 		var w whereBuilder
-		w.addOrFilter("a", "b", nil, ptr(true))
+		w.addOrFilter("a", "b", nil, new(true))
 		assert.Equal(t, "(a IS NOT NULL OR b IS NOT NULL)", w.sql())
 	})
 
 	t.Run("exists false", func(t *testing.T) {
 		var w whereBuilder
-		w.addOrFilter("a", "b", nil, ptr(false))
+		w.addOrFilter("a", "b", nil, new(false))
 		assert.Equal(t, "(a IS NULL OR b IS NULL)", w.sql())
 	})
 
@@ -126,8 +126,8 @@ func TestWhereBuilder_addTruthy(t *testing.T) {
 		want  string
 	}{
 		{"nil", nil, "TRUE"},
-		{"true", ptr(true), "col"},
-		{"false", ptr(false), "NOT IFNULL(col, 0)"},
+		{"true", new(true), "col"},
+		{"false", new(false), "NOT IFNULL(col, 0)"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -183,13 +183,13 @@ func TestWhereBuilder_addDateFilter(t *testing.T) {
 
 	t.Run("exists true", func(t *testing.T) {
 		var w whereBuilder
-		w.addDateFilter("col", &DateFilterValue{HasDate: ptr(true)}, true)
+		w.addDateFilter("col", &DateFilterValue{HasDate: new(true)}, true)
 		assert.Equal(t, "col IS NOT NULL", w.sql())
 	})
 
 	t.Run("exists false", func(t *testing.T) {
 		var w whereBuilder
-		w.addDateFilter("col", &DateFilterValue{HasDate: ptr(false)}, true)
+		w.addDateFilter("col", &DateFilterValue{HasDate: new(false)}, true)
 		assert.Equal(t, "col IS NULL", w.sql())
 	})
 
@@ -221,7 +221,7 @@ func TestWhereBuilder_addDateFilter(t *testing.T) {
 		var w whereBuilder
 		w.addDateFilter("stopDate", &DateFilterValue{
 			Operator: "=",
-			Date:     ptr(time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)),
+			Date:     new(time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)),
 		}, false)
 		assert.Equal(t, "date(stopDate, 'unixepoch', 'localtime') = date('2024-06-15')", w.sql())
 	})

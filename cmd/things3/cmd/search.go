@@ -10,7 +10,7 @@ import (
 func NewSearchCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "search <query>",
-		Short: "Search for todos by title or UUID prefix",
+		Short: "Search for todos by title, notes, and area",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := things3.NewClient()

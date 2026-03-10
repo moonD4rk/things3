@@ -187,6 +187,9 @@ func projectRelevantDate(p *things3.Project) string {
 	if p.Deadline != nil {
 		return "due:" + p.Deadline.Format(dateFormat)
 	}
+	if p.StartDate != nil {
+		return p.StartDate.Format(dateFormat)
+	}
 	return ""
 }
 
@@ -251,15 +254,21 @@ func outputTodoDetail(cmd *cobra.Command, todo *things3.Todo) error {
 	return writeTodoDetail(cmd.OutOrStdout(), todo)
 }
 
+// projectDetailOutput is the structured representation for JSON/YAML output.
+type projectDetailOutput struct {
+	Project *things3.Project `json:"project" yaml:"project"`
+	Todos   []things3.Todo   `json:"todos,omitempty" yaml:"todos,omitempty"`
+}
+
 // outputProjectDetail formats and outputs a single project with full details and its todos.
 func outputProjectDetail(cmd *cobra.Command, project *things3.Project, todos []things3.Todo) error {
 	_, format := getOutputFlags(cmd)
 	w := cmd.OutOrStdout()
 	if format == formatJSON {
-		return writeJSON(w, project)
+		return writeJSON(w, projectDetailOutput{Project: project, Todos: todos})
 	}
 	if format == formatYAML {
-		return writeYAML(w, project)
+		return writeYAML(w, projectDetailOutput{Project: project, Todos: todos})
 	}
 	if err := writeProjectDetail(w, project); err != nil {
 		return err

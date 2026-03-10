@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	"github.com/moond4rk/things3"
@@ -22,6 +24,10 @@ func NewTodoCmd() *cobra.Command {
 			identifier := args[0]
 			byTitle, _ := cmd.Flags().GetBool("title")
 			bySearch, _ := cmd.Flags().GetBool("search")
+
+			if byTitle && bySearch {
+				return fmt.Errorf("--title and --search are mutually exclusive")
+			}
 
 			var q things3.TodoQueryBuilder
 			switch {

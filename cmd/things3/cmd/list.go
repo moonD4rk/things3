@@ -12,10 +12,9 @@ import (
 func NewListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list <view>",
-		Short: "List tasks from various views",
+		Short: "List todos from various views",
 	}
 
-	// Register view subcommands
 	cmd.AddCommand(
 		newInboxCmd(),
 		newTodayCmd(),
@@ -35,7 +34,7 @@ func NewListCmd() *cobra.Command {
 func newInboxCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "inbox",
-		Short: "List tasks in the Inbox",
+		Short: "List todos in the Inbox",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			client, err := things3.NewClient()
 			if err != nil {
@@ -43,11 +42,14 @@ func newInboxCmd() *cobra.Command {
 			}
 			defer client.Close()
 
-			tasks, err := client.Inbox(cmd.Context())
+			todos, err := client.Todos().
+				Start().Inbox().
+				Status().Incomplete().
+				All(cmd.Context())
 			if err != nil {
 				return err
 			}
-			return outputTasks(cmd, tasks)
+			return outputTodos(cmd, todos)
 		},
 	}
 }
@@ -55,7 +57,7 @@ func newInboxCmd() *cobra.Command {
 func newTodayCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "today",
-		Short: "List tasks scheduled for today",
+		Short: "List todos scheduled for today",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			client, err := things3.NewClient()
 			if err != nil {
@@ -63,11 +65,47 @@ func newTodayCmd() *cobra.Command {
 			}
 			defer client.Close()
 
-			tasks, err := client.Today(cmd.Context())
+			ctx := cmd.Context()
+
+			// Regular Today tasks: have a start date and in Anytime bucket
+			regularTodos, err := client.Todos().
+				StartDate().Exists(true).
+				Start().Anytime().
+				Status().Incomplete().
+				OrderByTodayIndex().
+				All(ctx)
 			if err != nil {
 				return err
 			}
-			return outputTasks(cmd, tasks)
+
+			// Scheduled tasks from Someday with past start dates (yellow dot)
+			scheduledTodos, err := client.Todos().
+				StartDate().Past().
+				Start().Someday().
+				Status().Incomplete().
+				OrderByTodayIndex().
+				All(ctx)
+			if err != nil {
+				return err
+			}
+
+			// Overdue deadline tasks: no start date, deadline past, not suppressed
+			overdueTodos, err := client.Todos().
+				StartDate().Exists(false).
+				Deadline().Past().
+				DeadlineSuppressed(false).
+				Status().Incomplete().
+				All(ctx)
+			if err != nil {
+				return err
+			}
+
+			todos := make([]things3.Todo, 0, len(regularTodos)+len(scheduledTodos)+len(overdueTodos))
+			todos = append(todos, regularTodos...)
+			todos = append(todos, scheduledTodos...)
+			todos = append(todos, overdueTodos...)
+
+			return outputTodos(cmd, todos)
 		},
 	}
 }
@@ -75,7 +113,7 @@ func newTodayCmd() *cobra.Command {
 func newUpcomingCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "upcoming",
-		Short: "List tasks scheduled for future dates",
+		Short: "List todos scheduled for future dates",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			client, err := things3.NewClient()
 			if err != nil {
@@ -83,11 +121,15 @@ func newUpcomingCmd() *cobra.Command {
 			}
 			defer client.Close()
 
-			tasks, err := client.Upcoming(cmd.Context())
+			todos, err := client.Todos().
+				StartDate().Future().
+				Start().Someday().
+				Status().Incomplete().
+				All(cmd.Context())
 			if err != nil {
 				return err
 			}
-			return outputTasks(cmd, tasks)
+			return outputTodos(cmd, todos)
 		},
 	}
 }
@@ -95,7 +137,7 @@ func newUpcomingCmd() *cobra.Command {
 func newAnytimeCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "anytime",
-		Short: "List tasks in the Anytime list",
+		Short: "List todos in the Anytime list",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			client, err := things3.NewClient()
 			if err != nil {
@@ -103,11 +145,14 @@ func newAnytimeCmd() *cobra.Command {
 			}
 			defer client.Close()
 
-			tasks, err := client.Anytime(cmd.Context())
+			todos, err := client.Todos().
+				Start().Anytime().
+				Status().Incomplete().
+				All(cmd.Context())
 			if err != nil {
 				return err
 			}
-			return outputTasks(cmd, tasks)
+			return outputTodos(cmd, todos)
 		},
 	}
 }
@@ -115,7 +160,7 @@ func newAnytimeCmd() *cobra.Command {
 func newSomedayCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "someday",
-		Short: "List tasks in the Someday list",
+		Short: "List todos in the Someday list",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			client, err := things3.NewClient()
 			if err != nil {
@@ -123,11 +168,15 @@ func newSomedayCmd() *cobra.Command {
 			}
 			defer client.Close()
 
-			tasks, err := client.Someday(cmd.Context())
+			todos, err := client.Todos().
+				StartDate().Exists(false).
+				Start().Someday().
+				Status().Incomplete().
+				All(cmd.Context())
 			if err != nil {
 				return err
 			}
-			return outputTasks(cmd, tasks)
+			return outputTodos(cmd, todos)
 		},
 	}
 }
@@ -135,7 +184,7 @@ func newSomedayCmd() *cobra.Command {
 func newLogbookCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "logbook",
-		Short: "List completed and canceled tasks",
+		Short: "List completed and canceled todos",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			client, err := things3.NewClient()
 			if err != nil {
@@ -145,24 +194,20 @@ func newLogbookCmd() *cobra.Command {
 
 			days, _ := cmd.Flags().GetInt("days")
 
-			var tasks []things3.Task
-			if days == 0 {
-				// No limit, get all
-				tasks, err = client.Logbook(cmd.Context())
-			} else {
-				// Filter by stop date within N days
+			q := client.Todos().
+				Status().Any().
+				StopDate().Exists(true)
+
+			if days > 0 {
 				since := time.Now().AddDate(0, 0, -days)
-				tasks, err = client.Tasks().
-					StopDate().After(since).
-					Status().Any().
-					ContextTrashed(false).
-					All(cmd.Context())
+				q = q.StopDate().After(since)
 			}
+
+			todos, err := q.All(cmd.Context())
 			if err != nil {
 				return err
 			}
-
-			return outputTasks(cmd, tasks)
+			return outputTodos(cmd, todos)
 		},
 	}
 
@@ -174,7 +219,7 @@ func newLogbookCmd() *cobra.Command {
 func newDeadlinesCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "deadlines",
-		Short: "List tasks with deadlines",
+		Short: "List todos with deadlines",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			client, err := things3.NewClient()
 			if err != nil {
@@ -182,11 +227,14 @@ func newDeadlinesCmd() *cobra.Command {
 			}
 			defer client.Close()
 
-			tasks, err := client.Deadlines(cmd.Context())
+			todos, err := client.Todos().
+				Deadline().Exists(true).
+				Status().Incomplete().
+				All(cmd.Context())
 			if err != nil {
 				return err
 			}
-			return outputTasks(cmd, tasks)
+			return outputTodos(cmd, todos)
 		},
 	}
 }
@@ -202,11 +250,13 @@ func newProjectsCmd() *cobra.Command {
 			}
 			defer client.Close()
 
-			tasks, err := client.Projects(cmd.Context())
+			projects, err := client.Projects().
+				Status().Incomplete().
+				All(cmd.Context())
 			if err != nil {
 				return err
 			}
-			return outputTasks(cmd, tasks)
+			return outputProjects(cmd, projects)
 		},
 	}
 }

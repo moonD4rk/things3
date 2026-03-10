@@ -10,7 +10,7 @@ import (
 func NewSearchCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "search <query>",
-		Short: "Search for tasks by title or UUID prefix",
+		Short: "Search for todos by title, notes, and area",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := things3.NewClient()
@@ -22,22 +22,18 @@ func NewSearchCmd() *cobra.Command {
 			query := args[0]
 			byUUID, _ := cmd.Flags().GetBool("uuid")
 
-			var tasks []things3.Task
+			var q things3.TodoQueryBuilder
 			if byUUID {
-				// Search by UUID prefix
-				tasks, err = client.Tasks().
-					WithUUIDPrefix(query).
-					Status().Any().
-					All(cmd.Context())
+				q = client.Todos().WithUUIDPrefix(query).Status().Any()
 			} else {
-				// Search by title/notes
-				tasks, err = client.Search(cmd.Context(), query)
+				q = client.Todos().Search(query).Status().Any()
 			}
+
+			todos, err := q.All(cmd.Context())
 			if err != nil {
 				return err
 			}
-
-			return outputTasks(cmd, tasks)
+			return outputTodos(cmd, todos)
 		},
 	}
 

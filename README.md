@@ -1,107 +1,132 @@
 # things3
 
-[![Go CI](https://github.com/moond4rk/things3/actions/workflows/ci.yml/badge.svg)](https://github.com/moond4rk/things3/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/moond4rk/things3/branch/main/graph/badge.svg)](https://codecov.io/gh/moond4rk/things3)
-[![Go Reference](https://pkg.go.dev/badge/github.com/moond4rk/things3.svg)](https://pkg.go.dev/github.com/moond4rk/things3)
-[![Go Report Card](https://goreportcard.com/badge/github.com/moond4rk/things3)](https://goreportcard.com/report/github.com/moond4rk/things3)
-[![License](https://img.shields.io/github/license/moond4rk/things3)](https://github.com/moond4rk/things3/blob/main/LICENSE)
+[![Go CI](https://github.com/moond4rk/things3/actions/workflows/ci.yml/badge.svg)](https://github.com/moond4rk/things3/actions/workflows/ci.yml) [![codecov](https://codecov.io/gh/moond4rk/things3/branch/main/graph/badge.svg)](https://codecov.io/gh/moond4rk/things3) [![Go Reference](https://pkg.go.dev/badge/github.com/moond4rk/things3.svg)](https://pkg.go.dev/github.com/moond4rk/things3) [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/moond4rk/things3/blob/main/LICENSE)
 
-Go library and CLI for [Things 3](https://culturedcode.com/things/) on macOS. Read tasks from the Things 3 SQLite database, create and update items via [Things URL Scheme](https://culturedcode.com/things/support/articles/2803573/), and query your task list from the terminal.
+AI-friendly Go library and CLI for [Things 3](https://culturedcode.com/things/) on macOS.
 
-## Features
+Reads come straight from the Things SQLite database through typed query builders; writes go through the official [Things URL scheme](https://culturedcode.com/things/support/articles/2803573/) and are verified against the database afterwards. Every CLI command speaks the same machine-readable protocol - uniform flags, self-describing JSON pagination, a strict exit-code contract, and stable UUID handles - so it works equally well for a human at a terminal and an AI agent or script driving it. The read API is a full Go port of [things.py](https://github.com/thingsapi/things.py).
 
-- **Unified client** - Single `NewClient()` entry point for all operations
-- **Database queries** - Read-only access to the Things 3 SQLite database with fluent query builder and type-safe filters
-- **URL Scheme** - Create todos, projects, and batch operations; update existing items with automatic authentication token management
-- **CLI** - Query tasks, projects, areas, and tags from the terminal with JSON/YAML output
-- **Interface-based API** - All public methods return interfaces for clean, testable code
+## Highlights
+
+- **Complete read API** - typed, chainable query builders for todos, projects, headings, areas, and tags, plus composed `Today` and `Upcoming` views (`Upcoming` includes repeating tasks at their next occurrence, which the raw database does not materialize)
+- **Type-safe writes** - create, update, and batch operations built as fluent URL-scheme builders with automatic auth-token management
+- **Verified writes in the CLI** - every action resolves its target in the database, executes the URL scheme, then polls the database to confirm the write actually landed
+- **Built for automation** - one global flag surface (`--json` / `--yaml` / `--text`), list output wrapped in a `{items, total, page, pages}` envelope so truncation is never silent, exit codes `0`/`1`/`2`, and every printed 8-char UUID usable as a query
+- **App-shaped commands** - the CLI mirrors the Things sidebar (`today`, `inbox`, `upcoming`, ...) and its verbs (`schedule`, `move`, `edit`), so knowing the app is knowing the tool
+
+> **Requirements**: macOS with Things 3 installed. CGO enabled when building from source (`github.com/mattn/go-sqlite3`). Write commands need Things running; reads only need the database file.
 
 ## CLI
 
-A command-line tool for querying your Things 3 tasks from the terminal.
-
-### Installation
-
-**Homebrew** (recommended):
+### Install
 
 ```bash
-brew install moond4rk/tap/things3
-```
-
-**Go**:
-
-```bash
+brew install moond4rk/tap/things3            # Homebrew (recommended)
 go install github.com/moond4rk/things3/cmd/things3@latest
 ```
 
-> **Note**: Requires CGO enabled (uses `go-sqlite3`). macOS only.
-
-**Manual**: Download pre-built binaries from [GitHub Releases](https://github.com/moonD4rk/things3/releases). If macOS shows "Apple could not verify", remove the quarantine attribute:
-
-```bash
-xattr -d com.apple.quarantine /path/to/things3
-```
+Pre-built binaries are on [GitHub Releases](https://github.com/moonD4rk/things3/releases). If macOS complains about verification: `xattr -d com.apple.quarantine /path/to/things3`.
 
 ### Commands
 
+The whole surface, straight from `things3 -h`:
+
+```text
+Views:
+  anytime     List Anytime todos grouped by project or area
+  deadlines   List todos with deadlines, soonest first
+  inbox       List todos in the Inbox
+  logbook     List completed and canceled todos, most recent first
+  someday     List Someday todos with no scheduled date
+  today       List today's todos, including This Evening
+  trash       List trashed todos and projects
+  upcoming    List scheduled todos grouped by date
+
+Collections:
+  areas       List all areas
+  projects    List projects
+  tags        List all tags
+
+Lookup:
+  search      Full-text search across todos and projects
+  show        Show an item by UUID, prefix, or title (Quick Find)
+
+Actions:
+  add         Add a todo
+  cancel      Cancel a todo or project
+  done        Complete a todo or project
+  edit        Edit a todo or project's attributes
+  move        Move a todo or project to a project or area (the app's Move)
+  open        Reveal an item or built-in list in Things.app
+  schedule    Schedule a todo or project (the app's When)
+
+Flags:
+      --all          show all items without pagination (list commands)
+      --db string    Things database path (overrides THINGSDB)
+      --desc         reverse the --sort order (list commands)
+  -h, --help         help for things3
+  -j, --json         output as JSON
+  -n, --limit int    max items to display (0 = unlimited)
+      --page page    page number, 1-based (list commands) (default 1)
+      --sort sort    sort by: date, created, modified, title (list commands)
+      --tag string   keep only items carrying this tag, case-insensitive (list commands)
+      --text         output as plain text (default)
+  -y, --yaml         output as YAML
+```
+
+The format switches (`--text` / `--json` / `--yaml`) are mutually exclusive, text is the default, and lists show 10 items per page unless `-n` or `--all` says otherwise. Write commands additionally accept `--dry-run` (print the `things:///` URL without executing) and `--no-verify` (skip the post-write confirmation).
+
+### Read examples
+
 ```bash
-things3 list <view>            # List tasks from a view
-things3 search <query>         # Search tasks by title
-things3 search --uuid <prefix> # Search tasks by UUID prefix
-things3 version                # Print version information
+things3 today                        # Today view, This Evening sectioned
+things3 upcoming                     # scheduled todos grouped by date, repeating tasks included
+things3 logbook --days 7 -n 5        # five most recent completions this week
+things3 anytime --tag work --sort title
+things3 search meeting --page 2      # paginated full-text search
+things3 show Stzhb3Sc                # any printed 8-char UUID is a valid query
 ```
 
-**Available views**: `inbox`, `today`, `upcoming`, `anytime`, `someday`, `logbook`, `deadlines`, `projects`, `areas`, `tags`
+Text lists print rows like
 
-### Global Flags
+```
+STATUS   UUID      TITLE
+[ ]      52vEKPy3  Buy concert tickets | 2026-07-03 | @Personal | #errand
+-- 1-10 of 44 (page 1/5) | next: --page 2 | all: --all
+```
 
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--json` | `-j` | Output as JSON |
-| `--yaml` | `-y` | Output as YAML |
-| `--limit` | `-n` | Max items to display (0 for unlimited) |
-
-The `logbook` view also supports `--days` (`-d`) to limit results to recent N days (default: 30, 0 for all).
-
-### Examples
+and machine formats wrap every list in a self-describing envelope:
 
 ```bash
-things3 list today              # Today's tasks
-things3 list inbox --json       # Inbox as JSON
-things3 list logbook --days 7   # Recent 7 days
-things3 search meeting          # Search by title
-things3 search --uuid 4fthuhgF  # Search by UUID prefix
-things3 list areas --yaml       # Areas as YAML
-things3 list projects -n 5      # First 5 projects
+$ things3 upcoming --json --page 2 | jq '{total, page, pages, first: .items[0].title}'
+{ "total": 44, "page": 2, "pages": 5, "first": "Weekly review" }
 ```
 
-### Output Formats
+### Write examples
 
-**Default (table)**:
+```bash
+things3 add "Buy milk" --when today --reminder 18:00 --tags errand
+things3 add "Ship v1" --deadline 2026-08-01 --project "Launch"
+things3 add project "Launch"
+things3 done "Buy milk"              # resolve -> execute -> verify against the DB
+things3 schedule "Ship v1" 2026-07-10
+things3 move "Ship v1" --to Launch
+things3 edit "Ship v1" --title "Ship v1.0" --clear-deadline
 ```
-STATUS   UUID      TYPE     TITLE
-[x]      4fthuhgF  project  Task title | 2024-01-15 | #tag1 #tag2
-[ ]      WZR4hDw5  todo     Another task | due:2024-02-01
-[-]      gjUph7Jz  todo     Canceled task | 2024-01-10
-```
 
-Status indicators: `[ ]` incomplete, `[x]` completed, `[-]` canceled.
+Targets resolve by exact UUID, UUID prefix (4+ chars), exact title, then title substring. An ambiguous target prints a candidate table with a UUID hint, executes nothing, and exits `2`; success (including a sent-but-unconfirmed write) exits `0`; every other error exits `1`. Under `--json`, errors arrive on stderr as `{"error", "candidates"}`.
 
-**JSON** (`--json`): Full task objects as a JSON array.
-
-**YAML** (`--yaml`): Full task objects in YAML format.
+Inherited URL-scheme limits (not worked around): no delete or trash, no move to Inbox, checklist is replace-only, repeating rules are read-only, and unknown tags are silently ignored by Things.
 
 ## Library
 
-### Installation
+### Install
 
 ```bash
 go get github.com/moond4rk/things3
 ```
 
-> **Note**: Requires CGO enabled (uses `go-sqlite3`). macOS only.
-
-### Quick Start
+### Quick start
 
 ```go
 package main
@@ -123,234 +148,80 @@ func main() {
 
     ctx := context.Background()
 
-    // Get today's tasks
+    // Composed views
     today, _ := client.Today(ctx)
-    for _, task := range today {
-        fmt.Printf("- %s\n", task.Title)
-    }
+    upcoming, _ := client.Upcoming(ctx) // includes repeating tasks' next occurrences
+    fmt.Println(len(today), len(upcoming))
 
-    // Create a new todo
-    client.AddTodo().
+    // Typed query builders
+    todos, _ := client.Todos().
+        Status().Incomplete().
+        StartDate().Future().
+        All(ctx)
+    fmt.Println(len(todos))
+
+    // Writes via the URL scheme
+    _ = client.AddTodo().
         Title("Buy groceries").
         Notes("Milk, eggs, bread").
         When(things3.Today()).
+        Tags("errand").
         Execute(ctx)
 }
 ```
 
-### API Overview
+### Query builders
 
-#### Query Operations
-
-##### Convenience Methods
+One builder per domain type; filters chain and copy-on-write, terminals execute:
 
 ```go
-client.Inbox(ctx)                      // Tasks in Inbox
-client.Today(ctx)                      // Today's tasks
-client.Upcoming(ctx)                   // Scheduled future tasks
-client.Anytime(ctx)                    // Anytime tasks
-client.Someday(ctx)                    // Someday tasks
-client.Logbook(ctx)                    // Completed/canceled tasks
-client.Trash(ctx)                      // Trashed tasks
-client.Todos(ctx)                      // All incomplete to-dos
-client.Projects(ctx)                   // All incomplete projects
-client.Deadlines(ctx)                  // Tasks with deadlines
-client.Search(ctx, "query")            // Search tasks
-client.CreatedWithin(ctx, DaysAgo(7))  // Tasks from last 7 days
+client.Todos().Status().Incomplete().All(ctx)          // []Todo
+client.Todos().InProject(uuid).Count(ctx)              // int
+client.Todos().WithUUID(uuid).First(ctx)               // *Todo, checklist loaded
+client.Todos().Deadline().Before(t).All(ctx)           // date filters: Exists, Future, Past, On, Before, After, ...
+client.Projects().InArea(uuid).All(ctx)
+client.Headings().InProject(uuid).All(ctx)
+client.Areas().All(ctx)
+client.Tags().All(ctx)
 ```
 
-##### Fluent Query Builder
+Relationships are flat: parent references come inline for free (`todo.ProjectTitle`, `todo.AreaTitle` from SQL JOINs); children are separate queries (`Todos().InProject(uuid)`).
 
-```go
-// Type-safe status filtering
-tasks, _ := client.Tasks().
-    Type().Todo().
-    Status().Incomplete().
-    All(ctx)
-
-// Date filtering
-tasks, _ := client.Tasks().
-    StartDate().Future().
-    Deadline().OnOrBefore(time.Now().AddDate(0, 0, 7)).
-    All(ctx)
-
-// Filter by area, project, or tag
-tasks, _ := client.Tasks().
-    InArea("area-uuid").
-    InTag("work").
-    All(ctx)
-
-// Get single task or count
-task, _ := client.Tasks().WithUUID("task-uuid").First(ctx)
-count, _ := client.Tasks().Status().Completed().Count(ctx)
-```
-
-##### Areas and Tags
-
-```go
-// Get all areas with their tasks
-areas, _ := client.Areas().IncludeItems(true).All(ctx)
-
-// Get all tags
-tags, _ := client.Tags().All(ctx)
-```
-
-#### Add Operations
-
-##### Create Todo
+### Writes
 
 ```go
 client.AddTodo().
-    Title("Task title").
-    Notes("Task notes").
-    When(things3.Today()).              // today's date
-    Deadline(time.Date(2024, 12, 31, 0, 0, 0, 0, time.Local)).
-    Tags("work", "urgent").
+    Title("Task").
+    When(things3.Tomorrow()).
+    Reminder(9, 0).
+    Deadline(deadline).
     ChecklistItems("Step 1", "Step 2").
-    List("Project Name").               // or ListID("project-uuid")
-    Reveal(true).
-    Execute(ctx)
-```
-
-##### Create Project
-
-```go
-client.AddProject().
-    Title("New Project").
-    Notes("Project description").
-    Area("Work").                       // or AreaID("area-uuid")
-    Tags("important").
-    Deadline(time.Date(2024, 12, 31, 0, 0, 0, 0, time.Local)).
-    Todos("Task 1", "Task 2", "Task 3"). // child todos
-    Execute(ctx)
-```
-
-#### Update Operations
-
-Update operations automatically manage authentication tokens.
-
-```go
-// Update a todo
-client.UpdateTodo("todo-uuid").
-    Title("Updated title").
-    Completed(true).
-    AddTags("done").
+    List("Project Name").              // or ListID(uuid)
     Execute(ctx)
 
-// Update a project
-client.UpdateProject("project-uuid").
-    Notes("Updated notes").
-    Canceled(true).
-    Execute(ctx)
-```
+client.AddProject().Title("New Project").Tags("work").Execute(ctx)
 
-#### Show Operations
+client.UpdateTodo(uuid).Completed(true).Execute(ctx)   // auth token managed automatically
+client.UpdateProject(uuid).Notes("Updated").Execute(ctx)
 
-```go
-client.Show(ctx, "item-uuid")                    // Show specific item
-client.ShowList(ctx, things3.ListToday)          // Show Today view
-client.ShowSearch(ctx, "urgent tasks")           // Show search results
-
-// Complex navigation
-client.ShowBuilder().
-    List(things3.ListInbox).
-    Filter("work", "urgent").
-    Execute(ctx)
-```
-
-#### Batch Operations
-
-```go
-// Create multiple items at once
-client.Batch().
-    AddTodo(func(t things3.BatchTodoConfigurator) {
-        t.Title("Task 1").Tags("work")
-    }).
-    AddTodo(func(t things3.BatchTodoConfigurator) {
-        t.Title("Task 2").When(things3.Today())
-    }).
-    AddProject(func(p things3.BatchProjectConfigurator) {
-        p.Title("New Project").Notes("Description")
-    }).
-    Reveal(true).
-    Execute(ctx)
+client.Show(ctx, uuid)                                 // navigate the app
+client.Batch().AddTodo(func(t things3.BatchTodoConfigurator) {
+    t.Title("Task 1")
+}).Execute(ctx)                                        // multiple items in one URL
 ```
 
 ### Configuration
 
 ```go
-// Use custom database path
 client, _ := things3.NewClient(
-    things3.WithDatabasePath("/path/to/main.sqlite"),
-)
-
-// Enable SQL logging for debugging
-client, _ := things3.NewClient(
-    things3.WithPrintSQL(true),
-)
-
-// Control Things app focus behavior
-client, _ := things3.NewClient(
-    things3.WithForeground(),        // Bring Things to foreground (default for show)
-    things3.WithBackground(),        // Run in background without stealing focus
-)
-
-// Preload authentication token
-client, _ := things3.NewClient(
-    things3.WithPreloadToken(),
+    things3.WithDatabasePath("/path/to/main.sqlite"), // else THINGSDB env, else auto-discovery
+    things3.WithPrintSQL(true),                       // log executed SQL
+    things3.WithForegroundExecution(),                // writes bring Things to the foreground
+    things3.WithBackgroundNavigation(),               // show/navigation without stealing focus
+    things3.WithPreloadToken(),                       // read the auth token at construction
 )
 ```
-
-#### Database Discovery
-
-The database path is resolved in order:
-1. Custom path via `WithDatabasePath()`
-2. `THINGSDB` environment variable
-3. Default: `~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/Things Database.thingsdatabase/main.sqlite`
-
-### Types
-
-```go
-// Task types
-things3.TaskTypeTodo     // 0 - To-do item
-things3.TaskTypeProject  // 1 - Project
-things3.TaskTypeHeading  // 2 - Heading
-
-// Status
-things3.StatusIncomplete // 0
-things3.StatusCanceled   // 2
-things3.StatusCompleted  // 3
-
-// Start bucket
-things3.StartInbox    // 0
-things3.StartAnytime  // 1
-things3.StartSomeday  // 2
-
-// Date helper functions
-things3.Today()       // returns today's date at midnight
-things3.Tomorrow()    // returns tomorrow's date at midnight
-
-// Scheduling methods (called on builders)
-.When(time.Time)      // schedule for specific date
-.WhenEvening()        // schedule for this evening
-.WhenAnytime()        // schedule for anytime (no specific date)
-.WhenSomeday()        // schedule for someday (indefinite future)
-
-// List IDs for navigation
-things3.ListInbox
-things3.ListToday
-things3.ListUpcoming
-things3.ListAnytime
-things3.ListSomeday
-things3.ListLogbook
-things3.ListTrash
-```
-
-## References
-
-- [Things URL Scheme Documentation](https://culturedcode.com/things/support/articles/2803573/)
-- [things.py](https://github.com/thingsapi/things.py) - Python library (inspiration for database access patterns)
 
 ## License
 
-Apache License 2.0
+[Apache License 2.0](LICENSE)

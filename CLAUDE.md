@@ -1,242 +1,87 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code when working in this repository.
 
-## Mandatory Rules
+## What This Is
 
-- **English Only**: All code, comments, documentation, and commit messages MUST be in English
-- **No Emoji**: Never use emoji in any file (code, docs, comments, commits)
-- **No Local Paths**: Never expose local machine paths in code, tests, or documentation
-- **Design Focus**: RFC documents focus on design decisions, avoid large code blocks
-- **No Backward Compatibility**: Breaking changes are acceptable. Prioritize optimal design and elegant code over backward compatibility. Do not deprecate, just remove or redesign
+**things3** is two things in one repo, wired as separate Go modules via `go.work`:
 
-## Project Overview
+- A Go **library** (repo root): read-only access to the Things 3 macOS SQLite database plus type-safe `things:///` URL-scheme building and execution. A port of Python `things.py` with full API parity.
+- A **CLI** (`cmd/things3`): mirrors the app's sidebar views and interaction verbs on top of the library.
 
-**things3** is a Go library providing read-only access to the Things 3 macOS application's SQLite database and type-safe URL Scheme building and execution. It is a Go port of the Python things.py library with full API parity.
+The single most important architectural fact: **reads and writes take different roads**. Reads query the SQLite database directly (`internal/database`). Writes can only go through the fire-and-forget URL scheme (`internal/scheme`) - there is no write access to the database, and the scheme's limits are hard boundaries, never worked around: no delete or trash, no move-to-Inbox, checklist replace-only, repeating items read-only, tags never created, auth token auto-read from the DB.
 
-## Build and Development Commands
+## Commands
+
+Run in both modules (repo root and `cmd/things3`):
 
 ```bash
-go test ./...                              # Run all tests
-go test -cover ./...                       # Run tests with coverage
-go test -run TestTodoQuery ./...           # Run single test
-golangci-lint run                          # Run linter
-gofumpt -l -w .                            # Format (stricter than gofmt)
-goimports -w -local github.com/moond4rk/things3 . # Format Import
-go build ./...                             # Build
+go build ./... && go test ./...                    # Build and test
+golangci-lint run                                  # Lint
+gofumpt -l -w .                                    # Format (stricter than gofmt)
+goimports -w -local github.com/moond4rk/things3 .  # Format imports
 ```
 
-## Architecture
+## Library Architecture
 
-### Design Philosophy
+Core principles, in order of importance:
 
-- **Single Entry Point**: `NewClient()` is the only public constructor
-- **Typed Query Builders**: Separate builders for Todo, Project, Heading (no union Task type)
-- **Flat Data Model**: No nested items; parent refs inline, child queries via builders
-- **Interface-Based API**: Methods return interfaces, not concrete types
-- **Go Idioms**: Small interfaces, generics for type-safe sub-builders
+- **Single entry point**: `NewClient()` is the only public constructor (functional options via `ClientOption`). Everything hangs off `Client`.
+- **Typed, copy-on-write query builders**: one builder per domain type (`Todos()`, `Projects()`, `Headings()`, `Areas()`, `Tags()`), no union Task type. Chainable filters clone the builder and return interfaces; terminals are `All`/`First`/`Count`. Generic sub-builders (`StatusFilter[T]`, `StartFilter[T]`, `DateFilter[T]`) keep filter chains type-safe.
+- **Flat data model**: no nested items. Upward relationships come inline for free from SQL JOINs (`todo.ProjectTitle`, `todo.AreaTitle`); downward relationships are separate builder queries (`Todos().InProject(uuid)`).
+- **View composition lives on Client**: anything beyond a single query is a Client method, not a builder trick - `Today()` (three-part composition with Evening ordering), `Upcoming()` (scheduled todos merged with repeating templates).
+- **Naming**: `With*` identity, `In*` relationship, `Has*` existence; enums type-prefixed (`StatusCompleted`, `StartInbox`).
 
-### Design Patterns
+Domain facts that are easy to get wrong:
 
-- **Client Configuration**: Functional Options pattern (ClientOption)
-- **Query Building**: Builder pattern with chainable methods returning typed interfaces
-- **URL Building**: Builder pattern with Build() or Execute()
-- **Generic Sub-builders**: `StatusFilter[T]`, `StartFilter[T]`, `DateFilter[T]`
+- Enums map database integers: Status 0/2/3 = incomplete/canceled/completed; StartBucket 0/1/2 = inbox/anytime/someday.
+- Things stores dates in custom binary formats (27-bit date, packed time); all conversion is centralized in `internal/database/date.go` - never hand-roll it.
+- Repeating tasks: future occurrences are never materialized as rows. Only the template row (`rt1_recurrenceRule` set) exists, carrying the single next occurrence in `rt1_nextInstanceStartDate`. Normal queries exclude templates; `Upcoming()` opts them back in and maps the next occurrence to `StartDate`.
 
-### Interface Hierarchy
+## CLI Architecture (cmd/things3)
 
-```
-Layer 1: Terminal Operations
-├── TodoQueryExecutor    (All, First, Count -> []Todo)
-├── ProjectQueryExecutor (All, First, Count -> []Project)
-├── HeadingQueryExecutor (All, First, Count -> []Heading)
-├── AreaQueryExecutor    (All, First, Count -> []Area)
-├── TagQueryExecutor     (All, First -> []Tag)
-└── URLBuilder           (Build, Execute)
+Cobra with factory functions (`NewXxxCmd()`, registered explicitly in `NewRootCmd()`; no `init()` except the pinned `version.go` - do not touch it). Four command groups: **Views** (`today`, `inbox`, `upcoming`, `anytime`, `someday`, `logbook`, `deadlines`, `trash`), **Collections** (`projects`, `areas`, `tags`), **Lookup** (`show`, `search`), **Actions** (`add`, `done`, `cancel`, `schedule`, `move`, `edit`, `open`).
 
-Layer 2: Generic Sub-builders
-├── StatusFilter[T]  (Incomplete, Completed, Canceled, Any)
-├── StartFilter[T]   (Inbox, Anytime, Someday)
-└── DateFilter[T]    (Exists, Future, Past, On, Before, After, etc.)
+### One uniform global flag surface
 
-Layer 3: Composed Query Builders
-├── TodoQueryBuilder    = TodoQueryExecutor + filters + IncludeChecklist
-├── ProjectQueryBuilder = ProjectQueryExecutor + filters
-├── HeadingQueryBuilder = HeadingQueryExecutor + WithUUID + InProject
-├── AreaQueryBuilder    = AreaQueryExecutor + filters
-└── TagQueryBuilder     = TagQueryExecutor + filters
+All flags are persistent on root; every command shows the same surface, non-list commands accept-and-ignore the list flags (deliberate trade-off):
 
-Layer 4: URL Scheme Builders (aliased from internal/scheme)
-├── TodoAdder, ProjectAdder     (creation)
-├── TodoUpdater, ProjectUpdater (update)
-└── ShowNavigator               (navigation)
+- Format: `--text` (default) / `-j, --json` / `-y, --yaml`, mutually exclusive booleans
+- List shaping: `-n` (page size), `--page`, `--all`, `--sort date|created|modified|title`, `--desc`, `--tag`
+- `--db <path>` overrides discovery (precedence: `--db` > `THINGSDB` env > auto)
 
-Layer 5: Batch Operations (aliased from internal/scheme)
-├── BatchCreator, AuthBatchCreator
-└── BatchTodoConfigurator, BatchProjectConfigurator
-```
+List pipeline is always fetch -> tag-filter -> sort -> paginate, default page size 10 in every format. Text prints a pagination footer; `json`/`yaml` lists are a self-describing envelope `{items, total, page, pages}` where `items` is always `[]`, never `null`. Detail views, write results, and stderr error objects stay bare. Write commands add `--dry-run` (print URL, do not execute) and `--no-verify`.
 
-### Core Components
+### Resolve -> execute -> verify
 
-| File | Purpose |
-|------|---------|
-| `client.go` | Client type, NewClient(), query/URL entry points |
-| `client_options.go` | ClientOption functional options |
-| `interfaces.go` | All public interface definitions |
-| `models.go` | Todo, Project, Heading, Area, Tag, ChecklistItem |
-| `types.go` | TaskType, Status, StartBucket enums |
-| `db.go` | Internal db type, row-to-model conversion |
-| `query.go` | todoQuery, projectQuery, headingQuery builders |
-| `query_filter.go` | Generic statusFilter, startFilter, dateFilter |
-| `query_area.go` | areaQuery builder |
-| `query_tag.go` | tagQuery builder |
-| `errors.go` | Error definitions |
-| `time_helpers.go` | DaysAgo, WeeksAgo, Today, ApplyWhen |
-| `internal/database/` | DB connection, SQL, filters, date conversion |
-| `internal/scheme/` | URL scheme building and execution |
+Every action follows `runWrite` (`write.go`): resolve the target, execute the URL scheme, poll the database to confirm. Two cobra-free internal packages carry the logic and are candidates for promotion into the library:
 
-### Domain Types
+- `internal/resolve`: tiered matching - exact UUID -> UUID prefix (>= 4 chars) -> exact title -> title substring - open-before-closed; every 8-char UUID the CLI prints is a valid query, for targets and `--to` destinations alike.
+- `internal/verify`: polls the DB (2s budget, injectable clock) to confirm a fire-and-forget write landed.
 
-Separate types per domain concept (no union Task type):
-- `Todo` - actionable item with checklist, relationships, dates
-- `Project` - container for organizing todos
-- `Heading` - grouping label within a project (UUID + Title only)
-- `Area` - high-level responsibility area
-- `Tag` - label for categorizing items
-- `ChecklistItem` - sub-item within a todo
+### Exit-code contract
 
-### Type System
+- **0** - success, including empty lists and sent-but-unconfirmed writes
+- **1** - any error (bad flags, DB failure, not found, unparseable input)
+- **2** - ambiguous target: candidates printed with a UUID-targeting hint, nothing executed
 
-Enums are integer-based for database mapping:
-- Status: 0=incomplete, 2=canceled, 3=completed
-- StartBucket: 0=inbox, 1=anytime, 2=someday
-- TaskType: 0=todo, 1=project, 2=heading (internal use only)
+Commands only return errors; `main.go` owns rendering (`RenderError`, format-aware: JSON errors go to stderr as `{"error", "candidates"}`) and `os.Exit`. Wrap DB command bodies with `withClient` (never open/close the client inline); write through `cmd.OutOrStdout()`; set `GroupID` and a realistic `Example` on every command.
 
-### Things Date Format
+## Development Workflow
 
-Things uses custom binary date formats:
-- Date: YYYYYYYYYYYMMMMDDDDD0000000 (27-bit integer)
-- Time: hhhhhmmmmmm00000000000000000000
+1. **Design first**: significant changes start as an RFC in `rfcs/NNN_snake_case_title.md` (header: Status/Author/Date; sections: Summary, Design, Implementation Notes). Current specs: RFC 009 (library query/model), RFC 012 (CLI) as amended by RFC 013 (list pagination, output envelope).
+2. **Implement library before CLI** when a change spans both; keep the CLI a thin consumer.
+3. **Verify in both modules**: `go build`, `go test`, `golangci-lint run`, `gofumpt` before finishing.
+4. **Sync docs**: `README.md` and `cmd/things3/README.md` must match implemented behavior. Release notes use Library and CLI bullet sections with PR references.
 
-## API Design
+House rules for every artifact: English only, no emoji, no local machine paths. Backward compatibility is a non-goal - remove or redesign, never deprecate.
 
-### Client Entry Points
+## Testing
 
-```go
-client, _ := things3.NewClient()
-defer client.Close()
-
-// Typed query builders
-todos, _ := client.Todos().Status().Incomplete().All(ctx)
-projects, _ := client.Projects().InArea(uuid).All(ctx)
-headings, _ := client.Headings().InProject(uuid).All(ctx)
-areas, _ := client.Areas().All(ctx)
-tags, _ := client.Tags().All(ctx)
-
-// URL scheme operations
-client.AddTodo().Title("Buy milk").Execute(ctx)
-client.UpdateTodo(uuid).Completed(true).Execute(ctx)
-client.Show(ctx, uuid)
-```
-
-### Query Builder Pattern
-
-Filter methods are chainable, terminal methods execute the query:
-- `.All(ctx)` - Get all matching results
-- `.First(ctx)` - Get first match (auto-loads checklist for todos)
-- `.Count(ctx)` - Count matches
-
-### Relationship Model
-
-- **Upward (inline)**: `todo.ProjectUUID`, `todo.AreaTitle` (from SQL JOIN, zero cost)
-- **Downward (query)**: `client.Todos().InProject(uuid)` (separate builder call)
-
-## Code Quality Standards
-
-### Naming Conventions
-
-- Exported types: PascalCase (Client, Todo, TodoQueryBuilder)
-- Internal types: camelCase (db, taskQuery, todoQuery)
-- Interfaces: Verb+er or descriptive (TodoQueryBuilder, URLBuilder)
-- Enums: Type prefix (StatusCompleted, StartInbox)
-- Query methods: With* for identity, In* for relationships, Has* for existence
-
-### Documentation Requirements
-
-Every exported type and function MUST have Go doc comments starting with the identifier name.
-
-### Testing Requirements
-
-- Table-driven tests for query building
-- Integration tests with test database in testdata/
-- Never hardcode local paths in tests
-
-## RFC Documentation
-
-RFC documents are stored in `rfcs/` directory with naming format `NNN_snake_case_title.md`.
-
-Active RFCs:
-- RFC 008: Domain Model Redesign (Superseded by RFC 009 for query/model sections)
-- RFC 009: Query Builder Redesign (current design spec)
-
-### RFC Template
-
-```
-# RFC NNN: Title
-
-Status: Draft | Accepted | Implemented | Superseded
-Author: @username
-Date: YYYY-MM-DD
-
-## Summary
-One paragraph describing the core content.
-
-## Design
-Detailed design decisions with rationale.
-
-## Implementation Notes
-Key implementation details and considerations.
-```
-
-## Release Note Template
-
-Release notes use this format with Library and CLI sections:
-
-```
-# things3 vX.Y.Z - Short Title
-
-One-line summary.
-
-## Breaking Changes (if any)
-Brief description of what changed and migration path.
-
-## Library
-- **Feature name** (#PR): One-line description
-- **Bug fix**: Description (#PR)
-
-## CLI
-- **Feature name** (#PR): One-line description
-
-**Full Changelog**: https://github.com/moonD4rk/things3/compare/vPREV...vX.Y.Z
-```
-
-## CLI Development (cmd/things3)
-
-CLI uses Cobra with factory function pattern (no `init()`).
-
-### Key Rules
-
-- Use `NewXxxCmd()` factory functions, avoid `init()`
-- Use `cmd.OutOrStdout()` for testability
-- Return errors, let `main()` handle `os.Exit()`
-- Register subcommands explicitly in `NewRootCmd()`
-
-## Dependencies
-
-- `github.com/mattn/go-sqlite3` - SQLite driver (CGO, optimal for macOS-only)
-- `github.com/stretchr/testify` - Testing (dev only)
+- Table-driven throughout; integration tests run against the fixture in `testdata/` via `thingstest.DatabasePath(t)` with `t.Setenv("THINGSDB", ...)` or `--db`.
+- **Action-command tests never execute osascript**: they assert `--dry-run` URLs and error paths only. No test requires Things to be installed; resolve/verify are covered directly against the fixture.
+- Every exported identifier gets a doc comment starting with its name. Real end-to-end write verification is manual, against a live Things app.
 
 ## Reference
 
-- Python Source: https://github.com/thingsapi/things.py
-- Database path discoverable via THINGSDB environment variable
+- Python origin: https://github.com/thingsapi/things.py

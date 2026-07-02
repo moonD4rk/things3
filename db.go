@@ -51,6 +51,8 @@ func convertTaskRowToTodo(r *database.TaskRow) Todo {
 		CreatedAt:  r.Created,
 		ModifiedAt: r.Modified,
 		Trashed:    r.Trashed,
+		Evening:    r.Evening,
+		Repeating:  r.Repeating,
 	}
 
 	// Convert status string to Status enum
@@ -97,6 +99,7 @@ func convertTaskRowToProject(r *database.TaskRow) Project {
 		CreatedAt:  r.Created,
 		ModifiedAt: r.Modified,
 		Trashed:    r.Trashed,
+		Repeating:  r.Repeating,
 	}
 
 	project.Status = parseStatusFromString(r.Status)

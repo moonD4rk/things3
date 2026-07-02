@@ -20,6 +20,9 @@ const (
 	colDeadline         = "deadline"
 	colStartDate        = "startDate"
 	colReminderTime     = "reminderTime"
+	// colNextInstanceStartDate holds a repeating template's next occurrence in
+	// Things date format; for a template it plays the role of startDate.
+	colNextInstanceStartDate = "rt1_nextInstanceStartDate"
 )
 
 // Filter SQL expressions.
@@ -45,7 +48,13 @@ const (
 
 	// Recurring filters
 	filterIsNotRecurring = "rt1_recurrenceRule IS NULL"
+	filterIsRecurring    = "rt1_recurrenceRule IS NOT NULL"
 )
+
+// startBucketEvening is the TMTask.startBucket value marking a todo as being in
+// the This Evening section of Today. Confirmed on a live database (schema v26)
+// by dragging a todo into This Evening and observing startBucket flip 0 -> 1.
+const startBucketEvening int64 = 1
 
 // Settings UUID for auth token.
 const settingsUUID = "RhAzEf6qDxCD5PmnZVtBZR"

@@ -20,6 +20,7 @@ func scanTaskRow(rows *sql.Rows) (*TaskRow, error) {
 		&s.headingUUID, &s.headingTitle, &s.notes, &s.tags, &s.start,
 		&s.checklist, &s.startDate, &s.deadline, &s.reminderTime,
 		&s.stopDate, &s.created, &s.modified, &s.index, &s.todayIndex,
+		&s.startBucket, &s.repeating,
 	)
 	if err != nil {
 		return nil, err
@@ -29,14 +30,14 @@ func scanTaskRow(rows *sql.Rows) (*TaskRow, error) {
 
 // taskScanRow holds raw SQL scan targets for a task query.
 type taskScanRow struct {
-	uuid, title                                    string
-	index, todayIndex                              int
-	typeStr, statusStr                             sql.NullString
-	trashed, tags, checklist                       sql.NullInt64
-	areaUUID, areaTitle, projectUUID, projectTitle sql.NullString
-	headingUUID, headingTitle, notes, start        sql.NullString
-	startDate, deadline, reminderTime              sql.NullString
-	stopDate, created, modified                    sql.NullFloat64
+	uuid, title                                      string
+	index, todayIndex                                int
+	typeStr, statusStr                               sql.NullString
+	trashed, tags, checklist, startBucket, repeating sql.NullInt64
+	areaUUID, areaTitle, projectUUID, projectTitle   sql.NullString
+	headingUUID, headingTitle, notes, start          sql.NullString
+	startDate, deadline, reminderTime                sql.NullString
+	stopDate, created, modified                      sql.NullFloat64
 }
 
 // toTaskRow converts raw scan values into a TaskRow.
@@ -65,6 +66,8 @@ func (s *taskScanRow) toTaskRow() *TaskRow {
 		Modified:     unixTimeValue(s.modified),
 		Index:        s.index,
 		TodayIndex:   s.todayIndex,
+		Evening:      s.startBucket.Valid && s.startBucket.Int64 == startBucketEvening,
+		Repeating:    nullBool(s.repeating),
 	}
 	return row
 }

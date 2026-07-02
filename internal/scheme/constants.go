@@ -88,6 +88,10 @@ const (
 const (
 	// KeyData contains the URL-encoded JSON array.
 	KeyData = "data"
+	// KeyType is the item type field in a JSON payload entry.
+	KeyType = "type"
+	// KeyAttributes is the attributes field in a JSON payload entry.
+	KeyAttributes = "attributes"
 )
 
 // URL Scheme limits.

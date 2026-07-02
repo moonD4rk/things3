@@ -17,6 +17,12 @@ func TestTaskFilter_buildWhere(t *testing.T) {
 		"TASK.trashed = 0" + and +
 		"NOT IFNULL(PROJECT.trashed, 0)" + and +
 		"NOT IFNULL(PROJECT_OF_HEADING.trashed, 0)"
+	// templatePrefix mirrors defaultPrefix but selects repeating templates
+	// instead of excluding them.
+	templatePrefix := "TASK.rt1_recurrenceRule IS NOT NULL" + and +
+		"TASK.trashed = 0" + and +
+		"NOT IFNULL(PROJECT.trashed, 0)" + and +
+		"NOT IFNULL(PROJECT_OF_HEADING.trashed, 0)"
 
 	tests := []struct {
 		name   string
@@ -157,6 +163,24 @@ func TestTaskFilter_buildWhere(t *testing.T) {
 			name:   "start date future",
 			filter: TaskFilter{StartDateFilter: &DateFilterValue{Relative: DateFuture}},
 			want:   defaultPrefix + and + "TASK.startDate > " + todayThingsDateSQL(),
+		},
+		{
+			name:   "repeating templates inverts recurrence exclusion",
+			filter: TaskFilter{RepeatingTemplates: new(true)},
+			want:   templatePrefix,
+		},
+		{
+			name:   "repeating templates false keeps default exclusion",
+			filter: TaskFilter{RepeatingTemplates: new(false)},
+			want:   defaultPrefix,
+		},
+		{
+			name: "repeating templates remap start date to next occurrence",
+			filter: TaskFilter{
+				RepeatingTemplates: new(true),
+				StartDateFilter:    &DateFilterValue{Relative: DateFuture},
+			},
+			want: templatePrefix + and + "TASK.rt1_nextInstanceStartDate > " + todayThingsDateSQL(),
 		},
 		{
 			name:   "start date past",

@@ -108,7 +108,6 @@ type TodoQueryBuilder interface {
 	StartDate() DateFilter[TodoQueryBuilder]
 	StopDate() DateFilter[TodoQueryBuilder]
 	Deadline() DateFilter[TodoQueryBuilder]
-	DeadlineSuppressed(suppressed bool) TodoQueryBuilder
 	CreatedAfter(t time.Time) TodoQueryBuilder
 
 	Search(query string) TodoQueryBuilder

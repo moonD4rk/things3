@@ -119,6 +119,11 @@ linters:
           - dupl
           - funlen
           - lll
+          - goconst
+      # version.go's init wires buildinfo/ldflags version data; intentionally allowed.
+      - path: cmd/version\.go
+        linters:
+          - gochecknoinits
 
 formatters:
   enable:

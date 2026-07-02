@@ -36,6 +36,12 @@ type Todo struct {
 	CanceledAt  *time.Time `json:"canceled_at,omitempty"`
 
 	Trashed bool `json:"trashed,omitempty"`
+
+	// Evening reports whether the todo is in the This Evening section of Today.
+	Evening bool `json:"evening,omitempty"`
+	// Repeating reports whether the todo belongs to a repeating series, either a
+	// generated instance or the template that schedules its next occurrence.
+	Repeating bool `json:"repeating,omitempty"`
 }
 
 // Project represents a container for organizing todos in Things 3.
@@ -67,6 +73,10 @@ type Project struct {
 	CanceledAt  *time.Time `json:"canceled_at,omitempty"`
 
 	Trashed bool `json:"trashed,omitempty"`
+
+	// Repeating reports whether the project belongs to a repeating series, either
+	// a generated instance or the template that schedules its next occurrence.
+	Repeating bool `json:"repeating,omitempty"`
 }
 
 // Heading represents a grouping label within a project.

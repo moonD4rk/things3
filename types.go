@@ -248,9 +248,3 @@ const (
 	JSONItemTypeTodo    = scheme.JSONItemTypeTodo
 	JSONItemTypeProject = scheme.JSONItemTypeProject
 )
-
-// Headings creates heading entries for a project's items.
-// Used within BatchProjectConfigurator.Todos to organize todos under headings.
-func Headings(headings ...string) string {
-	return scheme.Headings(headings...)
-}

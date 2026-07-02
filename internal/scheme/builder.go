@@ -3,9 +3,9 @@ package scheme
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // addTodoBuilder builds URLs for creating new todos via the add command.
@@ -32,14 +32,20 @@ func (b *addTodoBuilder) Title(title string) TodoAdder {
 }
 
 // Titles sets multiple todo titles (creates multiple todos).
-// Titles are newline-separated.
+// Titles are newline-separated in the URL, so each title must not contain
+// a newline and each title is limited to MaxTitleLength characters.
 func (b *addTodoBuilder) Titles(titles ...string) TodoAdder {
-	combined := strings.Join(titles, "\n")
-	if len(combined) > MaxTitleLength {
-		b.err = ErrTitleTooLong
-		return b
+	for _, title := range titles {
+		if utf8.RuneCountInString(title) > MaxTitleLength {
+			b.err = ErrTitleTooLong
+			return b
+		}
+		if strings.Contains(title, "\n") {
+			b.err = ErrTitleContainsNewline
+			return b
+		}
 	}
-	b.attrs.SetString(KeyTitles, combined)
+	b.attrs.SetString(KeyTitles, strings.Join(titles, "\n"))
 	return b
 }
 
@@ -130,9 +136,10 @@ func (b *addTodoBuilder) Reveal(reveal bool) TodoAdder {
 }
 
 // Reminder sets a reminder time for the todo.
-// The reminder is combined with the scheduling date (When/WhenDate).
+// The reminder is combined with the scheduling date (When/WhenEvening).
 // If no scheduling date is set, defaults to "today".
 // Hour must be 0-23, minute must be 0-59.
+// Combining a reminder with WhenSomeday or WhenAnytime is a build error.
 func (b *addTodoBuilder) Reminder(hour, minute int) TodoAdder {
 	return SetReminder(b, hour, minute)
 }
@@ -150,17 +157,16 @@ func (b *addTodoBuilder) CompletionDate(date time.Time) TodoAdder {
 }
 
 // Build returns the Things URL for creating the todo.
+// Build is pure: it never mutates the builder, so it can be called
+// repeatedly (including via Execute) with identical results.
 func (b *addTodoBuilder) Build() (string, error) {
 	if b.err != nil {
 		return "", b.err
 	}
 
-	// Finalize when parameter with reminder time if set
-	b.attrs.FinalizeWhen()
-
-	query := url.Values{}
-	for k, v := range b.attrs.Params {
-		query.Set(k, v)
+	query, err := b.attrs.QueryValues()
+	if err != nil {
+		return "", err
 	}
 
 	return fmt.Sprintf("things:///%s?%s", CommandAdd, EncodeQuery(query)), nil
@@ -247,9 +253,9 @@ func (b *addProjectBuilder) AreaID(id string) ProjectAdder {
 }
 
 // Todos sets the child todo titles.
+// Titles are newline-separated in the URL, so each title must not contain a newline.
 func (b *addProjectBuilder) Todos(titles ...string) ProjectAdder {
-	b.attrs.SetStrings(KeyTodos, titles, "\n")
-	return b
+	return SetStrs(b, TodosParam, titles)
 }
 
 // Completed sets the completion status.
@@ -271,6 +277,7 @@ func (b *addProjectBuilder) Reveal(reveal bool) ProjectAdder {
 // The reminder is combined with the scheduling date (When).
 // If no scheduling date is set, defaults to "today".
 // Hour must be 0-23, minute must be 0-59.
+// Combining a reminder with WhenSomeday or WhenAnytime is a build error.
 func (b *addProjectBuilder) Reminder(hour, minute int) ProjectAdder {
 	return SetReminder(b, hour, minute)
 }
@@ -286,17 +293,16 @@ func (b *addProjectBuilder) CompletionDate(date time.Time) ProjectAdder {
 }
 
 // Build returns the Things URL for creating the project.
+// Build is pure: it never mutates the builder, so it can be called
+// repeatedly (including via Execute) with identical results.
 func (b *addProjectBuilder) Build() (string, error) {
 	if b.err != nil {
 		return "", b.err
 	}
 
-	// Finalize when parameter with reminder time if set
-	b.attrs.FinalizeWhen()
-
-	query := url.Values{}
-	for k, v := range b.attrs.Params {
-		query.Set(k, v)
+	query, err := b.attrs.QueryValues()
+	if err != nil {
+		return "", err
 	}
 
 	return fmt.Sprintf("things:///%s?%s", CommandAddProject, EncodeQuery(query)), nil

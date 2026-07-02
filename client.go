@@ -143,6 +143,14 @@ func (c *Client) ensureToken(ctx context.Context) (string, error) {
 		return "", err
 	}
 
+	// An empty stored token means URL scheme authorization was never enabled.
+	if token == "" {
+		return "", fmt.Errorf(
+			"%w: Things URL scheme authorization not set up (enable it in Things settings under General > Enable Things URLs)",
+			ErrAuthTokenNotFound,
+		)
+	}
+
 	// Cache successful result
 	c.tokenCache = token
 	return token, nil

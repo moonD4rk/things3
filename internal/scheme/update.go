@@ -3,42 +3,39 @@ package scheme
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"time"
 )
 
-// buildUpdateURL is a shared helper for building update URLs.
-// It handles lazy token loading, validation, and URL construction.
-func buildUpdateURL(
-	token *string,
-	tokenFunc func(context.Context) (string, error),
-	id string,
-	attrs *URLAttrs,
-	command Command,
-	validateFn func() error,
-) (string, error) {
-	// Lazy load token if needed
-	if *token == "" && tokenFunc != nil {
-		t, err := tokenFunc(context.Background())
-		if err != nil {
-			return "", err
-		}
-		*token = t
+// resolveToken ensures a non-empty auth token is cached in *token.
+// A successful fetch is cached and reused by later Build calls; a failed or
+// empty fetch returns an error immediately and is retried on the next Build.
+func resolveToken(ctx context.Context, token *string, tokenFunc func(context.Context) (string, error)) error {
+	if *token != "" {
+		return nil
 	}
+	if tokenFunc == nil {
+		return ErrEmptyToken
+	}
+	t, err := tokenFunc(ctx)
+	if err != nil {
+		return err
+	}
+	if t == "" {
+		return ErrEmptyToken
+	}
+	*token = t
+	return nil
+}
 
-	if err := validateFn(); err != nil {
+// buildUpdateURL constructs an update URL from already-validated inputs.
+// It is pure: the attribute store is never mutated.
+func buildUpdateURL(id, token string, attrs *URLAttrs, command Command) (string, error) {
+	query, err := attrs.QueryValues()
+	if err != nil {
 		return "", err
 	}
-
-	// Finalize when parameter with reminder time if set
-	attrs.FinalizeWhen()
-
-	query := url.Values{}
 	query.Set(KeyID, id)
-	query.Set(KeyAuthToken, *token)
-	for k, v := range attrs.Params {
-		query.Set(k, v)
-	}
+	query.Set(KeyAuthToken, token)
 
 	return fmt.Sprintf("things:///%s?%s", command, EncodeQuery(query)), nil
 }
@@ -115,6 +112,7 @@ func (b *updateTodoBuilder) WhenSomeday() TodoUpdater {
 // The reminder is combined with the scheduling date (When).
 // If no scheduling date is set, defaults to "today".
 // Hour must be 0-23, minute must be 0-59.
+// Combining a reminder with WhenSomeday or WhenAnytime is a build error.
 func (b *updateTodoBuilder) Reminder(hour, minute int) TodoUpdater {
 	return SetReminder(b, hour, minute)
 }
@@ -211,35 +209,36 @@ func (b *updateTodoBuilder) validate() error {
 	if b.err != nil {
 		return b.err
 	}
-	if b.token == "" {
-		return ErrEmptyToken
-	}
 	if b.id == "" {
 		return ErrIDRequired
 	}
 	return nil
 }
 
+// build validates the builder, resolves the auth token once using ctx,
+// and constructs the update URL.
+func (b *updateTodoBuilder) build(ctx context.Context) (string, error) {
+	if err := b.validate(); err != nil {
+		return "", err
+	}
+	if err := resolveToken(ctx, &b.token, b.tokenFunc); err != nil {
+		return "", err
+	}
+	return buildUpdateURL(b.id, b.token, &b.attrs, CommandUpdate)
+}
+
 // Build returns the Things URL for updating the todo.
-// If token is not set but tokenFunc is provided, it will fetch the token using context.Background().
-// For explicit context control, use Execute() instead.
+// If the token has not been resolved yet, the token function runs without a
+// caller context; use Execute for context-aware token loading.
 func (b *updateTodoBuilder) Build() (string, error) {
-	return buildUpdateURL(&b.token, b.tokenFunc, b.id, &b.attrs, CommandUpdate, b.validate)
+	return b.build(context.Background())
 }
 
 // Execute builds and executes the update URL.
 // Returns an error if the URL cannot be built or executed.
-// If token is not set but tokenFunc is provided, it will fetch the token first.
+// The auth token is resolved at most once, using the provided context.
 func (b *updateTodoBuilder) Execute(ctx context.Context) error {
-	// Lazy load token if needed
-	if b.token == "" && b.tokenFunc != nil {
-		token, err := b.tokenFunc(ctx)
-		if err != nil {
-			return err
-		}
-		b.token = token
-	}
-	uri, err := b.Build()
+	uri, err := b.build(ctx)
 	if err != nil {
 		return err
 	}
@@ -318,6 +317,7 @@ func (b *updateProjectBuilder) WhenSomeday() ProjectUpdater {
 // The reminder is combined with the scheduling date (When).
 // If no scheduling date is set, defaults to "today".
 // Hour must be 0-23, minute must be 0-59.
+// Combining a reminder with WhenSomeday or WhenAnytime is a build error.
 func (b *updateProjectBuilder) Reminder(hour, minute int) ProjectUpdater {
 	return SetReminder(b, hour, minute)
 }
@@ -376,35 +376,36 @@ func (b *updateProjectBuilder) validate() error {
 	if b.err != nil {
 		return b.err
 	}
-	if b.token == "" {
-		return ErrEmptyToken
-	}
 	if b.id == "" {
 		return ErrIDRequired
 	}
 	return nil
 }
 
+// build validates the builder, resolves the auth token once using ctx,
+// and constructs the update URL.
+func (b *updateProjectBuilder) build(ctx context.Context) (string, error) {
+	if err := b.validate(); err != nil {
+		return "", err
+	}
+	if err := resolveToken(ctx, &b.token, b.tokenFunc); err != nil {
+		return "", err
+	}
+	return buildUpdateURL(b.id, b.token, &b.attrs, CommandUpdateProject)
+}
+
 // Build returns the Things URL for updating the project.
-// If token is not set but tokenFunc is provided, it will fetch the token using context.Background().
-// For explicit context control, use Execute() instead.
+// If the token has not been resolved yet, the token function runs without a
+// caller context; use Execute for context-aware token loading.
 func (b *updateProjectBuilder) Build() (string, error) {
-	return buildUpdateURL(&b.token, b.tokenFunc, b.id, &b.attrs, CommandUpdateProject, b.validate)
+	return b.build(context.Background())
 }
 
 // Execute builds and executes the update URL.
 // Returns an error if the URL cannot be built or executed.
-// If token is not set but tokenFunc is provided, it will fetch the token first.
+// The auth token is resolved at most once, using the provided context.
 func (b *updateProjectBuilder) Execute(ctx context.Context) error {
-	// Lazy load token if needed
-	if b.token == "" && b.tokenFunc != nil {
-		token, err := b.tokenFunc(ctx)
-		if err != nil {
-			return err
-		}
-		b.token = token
-	}
-	uri, err := b.Build()
+	uri, err := b.build(ctx)
 	if err != nil {
 		return err
 	}

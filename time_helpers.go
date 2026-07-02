@@ -1,6 +1,9 @@
 package things3
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Today returns today's date at midnight (00:00:00) in local timezone.
 // This is useful for scheduling todos with When().
@@ -63,6 +66,15 @@ func YearsAgo(n int) time.Time {
 	return time.Now().AddDate(-n, 0, 0)
 }
 
+// When keyword strings accepted by ParseWhen and ApplyWhen.
+const (
+	whenKeywordToday    = "today"
+	whenKeywordTomorrow = "tomorrow"
+	whenKeywordEvening  = "evening"
+	whenKeywordAnytime  = "anytime"
+	whenKeywordSomeday  = "someday"
+)
+
 // WhenScheduler is implemented by builders that support scheduling.
 // All builder types (TodoAdder, ProjectAdder, TodoUpdater,
 // ProjectUpdater, BatchTodoConfigurator, BatchProjectConfigurator) satisfy this interface.
@@ -73,7 +85,7 @@ type WhenScheduler[T any] interface {
 	WhenSomeday() T
 }
 
-// ApplyWhen parses a when string and applies scheduling to a builder.
+// ParseWhen parses a when string and applies scheduling to a builder.
 // Supports:
 //   - "today": schedules for today
 //   - "tomorrow": schedules for tomorrow
@@ -82,7 +94,39 @@ type WhenScheduler[T any] interface {
 //   - "someday": schedules for someday (indefinite future)
 //   - "yyyy-mm-dd": schedules for specific date
 //
-// Returns the builder unchanged if the format is not recognized.
+// Unrecognized input returns the builder unchanged along with a descriptive
+// error. Use ApplyWhen to silently ignore invalid input instead.
+//
+// Example:
+//
+//	todo := client.AddTodo().Title("Buy milk")
+//	todo, err := things3.ParseWhen(todo, "2024-12-25")
+func ParseWhen[T WhenScheduler[T]](b T, when string) (T, error) {
+	switch when {
+	case whenKeywordToday:
+		return b.When(Today()), nil
+	case whenKeywordTomorrow:
+		return b.When(Tomorrow()), nil
+	case whenKeywordEvening:
+		return b.WhenEvening(), nil
+	case whenKeywordAnytime:
+		return b.WhenAnytime(), nil
+	case whenKeywordSomeday:
+		return b.WhenSomeday(), nil
+	default:
+		if t, err := time.Parse(time.DateOnly, when); err == nil {
+			return b.When(t), nil
+		}
+		return b, fmt.Errorf(
+			"things3: unrecognized when value %q (expected today, tomorrow, evening, anytime, someday, or yyyy-mm-dd)",
+			when,
+		)
+	}
+}
+
+// ApplyWhen is the error-ignoring variant of ParseWhen: it applies the parsed
+// scheduling to the builder and silently returns the builder unchanged when
+// the input is not recognized. Use ParseWhen to detect invalid input.
 //
 // Example:
 //
@@ -90,21 +134,6 @@ type WhenScheduler[T any] interface {
 //	todo = things3.ApplyWhen(todo, "today")
 //	todo = things3.ApplyWhen(todo, "2024-12-25")
 func ApplyWhen[T WhenScheduler[T]](b T, when string) T {
-	switch when {
-	case "today":
-		return b.When(Today())
-	case "tomorrow":
-		return b.When(Tomorrow())
-	case "evening":
-		return b.WhenEvening()
-	case "anytime":
-		return b.WhenAnytime()
-	case "someday":
-		return b.WhenSomeday()
-	default:
-		if t, err := time.Parse(time.DateOnly, when); err == nil {
-			return b.When(t)
-		}
-		return b
-	}
+	result, _ := ParseWhen(b, when)
+	return result
 }

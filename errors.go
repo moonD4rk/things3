@@ -45,7 +45,8 @@ var (
 
 // URL Scheme Operation Errors - aliased from internal/scheme.
 var (
-	// ErrEmptyToken is returned when an empty token is provided to WithToken.
+	// ErrEmptyToken is returned when the auth token resolves to empty for an
+	// operation that requires one (update commands and batch updates).
 	ErrEmptyToken = scheme.ErrEmptyToken
 	// ErrIDRequired is returned when id is missing for an update operation.
 	ErrIDRequired = scheme.ErrIDRequired

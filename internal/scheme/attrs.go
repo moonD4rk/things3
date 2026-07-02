@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // AttrStore abstracts attribute storage for URL params vs JSON attributes.
@@ -43,7 +44,7 @@ type ReminderStore interface {
 // StrParam defines metadata for string URL parameters including validation rules.
 type StrParam struct {
 	Key    string // URL parameter key (e.g., "title", "notes")
-	MaxLen int    // Maximum length (0 = no limit)
+	MaxLen int    // Maximum length in characters/runes (0 = no limit)
 	Err    error  // Error to return if validation fails
 }
 
@@ -57,7 +58,8 @@ type StrsParam struct {
 	Key      string // URL parameter key
 	Sep      string // Separator for joining values (e.g., "," for tags, "\n" for checklist)
 	MaxCount int    // Maximum item count (0 = no limit)
-	Err      error  // Error to return if validation fails
+	Err      error  // Error to return if count validation fails
+	SepErr   error  // Error to return when a value contains the separator
 }
 
 // TimeParam defines metadata for time URL parameters.
@@ -94,11 +96,16 @@ var (
 	ShowQuickEntryParam = BoolParam{Key: KeyShowQuickEntry}
 
 	// String slice parameters
-	TagsParam             = StrsParam{Key: KeyTags, Sep: ","}
-	AddTagsParam          = StrsParam{Key: KeyAddTags, Sep: ","}
-	ChecklistItemsParam   = StrsParam{Key: KeyChecklistItems, Sep: "\n", MaxCount: MaxChecklistItems, Err: ErrTooManyChecklistItems}
-	PrependChecklistParam = StrsParam{Key: KeyPrependChecklistItems, Sep: "\n"}
-	AppendChecklistParam  = StrsParam{Key: KeyAppendChecklistItems, Sep: "\n"}
+	TagsParam           = StrsParam{Key: KeyTags, Sep: ",", SepErr: ErrTagContainsComma}
+	AddTagsParam        = StrsParam{Key: KeyAddTags, Sep: ",", SepErr: ErrTagContainsComma}
+	ChecklistItemsParam = StrsParam{
+		Key: KeyChecklistItems, Sep: "\n",
+		MaxCount: MaxChecklistItems, Err: ErrTooManyChecklistItems,
+		SepErr: ErrChecklistItemContainsNewline,
+	}
+	PrependChecklistParam = StrsParam{Key: KeyPrependChecklistItems, Sep: "\n", SepErr: ErrChecklistItemContainsNewline}
+	AppendChecklistParam  = StrsParam{Key: KeyAppendChecklistItems, Sep: "\n", SepErr: ErrChecklistItemContainsNewline}
+	TodosParam            = StrsParam{Key: KeyTodos, Sep: "\n", SepErr: ErrTitleContainsNewline}
 
 	// Time parameters
 	CreationDateParam   = TimeParam{Key: KeyCreationDate}
@@ -116,13 +123,21 @@ var (
 	ErrNotesTooLong = fmt.Errorf("things3: notes exceed %d character limit", MaxNotesLength)
 	// ErrTooManyChecklistItems is returned when checklist exceeds the item limit.
 	ErrTooManyChecklistItems = fmt.Errorf("things3: checklist exceeds %d item limit", MaxChecklistItems)
+	// ErrTagContainsComma is returned when a tag contains a comma, the tag list separator.
+	ErrTagContainsComma = errors.New("things3: tag must not contain a comma")
+	// ErrChecklistItemContainsNewline is returned when a checklist item contains a newline, the item separator.
+	ErrChecklistItemContainsNewline = errors.New("things3: checklist item must not contain a newline")
+	// ErrTitleContainsNewline is returned when a title contains a newline, the title list separator.
+	ErrTitleContainsNewline = errors.New("things3: title must not contain a newline")
 )
 
 // Generic setter functions with type-safe parameter definitions.
 
 // SetStr sets a string attribute with optional length validation.
+// Length limits are counted in Unicode characters, matching the limits
+// documented by the Things URL scheme.
 func SetStr[T AttrBuilder](b T, p StrParam, value string) T {
-	if p.MaxLen > 0 && len(value) > p.MaxLen {
+	if p.MaxLen > 0 && utf8.RuneCountInString(value) > p.MaxLen {
 		b.SetErr(p.Err)
 		return b
 	}
@@ -137,10 +152,20 @@ func SetBool[T AttrBuilder](b T, p BoolParam, value bool) T {
 }
 
 // SetStrs sets a string slice attribute with optional count validation.
+// Values containing the separator are rejected because they would silently
+// split into multiple items when joined for the URL scheme.
 func SetStrs[T AttrBuilder](b T, p StrsParam, values []string) T {
 	if p.MaxCount > 0 && len(values) > p.MaxCount {
 		b.SetErr(p.Err)
 		return b
+	}
+	if p.Sep != "" {
+		for _, v := range values {
+			if strings.Contains(v, p.Sep) {
+				b.SetErr(p.SepErr)
+				return b
+			}
+		}
 	}
 	b.GetStore().SetStrings(p.Key, values, p.Sep)
 	return b
@@ -188,6 +213,11 @@ func SetDeadlineTime[T AttrBuilder](b T, t time.Time) T {
 
 // ErrInvalidReminderTime is returned when reminder hour or minute is out of range.
 var ErrInvalidReminderTime = errors.New("things3: invalid reminder time (hour must be 0-23, minute must be 0-59)")
+
+// ErrReminderNeedsDate is returned when a reminder is combined with a "when"
+// value that has no concrete date. Things accepts reminder times only with a
+// date, today, tomorrow, or evening; someday and anytime cannot carry one.
+var ErrReminderNeedsDate = errors.New("things3: reminder requires a concrete date, today, tomorrow, or evening (not someday or anytime)")
 
 // SetReminder sets the reminder time for builders that support it.
 func SetReminder[T AttrBuilder](b T, hour, minute int) T {
@@ -248,21 +278,31 @@ func (u *URLAttrs) SetReminder(hour, minute int) {
 	u.ReminderMin = &minute
 }
 
-// FinalizeWhen returns the final "when" parameter value with reminder time appended.
-// If reminder is set but no "when" value exists, defaults to "today".
-// Format: "when@HH:MM" (e.g., "today@15:30", "2024-03-15@14:00")
-func (u *URLAttrs) FinalizeWhen() {
-	if u.ReminderHour == nil {
-		return
+// QueryValues returns the URL query values for the stored parameters.
+// When a reminder is set, its time is appended to the "when" value in
+// "when@HH:MM" format (e.g., "today@15:30", "2024-03-15@14:00"),
+// defaulting to "today" when no "when" value exists.
+// The receiver is never mutated, so repeated calls yield identical results.
+func (u *URLAttrs) QueryValues() (url.Values, error) {
+	query := url.Values{}
+	for k, v := range u.Params {
+		query.Set(k, v)
 	}
 
-	w, exists := u.Params[KeyWhen]
-	if !exists || w == "" {
+	if u.ReminderHour == nil {
+		return query, nil
+	}
+
+	w := u.Params[KeyWhen]
+	if w == "" {
 		w = "today" // default to today if no when specified
 	}
+	if w == string(WhenSomeday) || w == string(WhenAnytime) {
+		return nil, ErrReminderNeedsDate
+	}
 
-	// Append reminder time in HH:MM format
-	u.Params[KeyWhen] = fmt.Sprintf("%s@%02d:%02d", w, *u.ReminderHour, *u.ReminderMin)
+	query.Set(KeyWhen, fmt.Sprintf("%s@%02d:%02d", w, *u.ReminderHour, *u.ReminderMin))
+	return query, nil
 }
 
 // JSONAttrs stores attributes as JSON values (native types).

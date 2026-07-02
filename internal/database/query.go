@@ -50,8 +50,8 @@ func (f *TaskFilter) buildWhere() string {
 	} else {
 		w.add("TASK." + filterIsNotTrashed)
 		notTrashed := false
-		w.addTruthy("PROJECT.trashed", &notTrashed)
-		w.addTruthy("PROJECT_OF_HEADING.trashed", &notTrashed)
+		w.addTruthy("PROJECT.trashed", &notTrashed, 0)
+		w.addTruthy("PROJECT_OF_HEADING.trashed", &notTrashed, 0)
 	}
 
 	// Integer field filters
@@ -62,10 +62,10 @@ func (f *TaskFilter) buildWhere() string {
 	// Identity filters
 	w.addStringEqual("TASK.uuid", f.UUID)
 	if f.UUIDPrefix != nil {
-		w.addLike("TASK.uuid", *f.UUIDPrefix+"%")
+		w.addLikePrefix("TASK.uuid", *f.UUIDPrefix)
 	}
 	if f.Title != nil {
-		w.addLike("TASK.title", "%"+*f.Title+"%")
+		w.addLikeContains("TASK.title", *f.Title)
 	}
 
 	// Relation filters
@@ -119,7 +119,8 @@ func (f *AreaFilter) buildWhere() string {
 
 	w.addStringEqual("AREA.uuid", f.UUID)
 	w.addStringEqual("AREA.title", f.Title)
-	w.addTruthy("AREA.visible", f.Visible)
+	// NULL visible means the user never hid the area, so NULL defaults to 1.
+	w.addTruthy("AREA.visible", f.Visible, 1)
 	w.addFilter("TAG.title", f.TagTitle, f.HasTag)
 
 	return w.sql()
@@ -246,16 +247,7 @@ func (d *DB) TagsOfTask(ctx context.Context, taskUUID string) ([]string, error) 
 	}
 	defer rows.Close()
 
-	var tags []string
-	for rows.Next() {
-		var title string
-		if err := rows.Scan(&title); err != nil {
-			return nil, err
-		}
-		tags = append(tags, title)
-	}
-
-	return tags, rows.Err()
+	return collectTagTitles(rows)
 }
 
 // TagsOfArea returns the tag titles for an area.
@@ -267,13 +259,22 @@ func (d *DB) TagsOfArea(ctx context.Context, areaUUID string) ([]string, error) 
 	}
 	defer rows.Close()
 
+	return collectTagTitles(rows)
+}
+
+// collectTagTitles scans tag titles from a LEFT-JOIN result, skipping NULL
+// titles produced by dangling tag references.
+func collectTagTitles(rows *sql.Rows) ([]string, error) {
 	var tags []string
 	for rows.Next() {
-		var title string
+		var title sql.NullString
 		if err := rows.Scan(&title); err != nil {
 			return nil, err
 		}
-		tags = append(tags, title)
+		if !title.Valid {
+			continue
+		}
+		tags = append(tags, title.String)
 	}
 
 	return tags, rows.Err()

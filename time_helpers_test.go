@@ -56,6 +56,61 @@ func TestYearsAgo(t *testing.T) {
 	assert.WithinDuration(t, expected, oneYearAgo, time.Second)
 }
 
+// testWhenDate is a fixed calendar date used by the when-parsing tests.
+const testWhenDate = "2024-12-25"
+
+func TestParseWhen(t *testing.T) {
+	scheme := newScheme()
+
+	// Get expected dates for today/tomorrow
+	todayStr := Today().Format(time.DateOnly)
+	tomorrowStr := Tomorrow().Format(time.DateOnly)
+
+	tests := []struct {
+		name     string
+		when     string
+		wantWhen string
+		wantErr  bool
+	}{
+		{"today keyword", whenKeywordToday, todayStr, false},
+		{"tomorrow keyword", whenKeywordTomorrow, tomorrowStr, false},
+		{"evening keyword", whenKeywordEvening, whenKeywordEvening, false},
+		{"anytime keyword", whenKeywordAnytime, whenKeywordAnytime, false},
+		{"someday keyword", whenKeywordSomeday, whenKeywordSomeday, false},
+		{"specific date", testWhenDate, testWhenDate, false},
+		{"unrecognized word", "invalid", "", true},
+		{"malformed date", "2024-13-45", "", true},
+		{"empty string", "", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			todo, err := ParseWhen(scheme.AddTodo().Title("Test"), tt.when)
+
+			if tt.wantErr {
+				require.ErrorContains(t, err, "unrecognized when value")
+				if tt.when != "" {
+					require.ErrorContains(t, err, tt.when)
+				}
+			} else {
+				require.NoError(t, err)
+			}
+
+			thingsURL, err := todo.Build()
+			require.NoError(t, err)
+
+			_, params := parseThingsURL(t, thingsURL)
+			whenValue := params.Get("when")
+
+			if tt.wantErr {
+				assert.Empty(t, whenValue, "builder should be returned unchanged for invalid input")
+			} else {
+				assert.Equal(t, tt.wantWhen, whenValue)
+			}
+		})
+	}
+}
+
 func TestApplyWhen(t *testing.T) {
 	scheme := newScheme()
 
@@ -69,13 +124,13 @@ func TestApplyWhen(t *testing.T) {
 		wantWhen  string
 		wantEmpty bool
 	}{
-		{"today", "today", todayStr, false},
-		{"tomorrow", "tomorrow", tomorrowStr, false},
-		{"evening", "evening", "evening", false},
-		{"anytime", "anytime", "anytime", false},
-		{"someday", "someday", "someday", false},
-		{"specific date", "2024-12-25", "2024-12-25", false},
-		{"invalid format unchanged", "invalid", "", true},
+		{"today keyword", whenKeywordToday, todayStr, false},
+		{"tomorrow keyword", whenKeywordTomorrow, tomorrowStr, false},
+		{"evening keyword", whenKeywordEvening, whenKeywordEvening, false},
+		{"anytime keyword", whenKeywordAnytime, whenKeywordAnytime, false},
+		{"someday keyword", whenKeywordSomeday, whenKeywordSomeday, false},
+		{"specific date", testWhenDate, testWhenDate, false},
+		{"invalid format silently ignored", "invalid", "", true},
 	}
 
 	for _, tt := range tests {
@@ -104,7 +159,7 @@ func TestApplyWhenWithDifferentBuilders(t *testing.T) {
 
 	// Test AddTodoBuilder
 	todo := scheme.AddTodo().Title("Todo")
-	todo = ApplyWhen(todo, "today")
+	todo = ApplyWhen(todo, whenKeywordToday)
 	todoURL, err := todo.Build()
 	require.NoError(t, err)
 	_, todoParams := parseThingsURL(t, todoURL)
@@ -112,7 +167,7 @@ func TestApplyWhenWithDifferentBuilders(t *testing.T) {
 
 	// Test AddProjectBuilder
 	project := scheme.AddProject().Title("Project")
-	project = ApplyWhen(project, "tomorrow")
+	project = ApplyWhen(project, whenKeywordTomorrow)
 	projectURL, err := project.Build()
 	require.NoError(t, err)
 	_, projectParams := parseThingsURL(t, projectURL)
@@ -121,17 +176,17 @@ func TestApplyWhenWithDifferentBuilders(t *testing.T) {
 	// Test UpdateTodoBuilder (requires auth token)
 	authScheme := scheme.WithToken("test-token")
 	updateTodo := authScheme.UpdateTodo("test-uuid")
-	updateTodo = ApplyWhen(updateTodo, "evening")
+	updateTodo = ApplyWhen(updateTodo, whenKeywordEvening)
 	updateURL, err := updateTodo.Build()
 	require.NoError(t, err)
 	_, updateParams := parseThingsURL(t, updateURL)
-	assert.Equal(t, "evening", updateParams.Get("when"))
+	assert.Equal(t, whenKeywordEvening, updateParams.Get("when"))
 
 	// Test UpdateProjectBuilder
 	updateProject := authScheme.UpdateProject("test-uuid")
-	updateProject = ApplyWhen(updateProject, "someday")
+	updateProject = ApplyWhen(updateProject, whenKeywordSomeday)
 	updateProjectURL, err := updateProject.Build()
 	require.NoError(t, err)
 	_, updateProjectParams := parseThingsURL(t, updateProjectURL)
-	assert.Equal(t, "someday", updateProjectParams.Get("when"))
+	assert.Equal(t, whenKeywordSomeday, updateProjectParams.Get("when"))
 }

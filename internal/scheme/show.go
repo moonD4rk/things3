@@ -11,6 +11,7 @@ import (
 type showBuilder struct {
 	scheme *Scheme
 	params map[string]string
+	err    error
 }
 
 // NewShowNavigator creates a new ShowNavigator for navigation operations.
@@ -38,13 +39,24 @@ func (b *showBuilder) Query(query string) ShowNavigator {
 }
 
 // Filter filters the displayed items by tags.
+// Tags are comma-separated in the URL, so a tag must not contain a comma.
 func (b *showBuilder) Filter(tags ...string) ShowNavigator {
+	for _, tag := range tags {
+		if strings.Contains(tag, ",") {
+			b.err = ErrTagContainsComma
+			return b
+		}
+	}
 	b.params[KeyFilter] = strings.Join(tags, ",")
 	return b
 }
 
 // Build returns the Things URL for the show command.
 func (b *showBuilder) Build() (string, error) {
+	if b.err != nil {
+		return "", b.err
+	}
+
 	query := url.Values{}
 	for k, v := range b.params {
 		query.Set(k, v)

@@ -27,6 +27,27 @@ func escapeString(s string) string {
 	return strings.ReplaceAll(s, "'", "''")
 }
 
+// likeEscapeChar is the escape character for LIKE patterns, declared once so
+// escaped patterns and their ESCAPE clauses stay in sync.
+const likeEscapeChar = `\`
+
+// escapeLikePattern escapes LIKE metacharacters (%, _) and the escape
+// character itself so user input matches literally inside a LIKE pattern.
+// The pattern must be used with an ESCAPE clause (see likeSQL).
+func escapeLikePattern(s string) string {
+	s = strings.ReplaceAll(s, likeEscapeChar, likeEscapeChar+likeEscapeChar)
+	s = strings.ReplaceAll(s, "%", likeEscapeChar+"%")
+	s = strings.ReplaceAll(s, "_", likeEscapeChar+"_")
+	return s
+}
+
+// likeSQL returns "column LIKE 'pattern' ESCAPE '\'" where value is matched
+// literally and prefix/suffix hold the intended wildcards ("%" or "").
+func likeSQL(column, prefix, value, suffix string) string {
+	escaped := escapeString(escapeLikePattern(value))
+	return fmt.Sprintf("%s LIKE '%s%s%s' ESCAPE '%s'", column, prefix, escaped, suffix, likeEscapeChar)
+}
+
 // joinConditions joins SQL conditions with AND, returns "TRUE" if empty.
 func joinConditions(conditions []string) string {
 	if len(conditions) == 0 {
@@ -76,7 +97,10 @@ func (w *whereBuilder) addFilter(column string, value *string, exists *bool) {
 	}
 }
 
-// addOrFilter adds an OR filter across two columns with value-or-existence fallback.
+// addOrFilter adds a filter across two columns with value-or-existence fallback.
+// A value or exists=true matches if either column matches (OR). For
+// exists=false, De Morgan requires both columns to be NULL (AND), otherwise
+// "has neither" would wrongly match rows where only one column is set.
 func (w *whereBuilder) addOrFilter(col1, col2 string, value *string, exists *bool) {
 	if value != nil {
 		escaped := escapeString(*value)
@@ -85,7 +109,11 @@ func (w *whereBuilder) addOrFilter(col1, col2 string, value *string, exists *boo
 			fmt.Sprintf("%s = '%s'", col2, escaped),
 		)
 	} else if exists != nil {
-		w.addOr(existsSQL(col1, *exists), existsSQL(col2, *exists))
+		if *exists {
+			w.addOr(existsSQL(col1, true), existsSQL(col2, true))
+		} else {
+			w.addRawf("(%s AND %s)", existsSQL(col1, false), existsSQL(col2, false))
+		}
 	}
 }
 
@@ -96,24 +124,35 @@ func (w *whereBuilder) addIntEqual(column string, value *int) {
 	}
 }
 
-// addLike adds a LIKE pattern condition.
-func (w *whereBuilder) addLike(column, pattern string) {
-	if pattern != "" {
-		w.addRawf("%s LIKE '%s'", column, escapeString(pattern))
+// addLikePrefix adds a prefix-match condition; LIKE metacharacters in value
+// match literally.
+func (w *whereBuilder) addLikePrefix(column, value string) {
+	if value != "" {
+		w.add(likeSQL(column, "", value, "%"))
 	}
 }
 
-// addTruthy adds a boolean column check with NULL handling.
-//   - true:  "column"
-//   - false: "NOT IFNULL(column, 0)"
-func (w *whereBuilder) addTruthy(column string, value *bool) {
+// addLikeContains adds a substring-match condition; LIKE metacharacters in
+// value match literally.
+func (w *whereBuilder) addLikeContains(column, value string) {
+	if value != "" {
+		w.add(likeSQL(column, "%", value, "%"))
+	}
+}
+
+// addTruthy adds a boolean column check, treating NULL as nullDefault.
+// Pass 0 when NULL means false (e.g. trashed) and 1 when NULL means true
+// (e.g. AREA.visible, which is NULL until the user hides the area).
+//   - true:  "IFNULL(column, nullDefault)"
+//   - false: "NOT IFNULL(column, nullDefault)"
+func (w *whereBuilder) addTruthy(column string, value *bool, nullDefault int) {
 	if value == nil {
 		return
 	}
 	if *value {
-		*w = append(*w, column)
+		w.addRawf("IFNULL(%s, %d)", column, nullDefault)
 	} else {
-		w.addRawf("NOT IFNULL(%s, 0)", column)
+		w.addRawf("NOT IFNULL(%s, %d)", column, nullDefault)
 	}
 }
 
@@ -131,25 +170,28 @@ func (w *whereBuilder) addOr(parts ...string) {
 }
 
 // addSearch adds a full-text search condition across multiple columns.
+// LIKE metacharacters in the query match literally.
 func (w *whereBuilder) addSearch(query string) {
 	if query == "" {
 		return
 	}
-	escaped := escapeString(query)
 	columns := []string{"TASK.title", "TASK.notes", "AREA.title"}
 	var searches []string
 	for _, col := range columns {
-		searches = append(searches, fmt.Sprintf("%s LIKE '%%%s%%'", col, escaped))
+		searches = append(searches, likeSQL(col, "%", query, "%"))
 	}
 	*w = append(*w, "("+strings.Join(searches, " OR ")+")")
 }
 
 // addCreatedAfter adds a time-based filter for creation date.
+// The instant is normalized to local time so the same instant yields
+// identical SQL regardless of the Location carried by t.
 func (w *whereBuilder) addCreatedAfter(column string, t time.Time) {
 	if t.IsZero() {
 		return
 	}
-	w.addRawf("datetime(%s, 'unixepoch', 'localtime') > '%s'", column, t.Format("2006-01-02 15:04:05"))
+	local := t.In(time.Local).Format("2006-01-02 15:04:05")
+	w.addRawf("datetime(%s, 'unixepoch', 'localtime') > '%s'", column, local)
 }
 
 // addDateFilter adds a date filter condition.
@@ -186,11 +228,12 @@ func (w *whereBuilder) addDateFilter(column string, v *DateFilterValue, isThings
 		return
 	}
 
-	// Specific date comparison
+	// Specific date comparison. Normalize the instant to local time so the
+	// same instant yields the same calendar date regardless of its Location.
 	if v.Date == nil {
 		return
 	}
-	dateVal, ok := formatDateValue(v.Date.Format(time.DateOnly), isThingsDate)
+	dateVal, ok := formatDateValue(v.Date.In(time.Local).Format(time.DateOnly), isThingsDate)
 	if !ok {
 		return
 	}

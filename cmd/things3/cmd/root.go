@@ -22,6 +22,7 @@ func NewRootCmd() *cobra.Command {
 
 It provides read-only access to your Things 3 database and allows you to
 query tasks, projects, areas, and tags from the command line.`,
+		SilenceUsage: true,
 	}
 	cmd.SetOut(os.Stdout)
 	cmd.SetErr(os.Stderr)
@@ -30,6 +31,7 @@ query tasks, projects, areas, and tags from the command line.`,
 	cmd.PersistentFlags().IntP(flagLimit, "n", 0, "max items to display (0 for unlimited)")
 	cmd.PersistentFlags().BoolP(flagJSON, "j", false, "output as JSON")
 	cmd.PersistentFlags().BoolP(flagYAML, "y", false, "output as YAML")
+	cmd.MarkFlagsMutuallyExclusive(flagJSON, flagYAML)
 
 	// Register subcommands
 	cmd.AddCommand(NewVersionCmd())

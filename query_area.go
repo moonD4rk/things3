@@ -7,6 +7,8 @@ import (
 )
 
 // areaQuery provides a fluent interface for building area queries.
+// Chainable methods are copy-on-write: each call returns a new builder, so an
+// areaQuery can be forked into independent queries.
 type areaQuery struct {
 	database *db
 	filter   database.AreaFilter
@@ -19,46 +21,58 @@ func (d *db) Areas() *areaQuery {
 	}
 }
 
+// clone returns a shallow copy of the query for copy-on-write chaining.
+func (q *areaQuery) clone() *areaQuery {
+	c := *q
+	return &c
+}
+
 // WithUUID filters areas by UUID.
 func (q *areaQuery) WithUUID(uuid string) AreaQueryBuilder {
-	q.filter.UUID = &uuid
-	return q
+	c := q.clone()
+	c.filter.UUID = &uuid
+	return c
 }
 
 // WithTitle filters areas by title.
 func (q *areaQuery) WithTitle(title string) AreaQueryBuilder {
-	q.filter.Title = &title
-	return q
+	c := q.clone()
+	c.filter.Title = &title
+	return c
 }
 
 // Visible filters areas by visibility status.
 // Pass true to include only visible areas.
 // Pass false to include only hidden areas.
 func (q *areaQuery) Visible(visible bool) AreaQueryBuilder {
-	q.filter.Visible = &visible
-	return q
+	c := q.clone()
+	c.filter.Visible = &visible
+	return c
 }
 
 // InTag filters areas by a specific tag title.
 func (q *areaQuery) InTag(title string) AreaQueryBuilder {
-	q.filter.TagTitle = &title
-	return q
+	c := q.clone()
+	c.filter.TagTitle = &title
+	return c
 }
 
 // HasTag filters areas by whether they have any tags.
 func (q *areaQuery) HasTag(has bool) AreaQueryBuilder {
-	q.filter.HasTag = &has
-	return q
+	c := q.clone()
+	c.filter.HasTag = &has
+	return c
 }
 
 // All executes the query and returns all matching areas.
+// The result is never nil; an empty result encodes as a JSON array.
 func (q *areaQuery) All(ctx context.Context) ([]Area, error) {
 	rows, err := q.database.inner.QueryAreas(ctx, q.filter)
 	if err != nil {
 		return nil, err
 	}
 
-	var areas []Area
+	areas := make([]Area, 0, len(rows))
 	for _, row := range rows {
 		area := convertAreaRow(row)
 

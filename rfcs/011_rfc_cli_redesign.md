@@ -1,6 +1,6 @@
 # RFC 011: CLI Redesign - Task-Oriented Command Surface
 
-Status: Draft Author: @moond4rk Date: 2026-07-02 Supersedes: RFC 010
+Status: Superseded by RFC 012 Author: @moond4rk Date: 2026-07-02 Supersedes: RFC 010
 
 ## Summary
 

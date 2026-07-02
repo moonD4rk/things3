@@ -5,8 +5,11 @@ import "fmt"
 // sqlTrue is the default WHERE predicate.
 const sqlTrue = "TRUE"
 
-// buildTasksSQL builds the SQL query for fetching tasks.
-func buildTasksSQL(wherePredicate, orderPredicate string, limit *int) string {
+// buildTasksSQL builds the SQL query for fetching tasks. When templateStartDate
+// is true the start_date column is sourced from rt1_nextInstanceStartDate, so a
+// repeating template surfaces its next occurrence as its start date and flows
+// through the shared scan/convert pipeline unchanged.
+func buildTasksSQL(wherePredicate, orderPredicate string, limit *int, templateStartDate bool) string {
 	if wherePredicate == "" {
 		wherePredicate = sqlTrue
 	}
@@ -14,7 +17,11 @@ func buildTasksSQL(wherePredicate, orderPredicate string, limit *int) string {
 		orderPredicate = fmt.Sprintf("TASK.%q", IndexDefault)
 	}
 
-	startDateExpr := thingsDateExpressionToISODate("TASK." + colStartDate)
+	startDateColumn := colStartDate
+	if templateStartDate {
+		startDateColumn = colNextInstanceStartDate
+	}
+	startDateExpr := thingsDateExpressionToISODate("TASK." + startDateColumn)
 	deadlineExpr := thingsDateExpressionToISODate("TASK." + colDeadline)
 	reminderTimeExpr := thingsTimeExpressionToISOTime("TASK." + colReminderTime)
 
@@ -72,7 +79,11 @@ func buildTasksSQL(wherePredicate, orderPredicate string, limit *int) string {
 			TASK.%s AS created,
 			TASK.%s AS modified,
 			TASK.'index',
-			TASK.todayIndex AS today_index
+			TASK.todayIndex AS today_index,
+			TASK.startBucket AS start_bucket,
+			CASE
+				WHEN TASK.rt1_repeatingTemplate IS NOT NULL OR TASK.rt1_recurrenceRule IS NOT NULL THEN 1
+			END AS repeating
 		FROM
 			%s AS TASK
 		LEFT OUTER JOIN

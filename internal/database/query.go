@@ -26,6 +26,7 @@ type TaskFilter struct {
 	HasTags            *bool
 	DeadlineSuppressed *bool
 	Trashed            *bool
+	RepeatingTemplates *bool
 	CreatedAfter       *time.Time
 	SearchQuery        *string
 	Index              string
@@ -35,12 +36,23 @@ type TaskFilter struct {
 	Limit              *int
 }
 
+// wantsTemplates reports whether the query targets repeating templates rather
+// than the default set that excludes them.
+func (f *TaskFilter) wantsTemplates() bool {
+	return f.RepeatingTemplates != nil && *f.RepeatingTemplates
+}
+
 // buildWhere builds the WHERE clause for a task query.
 func (f *TaskFilter) buildWhere() string {
 	var w whereBuilder
 
-	// Always exclude recurring tasks
-	w.add("TASK." + filterIsNotRecurring)
+	// Recurring templates are excluded by default; a template query inverts the
+	// filter to select only them.
+	if f.wantsTemplates() {
+		w.add("TASK." + filterIsRecurring)
+	} else {
+		w.add("TASK." + filterIsNotRecurring)
+	}
 
 	// Trashed filter (default: not trashed)
 	// When viewing trash, only check the task's own trashed flag.
@@ -79,8 +91,13 @@ func (f *TaskFilter) buildWhere() string {
 		w.addExists("TASK.deadlineSuppressionDate", *f.DeadlineSuppressed)
 	}
 
-	// Date filters
-	w.addDateFilter("TASK."+colStartDate, f.StartDateFilter, true)
+	// Date filters. For a template, its next occurrence is its effective start
+	// date, so the start-date filter targets rt1_nextInstanceStartDate.
+	startDateColumn := colStartDate
+	if f.wantsTemplates() {
+		startDateColumn = colNextInstanceStartDate
+	}
+	w.addDateFilter("TASK."+startDateColumn, f.StartDateFilter, true)
 	w.addDateFilter("TASK."+colStopDate, f.StopDateFilter, false)
 	w.addDateFilter("TASK."+colDeadline, f.DeadlineFilter, true)
 
@@ -148,7 +165,7 @@ func (f *TagFilter) buildWhere() string {
 func (d *DB) QueryTasks(ctx context.Context, f *TaskFilter) ([]TaskRow, error) {
 	where := f.buildWhere()
 	order := f.buildOrder()
-	query := buildTasksSQL(where, order, f.Limit)
+	query := buildTasksSQL(where, order, f.Limit, f.wantsTemplates())
 
 	rows, err := d.ExecuteQuery(ctx, query)
 	if err != nil {
@@ -172,7 +189,7 @@ func (d *DB) QueryTasks(ctx context.Context, f *TaskFilter) ([]TaskRow, error) {
 func (d *DB) CountTasks(ctx context.Context, f *TaskFilter) (int, error) {
 	where := f.buildWhere()
 	order := f.buildOrder()
-	taskSQL := buildTasksSQL(where, order, nil)
+	taskSQL := buildTasksSQL(where, order, nil, f.wantsTemplates())
 	countSQL := buildCountSQL(taskSQL)
 
 	var count int

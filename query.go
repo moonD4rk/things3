@@ -145,9 +145,19 @@ func (q *todoQuery) Deadline() DateFilter[TodoQueryBuilder] {
 	return &dateFilter[TodoQueryBuilder]{with: q.withFilter, field: dateFieldDeadline}
 }
 
-// DeadlineSuppressed filters todos by whether the deadline has been suppressed.
-func (q *todoQuery) DeadlineSuppressed(suppressed bool) TodoQueryBuilder {
+// deadlineSuppressed filters todos by whether the deadline has been suppressed.
+// It is unexported: deadline suppression is a database internal, and Today is
+// its only consumer.
+func (q *todoQuery) deadlineSuppressed(suppressed bool) TodoQueryBuilder {
 	return q.withFilter(func(f *database.TaskFilter) { f.DeadlineSuppressed = &suppressed })
+}
+
+// repeatingTemplates restricts the query to repeating templates (rows carrying a
+// recurrence rule), whose start-date filter targets the next occurrence. It is
+// unexported: repeating templates are a database internal, and Upcoming is its
+// only consumer.
+func (q *todoQuery) repeatingTemplates() TodoQueryBuilder {
+	return q.withFilter(func(f *database.TaskFilter) { f.RepeatingTemplates = new(true) })
 }
 
 // CreatedAfter filters todos created after the specified time.

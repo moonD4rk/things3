@@ -99,8 +99,8 @@ func (t *batchTodoBuilder) ChecklistItems(items ...string) BatchTodoConfigurator
 	checklistItems := make([]map[string]any, len(items))
 	for i, item := range items {
 		checklistItems[i] = map[string]any{
-			"type":       "checklist-item",
-			"attributes": map[string]any{KeyTitle: item},
+			KeyType:       "checklist-item",
+			KeyAttributes: map[string]any{KeyTitle: item},
 		}
 	}
 	t.item.Attributes[KeyChecklistItems] = checklistItems
@@ -300,8 +300,8 @@ func (p *batchProjectBuilder) Todos(configs ...func(BatchTodoConfigurator)) Batc
 			return p
 		}
 		todos = append(todos, map[string]any{
-			"type":       "to-do",
-			"attributes": item.item.Attributes,
+			KeyType:       "to-do",
+			KeyAttributes: item.item.Attributes,
 		})
 	}
 	p.item.Attributes["items"] = todos
@@ -371,8 +371,8 @@ func (b *batchBuilder) Build() (string, error) {
 	data := make([]map[string]any, len(b.items))
 	for i, item := range b.items {
 		data[i] = map[string]any{
-			"type":       string(item.Type),
-			"attributes": item.Attributes,
+			KeyType:       string(item.Type),
+			KeyAttributes: item.Attributes,
 		}
 	}
 
@@ -510,8 +510,8 @@ func (b *authBatchBuilder) build(ctx context.Context) (string, error) {
 	data := make([]map[string]any, len(b.items))
 	for i, item := range b.items {
 		entry := map[string]any{
-			"type":       string(item.Type),
-			"attributes": item.Attributes,
+			KeyType:       string(item.Type),
+			KeyAttributes: item.Attributes,
 		}
 		if item.Operation == JSONOperationUpdate {
 			entry["operation"] = "update"

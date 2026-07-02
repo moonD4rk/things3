@@ -27,6 +27,8 @@ type TaskRow struct {
 	Modified     time.Time
 	Index        int
 	TodayIndex   int
+	Evening      bool
+	Repeating    bool
 }
 
 // AreaRow represents a row from an area query result.

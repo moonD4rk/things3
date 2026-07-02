@@ -51,7 +51,7 @@ func likeSQL(column, prefix, value, suffix string) string {
 // joinConditions joins SQL conditions with AND, returns "TRUE" if empty.
 func joinConditions(conditions []string) string {
 	if len(conditions) == 0 {
-		return "TRUE"
+		return sqlTrue
 	}
 	return strings.Join(conditions, "\n            AND ")
 }

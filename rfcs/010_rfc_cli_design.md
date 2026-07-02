@@ -1,6 +1,6 @@
 # RFC 010: CLI Design
 
-Status: Draft
+Status: Superseded by RFC 011
 Author: @moond4rk
 Date: 2026-03-09
 

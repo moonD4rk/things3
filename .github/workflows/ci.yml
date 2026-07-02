@@ -70,6 +70,15 @@ jobs:
       - name: Run Tests
         run: go test -v -race -coverprofile=coverage.out ./...
 
+      # The CLI is a nested module; the root ./... does not reach it, and
+      # go.work (which links the local library) is gitignored, so recreate the
+      # workspace here before building and testing the CLI module.
+      - name: Test CLI module
+        run: |
+          go work init . ./cmd/things3
+          go -C cmd/things3 build -v ./...
+          go -C cmd/things3 test -v -race ./...
+
       # Upload coverage only from Ubuntu to avoid duplicate reports
       - name: Upload coverage reports
         if: matrix.os == 'ubuntu-latest'

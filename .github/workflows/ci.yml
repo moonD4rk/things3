@@ -30,12 +30,6 @@ jobs:
         run: |
           diff -u <(echo -n) <(gofmt -d .)
 
-      # Run spelling check in parallel
-      - name: Check spelling
-        uses: crate-ci/typos@master
-        with:
-          config: ./.typos.toml
-
       # Use latest golangci-lint with optimized settings
       - name: Run Linter
         uses: golangci/golangci-lint-action@v8

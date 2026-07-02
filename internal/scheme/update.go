@@ -7,8 +7,8 @@ import (
 )
 
 // resolveToken ensures a non-empty auth token is cached in *token.
-// The token function runs at most once per builder: an error or an empty
-// result fails immediately instead of being retried on a later Build call.
+// A successful fetch is cached and reused by later Build calls; a failed or
+// empty fetch returns an error immediately and is retried on the next Build.
 func resolveToken(ctx context.Context, token *string, tokenFunc func(context.Context) (string, error)) error {
 	if *token != "" {
 		return nil

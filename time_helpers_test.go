@@ -88,8 +88,10 @@ func TestParseWhen(t *testing.T) {
 			todo, err := ParseWhen(scheme.AddTodo().Title("Test"), tt.when)
 
 			if tt.wantErr {
-				require.ErrorContains(t, err, tt.when)
 				require.ErrorContains(t, err, "unrecognized when value")
+				if tt.when != "" {
+					require.ErrorContains(t, err, tt.when)
+				}
 			} else {
 				require.NoError(t, err)
 			}

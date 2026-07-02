@@ -61,7 +61,22 @@ func TestTaskFilter_buildWhere(t *testing.T) {
 		{
 			name:   "uuid prefix",
 			filter: TaskFilter{UUIDPrefix: new("ABC")},
-			want:   defaultPrefix + and + "TASK.uuid LIKE 'ABC%'",
+			want:   defaultPrefix + and + `TASK.uuid LIKE 'ABC%' ESCAPE '\'`,
+		},
+		{
+			name:   "uuid prefix escapes wildcards",
+			filter: TaskFilter{UUIDPrefix: new("AB_C")},
+			want:   defaultPrefix + and + `TASK.uuid LIKE 'AB\_C%' ESCAPE '\'`,
+		},
+		{
+			name:   "title contains",
+			filter: TaskFilter{Title: new("milk")},
+			want:   defaultPrefix + and + `TASK.title LIKE '%milk%' ESCAPE '\'`,
+		},
+		{
+			name:   "title escapes wildcards",
+			filter: TaskFilter{Title: new("To_Do")},
+			want:   defaultPrefix + and + `TASK.title LIKE '%To\_Do%' ESCAPE '\'`,
 		},
 		{
 			name:   "area uuid",
@@ -94,9 +109,9 @@ func TestTaskFilter_buildWhere(t *testing.T) {
 			want:   defaultPrefix + and + "(TASK.project IS NOT NULL OR PROJECT_OF_HEADING.uuid IS NOT NULL)",
 		},
 		{
-			name:   "has project false",
+			name:   "has project false requires both columns NULL",
 			filter: TaskFilter{HasProject: new(false)},
-			want:   defaultPrefix + and + "(TASK.project IS NULL OR PROJECT_OF_HEADING.uuid IS NULL)",
+			want:   defaultPrefix + and + "(TASK.project IS NULL AND PROJECT_OF_HEADING.uuid IS NULL)",
 		},
 		{
 			name:   "heading uuid",
@@ -152,7 +167,7 @@ func TestTaskFilter_buildWhere(t *testing.T) {
 			name: "start date specific comparison",
 			filter: TaskFilter{StartDateFilter: &DateFilterValue{
 				Operator: ">=",
-				Date:     new(time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)),
+				Date:     new(time.Date(2024, 6, 15, 0, 0, 0, 0, time.Local)),
 			}},
 			want: defaultPrefix + and + "TASK.startDate >= 132671360",
 		},
@@ -170,7 +185,7 @@ func TestTaskFilter_buildWhere(t *testing.T) {
 			name: "stop date specific comparison (unix time)",
 			filter: TaskFilter{StopDateFilter: &DateFilterValue{
 				Operator: "=",
-				Date:     new(time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)),
+				Date:     new(time.Date(2024, 6, 15, 0, 0, 0, 0, time.Local)),
 			}},
 			want: defaultPrefix + and + "date(TASK.stopDate, 'unixepoch', 'localtime') = date('2024-06-15')",
 		},
@@ -187,12 +202,20 @@ func TestTaskFilter_buildWhere(t *testing.T) {
 		{
 			name:   "search query",
 			filter: TaskFilter{SearchQuery: new("buy milk")},
-			want:   defaultPrefix + and + "(TASK.title LIKE '%buy milk%' OR TASK.notes LIKE '%buy milk%' OR AREA.title LIKE '%buy milk%')",
+			want: defaultPrefix + and +
+				`(TASK.title LIKE '%buy milk%' ESCAPE '\' OR TASK.notes LIKE '%buy milk%' ESCAPE '\' OR AREA.title LIKE '%buy milk%' ESCAPE '\')`,
 		},
 		{
 			name:   "search with special chars",
 			filter: TaskFilter{SearchQuery: new("it's")},
-			want:   defaultPrefix + and + "(TASK.title LIKE '%it''s%' OR TASK.notes LIKE '%it''s%' OR AREA.title LIKE '%it''s%')",
+			want: defaultPrefix + and +
+				`(TASK.title LIKE '%it''s%' ESCAPE '\' OR TASK.notes LIKE '%it''s%' ESCAPE '\' OR AREA.title LIKE '%it''s%' ESCAPE '\')`,
+		},
+		{
+			name:   "search escapes like wildcards",
+			filter: TaskFilter{SearchQuery: new("%")},
+			want: defaultPrefix + and +
+				`(TASK.title LIKE '%\%%' ESCAPE '\' OR TASK.notes LIKE '%\%%' ESCAPE '\' OR AREA.title LIKE '%\%%' ESCAPE '\')`,
 		},
 		{
 			name: "complex filter combination",
@@ -261,14 +284,14 @@ func TestAreaFilter_buildWhere(t *testing.T) {
 			want:   "AREA.title = 'Work'",
 		},
 		{
-			name:   "visible true",
+			name:   "visible true treats NULL as visible",
 			filter: AreaFilter{Visible: new(true)},
-			want:   "AREA.visible",
+			want:   "IFNULL(AREA.visible, 1)",
 		},
 		{
-			name:   "visible false",
+			name:   "visible false treats NULL as visible",
 			filter: AreaFilter{Visible: new(false)},
-			want:   "NOT IFNULL(AREA.visible, 0)",
+			want:   "NOT IFNULL(AREA.visible, 1)",
 		},
 		{
 			name:   "tag title",
@@ -293,7 +316,7 @@ func TestAreaFilter_buildWhere(t *testing.T) {
 		{
 			name:   "multiple filters",
 			filter: AreaFilter{UUID: new("area-1"), Visible: new(true)},
-			want:   "AREA.uuid = 'area-1'" + and + "AREA.visible",
+			want:   "AREA.uuid = 'area-1'" + and + "IFNULL(AREA.visible, 1)",
 		},
 	}
 

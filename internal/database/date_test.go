@@ -169,9 +169,9 @@ func Test_thingsTimeToString(t *testing.T) {
 			want:       "12:34",
 		},
 		{
-			name:       "00:00",
+			name:       "00:00 midnight is a valid reminder",
 			thingsTime: 0,
-			want:       "",
+			want:       "00:00",
 		},
 		{
 			name:       "negative",
@@ -369,12 +369,11 @@ func Test_ThingsTime_BoundaryValues(t *testing.T) {
 		thingsTime int64
 		expected   string
 	}{
-		// Zero and negative
-		{"zero", 0, ""},
+		// Negative is invalid
 		{"negative", -1, ""},
 
-		// Valid times
-		{"midnight", (0 << 26) | (0 << 20), ""}, // 00:00 returns empty (treated as no time)
+		// Valid times ("no reminder" is NULL in the database, never 0)
+		{"midnight", (0 << 26) | (0 << 20), "00:00"},
 		{"one minute past midnight", (0 << 26) | (1 << 20), "00:01"},
 		{"noon", (12 << 26) | (0 << 20), "12:00"},
 		{"max time", (23 << 26) | (59 << 20), "23:59"},

@@ -27,6 +27,12 @@ import (
 	"testing"
 )
 
+// SQLite WAL-mode sidecar file suffixes.
+const (
+	walSuffix = "-wal"
+	shmSuffix = "-shm"
+)
+
 var (
 	sourcePath     string
 	initSourcePath = sync.OnceFunc(func() {
@@ -37,28 +43,58 @@ var (
 )
 
 // DatabasePath copies the things3 test fixture database to a temporary
-// directory and returns the path to the copy. The temporary file is
+// directory and returns the path to the copy. The temporary files are
 // automatically cleaned up when the test finishes.
 //
 // Copying is necessary because the module cache is read-only and SQLite
 // requires write access to the directory for lock files, even in read-only
 // mode. Each test invocation gets its own copy, so parallel tests do not
 // conflict.
+//
+// The fixture is in WAL mode, so the -wal and -shm sidecar files are copied
+// alongside the database when they exist; otherwise uncheckpointed data would
+// be silently lost.
 func DatabasePath(t *testing.T) string {
 	t.Helper()
 	initSourcePath()
 
-	data, err := os.ReadFile(sourcePath)
-	if err != nil {
-		t.Fatalf("thingstest: read fixture database: %v", err)
-	}
+	return copyDatabaseWithSidecars(t, sourcePath, t.TempDir())
+}
 
-	dst := filepath.Join(t.TempDir(), "main.sqlite")
-	if err := os.WriteFile(dst, data, 0o600); err != nil { //nolint:gosec // dst is from t.TempDir(), not user input
-		t.Fatalf("thingstest: write fixture database: %v", err)
+// copyDatabaseWithSidecars copies the database at src plus any -wal/-shm
+// sidecar files into dstDir and returns the path of the copied database.
+func copyDatabaseWithSidecars(t *testing.T, src, dstDir string) string {
+	t.Helper()
+
+	dst := filepath.Join(dstDir, filepath.Base(src))
+	copyFixtureFile(t, src, dst)
+
+	for _, suffix := range []string{walSuffix, shmSuffix} {
+		sidecar := src + suffix
+		if _, err := os.Stat(sidecar); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			t.Fatalf("thingstest: stat fixture sidecar: %v", err)
+		}
+		copyFixtureFile(t, sidecar, dst+suffix)
 	}
 
 	return dst
+}
+
+// copyFixtureFile copies a fixture file from src to dst, failing the test on
+// any error.
+func copyFixtureFile(t *testing.T, src, dst string) {
+	t.Helper()
+
+	data, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatalf("thingstest: read fixture file: %v", err)
+	}
+	if err := os.WriteFile(dst, data, 0o600); err != nil { //nolint:gosec // dst is from t.TempDir(), not user input
+		t.Fatalf("thingstest: write fixture file: %v", err)
+	}
 }
 
 // SourceDatabasePath returns the absolute path to the original fixture

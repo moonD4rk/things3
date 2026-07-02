@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"slices"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -207,6 +208,7 @@ func newLogbookCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			sortByStopTimeDesc(todos)
 			return outputTodos(cmd, todos)
 		},
 	}
@@ -214,6 +216,33 @@ func newLogbookCmd() *cobra.Command {
 	cmd.Flags().IntP("days", "d", 30, "limit to recent N days (0 for all)")
 
 	return cmd
+}
+
+// stopTime returns when a todo left the active list: completion time if set,
+// otherwise cancellation time, otherwise nil.
+func stopTime(t *things3.Todo) *time.Time {
+	if t.CompletedAt != nil {
+		return t.CompletedAt
+	}
+	return t.CanceledAt
+}
+
+// sortByStopTimeDesc orders todos by stop time descending so that --limit N
+// yields the N most recent entries. Todos without a stop time sort last.
+func sortByStopTimeDesc(todos []things3.Todo) {
+	slices.SortStableFunc(todos, func(a, b things3.Todo) int {
+		ta, tb := stopTime(&a), stopTime(&b)
+		switch {
+		case ta == nil && tb == nil:
+			return 0
+		case ta == nil:
+			return 1
+		case tb == nil:
+			return -1
+		default:
+			return tb.Compare(*ta)
+		}
+	})
 }
 
 func newDeadlinesCmd() *cobra.Command {

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"strings"
 	"time"
 )
 
@@ -479,34 +478,32 @@ func (b *authBatchBuilder) Reveal(reveal bool) AuthBatchCreator {
 	return b
 }
 
-// Build returns the Things URL for the JSON batch operation.
-// If token is not set but tokenFunc is provided, it will fetch the token using context.Background().
-// For explicit context control, use Execute() instead.
-func (b *authBatchBuilder) Build() (string, error) {
+// hasUpdates reports whether any item in the batch is an update operation.
+func (b *authBatchBuilder) hasUpdates() bool {
+	for _, item := range b.items {
+		if item.Operation == JSONOperationUpdate {
+			return true
+		}
+	}
+	return false
+}
+
+// build resolves the auth token (only when the batch contains updates)
+// and constructs the JSON batch URL.
+func (b *authBatchBuilder) build(ctx context.Context) (string, error) {
 	if b.err != nil {
 		return "", b.err
-	}
-	// Lazy load token if needed
-	if b.token == "" && b.tokenFunc != nil {
-		t, err := b.tokenFunc(context.Background())
-		if err != nil {
-			return "", err
-		}
-		b.token = t
-	}
-	if b.token == "" {
-		return "", ErrEmptyToken
 	}
 	if len(b.items) == 0 {
 		return "", ErrNoJSONItems
 	}
 
-	// Check if any items are updates
-	hasUpdates := false
-	for _, item := range b.items {
-		if item.Operation == JSONOperationUpdate {
-			hasUpdates = true
-			break
+	// The auth-token parameter is only required for update operations,
+	// so create-only batches never need a token.
+	hasUpdates := b.hasUpdates()
+	if hasUpdates {
+		if err := resolveToken(ctx, &b.token, b.tokenFunc); err != nil {
+			return "", err
 		}
 	}
 
@@ -540,27 +537,22 @@ func (b *authBatchBuilder) Build() (string, error) {
 	return fmt.Sprintf("things:///%s?%s", CommandJSON, EncodeQuery(query)), nil
 }
 
+// Build returns the Things URL for the JSON batch operation.
+// A token is required only when the batch contains update operations.
+// If the token has not been resolved yet, the token function runs without a
+// caller context; use Execute for context-aware token loading.
+func (b *authBatchBuilder) Build() (string, error) {
+	return b.build(context.Background())
+}
+
 // Execute builds and executes the JSON batch URL.
 // Returns an error if the URL cannot be built or executed.
-// If token is not set but tokenFunc is provided, it will fetch the token first.
+// The auth token is resolved at most once, using the provided context,
+// and only when the batch contains update operations.
 func (b *authBatchBuilder) Execute(ctx context.Context) error {
-	// Lazy load token if needed
-	if b.token == "" && b.tokenFunc != nil {
-		token, err := b.tokenFunc(ctx)
-		if err != nil {
-			return err
-		}
-		b.token = token
-	}
-	uri, err := b.Build()
+	uri, err := b.build(ctx)
 	if err != nil {
 		return err
 	}
 	return b.scheme.Execute(ctx, uri)
-}
-
-// Headings creates heading entries for a project's items.
-// Used within batchProjectBuilder.Todos to organize todos under headings.
-func Headings(headings ...string) string {
-	return strings.Join(headings, "\n")
 }

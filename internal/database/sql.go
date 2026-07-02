@@ -68,9 +68,9 @@ func buildTasksSQL(wherePredicate, orderPredicate string, limit *int) string {
 			%s AS start_date,
 			%s AS deadline,
 			%s AS reminder_time,
-			datetime(TASK.%s, "unixepoch", "localtime") AS stop_date,
-			datetime(TASK.%s, "unixepoch", "localtime") AS created,
-			datetime(TASK.%s, "unixepoch", "localtime") AS modified,
+			TASK.%s AS stop_date,
+			TASK.%s AS created,
+			TASK.%s AS modified,
 			TASK.'index',
 			TASK.todayIndex AS today_index
 		FROM
@@ -168,8 +168,8 @@ func buildChecklistItemsSQL() string {
 			date(CHECKLIST_ITEM.stopDate, "unixepoch", "localtime") AS stop_date,
 			'checklist-item' as type,
 			CHECKLIST_ITEM.uuid,
-			datetime(CHECKLIST_ITEM.%s, "unixepoch", "localtime") AS created,
-			datetime(CHECKLIST_ITEM.%s, "unixepoch", "localtime") AS modified
+			CHECKLIST_ITEM.%s AS created,
+			CHECKLIST_ITEM.%s AS modified
 		FROM
 			%s AS CHECKLIST_ITEM
 		WHERE

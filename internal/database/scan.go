@@ -7,9 +7,8 @@ import (
 
 // Time format constants used by Things 3 database.
 const (
-	dateFormat     = "2006-01-02"
-	dateTimeFormat = "2006-01-02 15:04:05"
-	timeFormat     = "15:04"
+	dateFormat = "2006-01-02"
+	timeFormat = "15:04"
 )
 
 // scanTaskRow scans a sql.Rows into a TaskRow.
@@ -36,8 +35,8 @@ type taskScanRow struct {
 	trashed, tags, checklist                       sql.NullInt64
 	areaUUID, areaTitle, projectUUID, projectTitle sql.NullString
 	headingUUID, headingTitle, notes, start        sql.NullString
-	startDate, deadline, reminderTime, stopDate    sql.NullString
-	created, modified                              sql.NullString
+	startDate, deadline, reminderTime              sql.NullString
+	stopDate, created, modified                    sql.NullFloat64
 }
 
 // toTaskRow converts raw scan values into a TaskRow.
@@ -61,9 +60,9 @@ func (s *taskScanRow) toTaskRow() *TaskRow {
 		StartDate:    parseDate(s.startDate),
 		Deadline:     parseDate(s.deadline),
 		ReminderTime: parseTime(s.reminderTime),
-		StopDate:     parseDateTime(s.stopDate),
-		Created:      parseDateTimeValue(s.created),
-		Modified:     parseDateTimeValue(s.modified),
+		StopDate:     unixTimePtr(s.stopDate),
+		Created:      unixTimeValue(s.created),
+		Modified:     unixTimeValue(s.modified),
 		Index:        s.index,
 		TodayIndex:   s.todayIndex,
 	}
@@ -105,7 +104,7 @@ func scanTagRow(rows *sql.Rows) (*TagRow, error) {
 func scanChecklistItemRow(rows *sql.Rows) (*ChecklistItemRow, error) {
 	var row ChecklistItemRow
 	var typeStr, stopDate sql.NullString
-	var created, modified sql.NullString
+	var created, modified sql.NullFloat64
 
 	err := rows.Scan(&row.Title, &row.Status, &stopDate, &typeStr, &row.UUID, &created, &modified)
 	if err != nil {
@@ -113,32 +112,20 @@ func scanChecklistItemRow(rows *sql.Rows) (*ChecklistItemRow, error) {
 	}
 
 	row.StopDate = parseDate(stopDate)
-	row.Created = parseDateTimeValue(created)
-	row.Modified = parseDateTimeValue(modified)
+	row.Created = unixTimeValue(created)
+	row.Modified = unixTimeValue(modified)
 
 	return &row, nil
 }
 
-// parseDate parses a date string in "2006-01-02" format.
-// Returns nil if the string is empty or invalid.
+// parseDate parses a date string in "2006-01-02" format as local midnight.
+// Things packed dates are calendar dates without a timezone, so they map to
+// the local day boundary. Returns nil if the string is empty or invalid.
 func parseDate(s sql.NullString) *time.Time {
 	if !s.Valid || s.String == "" {
 		return nil
 	}
-	t, err := time.Parse(dateFormat, s.String)
-	if err != nil {
-		return nil
-	}
-	return &t
-}
-
-// parseDateTime parses a datetime string in "2006-01-02 15:04:05" format.
-// Returns nil if the string is empty or invalid.
-func parseDateTime(s sql.NullString) *time.Time {
-	if !s.Valid || s.String == "" {
-		return nil
-	}
-	t, err := time.Parse(dateTimeFormat, s.String)
+	t, err := time.ParseInLocation(dateFormat, s.String, time.Local)
 	if err != nil {
 		return nil
 	}
@@ -146,7 +133,9 @@ func parseDateTime(s sql.NullString) *time.Time {
 }
 
 // parseTime parses a time string in "15:04" format.
-// Returns nil if the string is empty or invalid.
+// The result carries only a wall-clock time of day (date component is the
+// parse zero date); it does not represent an instant, so no location
+// normalization is needed. Returns nil if the string is empty or invalid.
 func parseTime(s sql.NullString) *time.Time {
 	if !s.Valid || s.String == "" {
 		return nil
@@ -163,12 +152,26 @@ func nullBool(n sql.NullInt64) bool {
 	return n.Valid && n.Int64 == 1
 }
 
-// parseDateTimeValue parses a datetime string, returning zero time on failure.
-func parseDateTimeValue(s sql.NullString) time.Time {
-	if t := parseDateTime(s); t != nil {
-		return *t
+// unixTimePtr converts a nullable Unix epoch value to a local-time instant.
+// Returns nil for NULL or zero epochs (Things stores "no timestamp" as NULL).
+func unixTimePtr(f sql.NullFloat64) *time.Time {
+	if !f.Valid {
+		return nil
 	}
-	return time.Time{}
+	t := unixToTime(f.Float64)
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}
+
+// unixTimeValue converts a nullable Unix epoch value to a local-time instant,
+// returning the zero time for NULL.
+func unixTimeValue(f sql.NullFloat64) time.Time {
+	if !f.Valid {
+		return time.Time{}
+	}
+	return unixToTime(f.Float64)
 }
 
 // nullString returns nil if NULL, otherwise returns pointer to string.

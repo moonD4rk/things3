@@ -44,6 +44,9 @@ func NewTodoCmd() *cobra.Command {
 				return err
 			}
 
+			if len(todos) == 0 {
+				return fmt.Errorf("no todo matches %q", identifier)
+			}
 			if len(todos) == 1 {
 				return outputTodoDetail(cmd, &todos[0])
 			}

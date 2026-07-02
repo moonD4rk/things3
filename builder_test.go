@@ -227,9 +227,20 @@ func TestAddTodoBuilder_Titles(t *testing.T) {
 
 func TestAddTodoBuilder_TitlesTooLong(t *testing.T) {
 	scheme := newScheme()
-	longTitle := strings.Repeat("a", 2000)
-	_, err := scheme.AddTodo().Titles(longTitle, longTitle, longTitle).Build()
+	longTitle := strings.Repeat("a", 4001)
+	_, err := scheme.AddTodo().Titles("short", longTitle).Build()
 	assert.ErrorIs(t, err, ErrTitleTooLong)
+}
+
+func TestAddTodoBuilder_TitlesLimitIsPerTitle(t *testing.T) {
+	// The per-title limit must not apply to the newline-joined combination.
+	scheme := newScheme()
+	title := strings.Repeat("a", 2500)
+	thingsURL, err := scheme.AddTodo().Titles(title, title).Build()
+	require.NoError(t, err)
+
+	_, params := parseThingsURL(t, thingsURL)
+	require.Equal(t, title+"\n"+title, params.Get("titles"))
 }
 
 func TestAddTodoBuilder_Heading(t *testing.T) {
@@ -1270,14 +1281,30 @@ func TestAuthBatchBuilder_Mixed(t *testing.T) {
 }
 
 func TestAuthBatchBuilder_EmptyToken(t *testing.T) {
+	// A batch containing an update still fails without a token.
 	scheme := newScheme()
 	auth := scheme.WithToken("")
 	_, err := auth.Batch().
-		AddTodo(func(todo BatchTodoConfigurator) {
+		UpdateTodo("uuid", func(todo BatchTodoConfigurator) {
 			todo.Title("Test")
 		}).
 		Build()
 	assert.ErrorIs(t, err, ErrEmptyToken)
+}
+
+func TestAuthBatchBuilder_CreateOnlyNeedsNoToken(t *testing.T) {
+	// Create-only batches never emit auth-token, so an empty token must not fail.
+	scheme := newScheme()
+	auth := scheme.WithToken("")
+	thingsURL, err := auth.Batch().
+		AddTodo(func(todo BatchTodoConfigurator) {
+			todo.Title("Test")
+		}).
+		Build()
+	require.NoError(t, err)
+
+	_, params := parseThingsURL(t, thingsURL)
+	require.False(t, params.Has("auth-token"))
 }
 
 func TestAuthBatchBuilder_NoItems(t *testing.T) {

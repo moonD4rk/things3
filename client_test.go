@@ -1,10 +1,13 @@
 package things3
 
 import (
+	"database/sql"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/moond4rk/things3/thingstest"
 )
 
 // newTestClient creates a new Client connected to the test database.
@@ -89,6 +92,27 @@ func TestClientToken(t *testing.T) {
 	token2, err := client.Token(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, token, token2)
+}
+
+func TestClientTokenEmptyInDatabase(t *testing.T) {
+	// An empty stored token means Things URL scheme authorization was never
+	// enabled; Token must fail with a descriptive error instead of returning
+	// the empty token as success.
+	dbPath := thingstest.DatabasePath(t)
+
+	raw, err := sql.Open("sqlite3", dbPath)
+	require.NoError(t, err)
+	_, err = raw.ExecContext(t.Context(), "UPDATE TMSettings SET uriSchemeAuthenticationToken = ''")
+	require.NoError(t, err)
+	require.NoError(t, raw.Close())
+
+	client, err := NewClient(WithDatabasePath(dbPath))
+	require.NoError(t, err)
+	t.Cleanup(func() { client.Close() })
+
+	_, err = client.Token(t.Context())
+	require.ErrorIs(t, err, ErrAuthTokenNotFound)
+	assert.Contains(t, err.Error(), "authorization not set up")
 }
 
 func TestClientURLSchemeBuilders(t *testing.T) {

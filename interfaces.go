@@ -79,6 +79,10 @@ type DateFilter[T any] interface {
 // ============================================================================
 // Layer 3: Composed Query Builder Interfaces
 // ============================================================================
+//
+// Query builders are copy-on-write: every chainable method returns a new
+// builder and leaves the receiver unchanged, so a base builder can be forked
+// into independent queries.
 
 // TodoQueryBuilder provides a fluent interface for building todo queries.
 type TodoQueryBuilder interface {
@@ -119,6 +123,7 @@ type ProjectQueryBuilder interface {
 	ProjectQueryExecutor
 
 	WithUUID(uuid string) ProjectQueryBuilder
+	WithUUIDPrefix(prefix string) ProjectQueryBuilder
 	WithTitle(title string) ProjectQueryBuilder
 
 	Status() StatusFilter[ProjectQueryBuilder]
@@ -144,6 +149,7 @@ type HeadingQueryBuilder interface {
 	HeadingQueryExecutor
 
 	WithUUID(uuid string) HeadingQueryBuilder
+	WithUUIDPrefix(prefix string) HeadingQueryBuilder
 	InProject(uuid string) HeadingQueryBuilder
 	Limit(n int) HeadingQueryBuilder
 }

@@ -2,6 +2,7 @@ package scheme
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,6 +80,54 @@ func TestJSONAttrs_SetDate(t *testing.T) {
 	assert.Equal(t, "2024-06-15", attrs.Attrs["when"])
 }
 
+func TestURLAttrs_QueryValues(t *testing.T) {
+	t.Run("idempotent with reminder", func(t *testing.T) {
+		attrs := NewURLAttrs()
+		attrs.SetString(KeyWhen, "today")
+		attrs.SetReminder(15, 0)
+
+		first, err := attrs.QueryValues()
+		require.NoError(t, err)
+		second, err := attrs.QueryValues()
+		require.NoError(t, err)
+
+		assert.Equal(t, "today@15:00", first.Get(KeyWhen))
+		assert.Equal(t, first, second, "repeated calls must return identical values")
+		assert.Equal(t, "today", attrs.Params[KeyWhen], "receiver must not be mutated")
+	})
+
+	t.Run("reminder defaults to today", func(t *testing.T) {
+		attrs := NewURLAttrs()
+		attrs.SetReminder(8, 5)
+
+		query, err := attrs.QueryValues()
+		require.NoError(t, err)
+		assert.Equal(t, "today@08:05", query.Get(KeyWhen))
+	})
+
+	t.Run("reminder rejects someday and anytime", func(t *testing.T) {
+		for _, when := range []When{WhenSomeday, WhenAnytime} {
+			attrs := NewURLAttrs()
+			attrs.SetString(KeyWhen, string(when))
+			attrs.SetReminder(9, 0)
+
+			_, err := attrs.QueryValues()
+			assert.ErrorIs(t, err, ErrReminderNeedsDate, "when=%s", when)
+		}
+	})
+
+	t.Run("no reminder passes params through", func(t *testing.T) {
+		attrs := NewURLAttrs()
+		attrs.SetString(KeyTitle, "Task")
+		attrs.SetString(KeyWhen, string(WhenSomeday))
+
+		query, err := attrs.QueryValues()
+		require.NoError(t, err)
+		assert.Equal(t, "Task", query.Get(KeyTitle))
+		assert.Equal(t, "someday", query.Get(KeyWhen))
+	})
+}
+
 // mockBuilder implements AttrBuilder interface for testing generic setters.
 type mockBuilder struct {
 	attrs URLAttrs
@@ -122,6 +171,20 @@ func TestSetStr(t *testing.T) {
 		}
 		result := SetStr(b, TitleParam, string(longTitle))
 		assert.Same(t, b, result)
+		assert.ErrorIs(t, b.err, ErrTitleTooLong)
+	})
+
+	t.Run("multi-byte title counts characters not bytes", func(t *testing.T) {
+		b := newMockBuilder()
+		title := strings.Repeat("中", MaxTitleLength) // 3x the limit in bytes
+		SetStr(b, TitleParam, title)
+		require.NoError(t, b.err)
+		assert.Equal(t, title, b.attrs.Params["title"])
+	})
+
+	t.Run("multi-byte title over rune limit rejected", func(t *testing.T) {
+		b := newMockBuilder()
+		SetStr(b, TitleParam, strings.Repeat("中", MaxTitleLength+1))
 		assert.ErrorIs(t, b.err, ErrTitleTooLong)
 	})
 
@@ -277,6 +340,24 @@ func TestSetStrs(t *testing.T) {
 		result := SetStrs(b, ChecklistItemsParam, items)
 		assert.Same(t, b, result)
 		assert.ErrorIs(t, b.err, ErrTooManyChecklistItems)
+	})
+
+	t.Run("tag containing separator rejected", func(t *testing.T) {
+		b := newMockBuilder()
+		SetStrs(b, TagsParam, []string{"home,work"})
+		assert.ErrorIs(t, b.err, ErrTagContainsComma)
+	})
+
+	t.Run("checklist item containing separator rejected", func(t *testing.T) {
+		b := newMockBuilder()
+		SetStrs(b, ChecklistItemsParam, []string{"line1\nline2"})
+		assert.ErrorIs(t, b.err, ErrChecklistItemContainsNewline)
+	})
+
+	t.Run("JSON storage also validates separators", func(t *testing.T) {
+		b := newMockJSONBuilder()
+		SetStrs(b, TagsParam, []string{"home,work"})
+		assert.ErrorIs(t, b.err, ErrTagContainsComma)
 	})
 }
 

@@ -1,6 +1,7 @@
 package things3
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -937,4 +938,99 @@ func TestTagWithParent(t *testing.T) {
 	tags, err := db.Tags().WithParent("nonexistent").All(ctx)
 	require.NoError(t, err)
 	assert.Empty(t, tags)
+}
+
+// =============================================================================
+// UUID Prefix Filter Tests
+// =============================================================================
+
+func TestWithUUIDPrefix(t *testing.T) {
+	db := newTestDB(t)
+	ctx := t.Context()
+
+	const (
+		testUUIDHeadingCompleted = "CmpltdHdngTestFixture1"
+		prefixNoMatch            = "zzzzzz"
+	)
+
+	todoUUIDs := func(prefix string) ([]string, error) {
+		todos, err := db.Todos().WithUUIDPrefix(prefix).All(ctx)
+		return extractTodoUUIDs(todos), err
+	}
+	projectUUIDs := func(prefix string) ([]string, error) {
+		projects, err := db.Projects().WithUUIDPrefix(prefix).All(ctx)
+		uuids := make([]string, len(projects))
+		for i := range projects {
+			uuids[i] = projects[i].UUID
+		}
+		return uuids, err
+	}
+	headingUUIDs := func(prefix string) ([]string, error) {
+		headings, err := db.Headings().WithUUIDPrefix(prefix).All(ctx)
+		uuids := make([]string, len(headings))
+		for i := range headings {
+			uuids[i] = headings[i].UUID
+		}
+		return uuids, err
+	}
+
+	tests := []struct {
+		name   string
+		query  func(prefix string) ([]string, error)
+		prefix string
+		want   []string
+	}{
+		{"todo short prefix", todoUUIDs, testUUIDTodoInProject[:6], []string{testUUIDTodoInProject}},
+		{"todo full uuid", todoUUIDs, testUUIDTodoInProject, []string{testUUIDTodoInProject}},
+		{"todo no match", todoUUIDs, prefixNoMatch, []string{}},
+		{"project short prefix", projectUUIDs, testUUIDProjectInArea1[:6], []string{testUUIDProjectInArea1}},
+		{"project full uuid", projectUUIDs, testUUIDProjectInArea1, []string{testUUIDProjectInArea1}},
+		{"project trashed excluded by default", projectUUIDs, "Tc7DAB", []string{}},
+		{"project no match", projectUUIDs, prefixNoMatch, []string{}},
+		{"heading short prefix", headingUUIDs, testUUIDHeadingCompleted[:6], []string{testUUIDHeadingCompleted}},
+		{"heading full uuid", headingUUIDs, testUUIDHeadingCompleted, []string{testUUIDHeadingCompleted}},
+		{"heading no match", headingUUIDs, prefixNoMatch, []string{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.query(tt.prefix)
+			require.NoError(t, err)
+			assert.ElementsMatch(t, tt.want, got)
+		})
+	}
+}
+
+// =============================================================================
+// Empty Result Encoding Tests
+// =============================================================================
+
+// TestAllEmptyResultsMarshalAsJSONArray verifies that every All() returns a
+// non-nil empty slice when nothing matches, so JSON encodes [] instead of null.
+func TestAllEmptyResultsMarshalAsJSONArray(t *testing.T) {
+	db := newTestDB(t)
+	ctx := t.Context()
+	const nonexistent = "nonexistent-uuid"
+
+	tests := []struct {
+		name string
+		all  func() (any, error)
+	}{
+		{"todo slice", func() (any, error) { return db.Todos().WithUUID(nonexistent).All(ctx) }},
+		{"project slice", func() (any, error) { return db.Projects().WithUUID(nonexistent).All(ctx) }},
+		{"heading slice", func() (any, error) { return db.Headings().WithUUID(nonexistent).All(ctx) }},
+		{"area slice", func() (any, error) { return db.Areas().WithUUID(nonexistent).All(ctx) }},
+		{"tag slice", func() (any, error) { return db.Tags().WithUUID(nonexistent).All(ctx) }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.all()
+			require.NoError(t, err)
+
+			data, err := json.Marshal(got)
+			require.NoError(t, err)
+			assert.Equal(t, "[]", string(data), "empty result must encode as JSON array, not null")
+		})
+	}
 }

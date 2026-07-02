@@ -7,6 +7,8 @@ import (
 )
 
 // tagQuery provides a fluent interface for building tag queries.
+// Chainable methods are copy-on-write: each call returns a new builder, so a
+// tagQuery can be forked into independent queries.
 type tagQuery struct {
 	database *db
 	filter   database.TagFilter
@@ -19,26 +21,36 @@ func (d *db) Tags() *tagQuery {
 	}
 }
 
+// clone returns a shallow copy of the query for copy-on-write chaining.
+func (q *tagQuery) clone() *tagQuery {
+	c := *q
+	return &c
+}
+
 // WithUUID filters tags by UUID.
 func (q *tagQuery) WithUUID(uuid string) TagQueryBuilder {
-	q.filter.UUID = &uuid
-	return q
+	c := q.clone()
+	c.filter.UUID = &uuid
+	return c
 }
 
 // WithTitle filters tags by title.
 func (q *tagQuery) WithTitle(title string) TagQueryBuilder {
-	q.filter.Title = &title
-	return q
+	c := q.clone()
+	c.filter.Title = &title
+	return c
 }
 
 // WithParent filters tags by parent tag UUID.
 // Use this to find child tags of a specific parent tag.
 func (q *tagQuery) WithParent(parentUUID string) TagQueryBuilder {
-	q.filter.ParentUUID = &parentUUID
-	return q
+	c := q.clone()
+	c.filter.ParentUUID = &parentUUID
+	return c
 }
 
 // All executes the query and returns all matching tags.
+// The result is never nil; an empty result encodes as a JSON array.
 func (q *tagQuery) All(ctx context.Context) ([]Tag, error) {
 	rows, err := q.database.inner.QueryTags(ctx, q.filter)
 	if err != nil {

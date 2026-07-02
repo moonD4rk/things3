@@ -12,7 +12,7 @@ import (
 func NewProjectCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "project <identifier>",
-		Short: "Show a project by UUID, title keyword, or search query",
+		Short: "Show a project by UUID prefix, title keyword, or search query",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := things3.NewClient()
@@ -36,7 +36,7 @@ func NewProjectCmd() *cobra.Command {
 			case bySearch:
 				q = client.Projects().Search(identifier).Status().Any()
 			default:
-				q = client.Projects().WithUUID(identifier).Status().Any()
+				q = client.Projects().WithUUIDPrefix(identifier).Status().Any()
 			}
 
 			projects, err := q.All(cmd.Context())
@@ -44,6 +44,9 @@ func NewProjectCmd() *cobra.Command {
 				return err
 			}
 
+			if len(projects) == 0 {
+				return fmt.Errorf("no project matches %q", identifier)
+			}
 			if len(projects) == 1 {
 				todos, err := client.Todos().
 					InProject(projects[0].UUID).

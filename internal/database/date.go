@@ -81,9 +81,10 @@ func stringToThingsDate(isoDate string) (int64, error) {
 
 // thingsTimeToString converts a Things time integer to time string (HH:MM).
 // Things time format: hhhhhmmmmmm00000000000000000000 (31-bit binary)
-// Returns empty string if thingsTime is 0 or negative.
+// Zero encodes a valid 00:00 reminder ("no reminder" is NULL in the
+// database, never 0). Returns empty string only for negative values.
 func thingsTimeToString(thingsTime int64) string {
-	if thingsTime <= 0 {
+	if thingsTime < 0 {
 		return ""
 	}
 
@@ -125,10 +126,12 @@ func thingsDateExpressionToISODate(expr string) string {
 }
 
 // thingsTimeExpressionToISOTime creates a SQL expression to convert Things time to HH:MM format.
+// The NULL check must be explicit: a packed value of 0 is a valid 00:00
+// reminder, so truthiness (CASE WHEN expr) would wrongly drop midnight.
 func thingsTimeExpressionToISOTime(expr string) string {
 	hours := fmt.Sprintf("(%s & %d) >> 26", expr, hourMask)
 	minutes := fmt.Sprintf("(%s & %d) >> 20", expr, minuteMask)
 
 	isoTime := fmt.Sprintf("printf('%%02d:%%02d', %s, %s)", hours, minutes)
-	return fmt.Sprintf("CASE WHEN %s THEN %s ELSE %s END", expr, isoTime, expr)
+	return fmt.Sprintf("CASE WHEN %s IS NOT NULL THEN %s ELSE NULL END", expr, isoTime)
 }

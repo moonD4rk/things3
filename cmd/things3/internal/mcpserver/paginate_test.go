@@ -24,7 +24,7 @@ func TestPaginate(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			slice, total, page, pages := paginate(items, tc.page, tc.limit)
+			slice, total, page, pages := paginate(items, tc.page, tc.limit, DefaultLimit, MaxLimit)
 			if len(slice) != tc.wantLen || total != tc.wantTotal || page != tc.wantPageOut || pages != tc.wantPagesOut {
 				t.Errorf("paginate(page=%d, limit=%d) = len %d, total %d, page %d, pages %d; want len %d, total %d, page %d, pages %d",
 					tc.page, tc.limit, len(slice), total, page, pages, tc.wantLen, tc.wantTotal, tc.wantPageOut, tc.wantPagesOut)
@@ -36,10 +36,10 @@ func TestPaginate(t *testing.T) {
 // TestPageResultNeverNil proves the envelope always carries a JSON array, even for
 // an empty result or an out-of-range page.
 func TestPageResultNeverNil(t *testing.T) {
-	if got := pageResult([]int{}, 1, 20); got.Items == nil {
+	if got := pageResult([]int{}, 1, 20, DefaultLimit, MaxLimit); got.Items == nil {
 		t.Errorf("empty result Items must not be nil")
 	}
-	if got := pageResult([]int{1, 2, 3}, 9, 20); got.Items == nil {
+	if got := pageResult([]int{1, 2, 3}, 9, 20, DefaultLimit, MaxLimit); got.Items == nil {
 		t.Errorf("out-of-range page Items must not be nil")
 	}
 }

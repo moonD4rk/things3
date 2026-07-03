@@ -1,7 +1,10 @@
 package mcpserver
 
 import (
+	"encoding/json"
+	"fmt"
 	"reflect"
+	"strconv"
 
 	"github.com/google/jsonschema-go/jsonschema"
 )
@@ -62,7 +65,38 @@ func enumSchema(values ...string) *jsonschema.Schema {
 }
 
 // inputSchemaFor infers an input schema for In, injecting the enum schemas so
-// every constrained field is rejected by the SDK before a handler runs.
-func inputSchemaFor[In any]() (*jsonschema.Schema, error) {
-	return jsonschema.For[In](&jsonschema.ForOptions{TypeSchemas: enumSchemas})
+// every constrained field is rejected by the SDK before a handler runs, then
+// stamping the pagination bounds so limit and page carry machine-readable
+// keywords rather than prose the model can ignore.
+func inputSchemaFor[In any](maxLimit, defaultLimit int) (*jsonschema.Schema, error) {
+	s, err := jsonschema.For[In](&jsonschema.ForOptions{TypeSchemas: enumSchemas})
+	if err != nil {
+		return nil, err
+	}
+	applyPageBounds(s, maxLimit, defaultLimit)
+	return s, nil
+}
+
+// applyPageBounds stamps default/minimum/maximum onto the limit and page
+// properties when a tool has them. The SDK runs ApplyDefaults then Validate on
+// every call, so these are enforced, not merely advertised: an omitted limit
+// arrives as defaultLimit and a limit above maxLimit is rejected before the
+// handler runs. It is a no-op for tools without pagination.
+func applyPageBounds(s *jsonschema.Schema, maxLimit, defaultLimit int) {
+	if s == nil || s.Properties == nil {
+		return
+	}
+	if lim := s.Properties["limit"]; lim != nil {
+		lo, hi := 1.0, float64(maxLimit)
+		lim.Minimum = &lo
+		lim.Maximum = &hi
+		lim.Default = json.RawMessage(strconv.Itoa(defaultLimit))
+		lim.Description = fmt.Sprintf("page size; defaults to %d, capped at %d", defaultLimit, maxLimit)
+	}
+	if page := s.Properties["page"]; page != nil {
+		lo := 1.0
+		page.Minimum = &lo
+		page.Default = json.RawMessage("1")
+		page.Description = "1-based page number"
+	}
 }

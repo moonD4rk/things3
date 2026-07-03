@@ -108,6 +108,24 @@ func projectItems(projects []things3.Project) []Item {
 	return items
 }
 
+// notesLimit bounds the notes text carried in a list or search item; the full
+// note remains available through get.
+const notesLimit = 200
+
+// truncateNotes shortens over-long notes in a list or search page to notesLimit
+// runes in place (rune-safe, never splitting a codepoint) and flags each item it
+// cut. It runs on the returned page only, so the shared item converters and the
+// get path keep full notes.
+func truncateNotes(items []Item) {
+	for i := range items {
+		r := []rune(items[i].Notes)
+		if len(r) > notesLimit {
+			items[i].Notes = string(r[:notesLimit])
+			items[i].NotesTruncated = true
+		}
+	}
+}
+
 // headingRefs converts headings into inline Refs.
 func headingRefs(headings []things3.Heading) []Ref {
 	refs := make([]Ref, len(headings))

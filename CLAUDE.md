@@ -8,6 +8,7 @@ Guidance for Claude Code when working in this repository.
 
 - A Go **library** (repo root): read-only access to the Things 3 macOS SQLite database plus type-safe `things:///` URL-scheme building and execution. A port of Python `things.py` with full API parity.
 - A **CLI** (`cmd/things3`): mirrors the app's sidebar views and interaction verbs on top of the library.
+- An **MCP server** (`things3 mcp`, `cmd/things3/internal/mcpserver`): the same verbs exposed as Model Context Protocol tools over stdio for AI assistants, sharing the CLI's resolve/verify infrastructure. One brew-installed binary serves humans and models alike.
 
 The single most important architectural fact: **reads and writes take different roads**. Reads query the SQLite database directly (`internal/database`). Writes can only go through the fire-and-forget URL scheme (`internal/scheme`) - there is no write access to the database, and the scheme's limits are hard boundaries, never worked around: no delete or trash, no move-to-Inbox, checklist replace-only, repeating items read-only, tags never created, auth token auto-read from the DB.
 
@@ -40,7 +41,7 @@ Domain facts that are easy to get wrong:
 
 ## CLI Architecture (cmd/things3)
 
-Cobra with factory functions (`NewXxxCmd()`, registered explicitly in `NewRootCmd()`; no `init()` except the pinned `version.go` - do not touch it). Four command groups: **Views** (`today`, `inbox`, `upcoming`, `anytime`, `someday`, `logbook`, `deadlines`, `trash`), **Collections** (`projects`, `areas`, `tags`), **Lookup** (`show`, `search`), **Actions** (`add`, `done`, `cancel`, `schedule`, `move`, `edit`, `open`).
+Cobra with factory functions (`NewXxxCmd()`, registered explicitly in `NewRootCmd()`; no `init()` except the pinned `version.go` - do not touch it). Four command groups: **Views** (`today`, `inbox`, `upcoming`, `anytime`, `someday`, `logbook`, `deadlines`, `trash`), **Collections** (`projects`, `areas`, `tags`), **Lookup** (`show`, `search`), **Actions** (`add`, `done`, `cancel`, `schedule`, `move`, `edit`, `open`, `mcp`).
 
 ### One uniform global flag surface
 
@@ -67,9 +68,13 @@ Every action follows `runWrite` (`write.go`): resolve the target, execute the UR
 
 Commands only return errors; `main.go` owns rendering (`RenderError`, format-aware: JSON errors go to stderr as `{"error", "candidates"}`) and `os.Exit`. Wrap DB command bodies with `withClient` (never open/close the client inline); write through `cmd.OutOrStdout()`; set `GroupID` and a realistic `Example` on every command.
 
+### MCP server (`mcp` command, `internal/mcpserver`)
+
+`things3 mcp` serves a stdio Model Context Protocol server (RFC 014): thirteen verb-shaped tools mirroring the CLI (six read, six write, `open`) built on the same `internal/resolve` and `internal/verify`. The `mcpserver` package is cobra-free and owns the tool handlers, JSON-Schema registration (enum injection for named string types), pagination, and library-to-MCP conversion; `cmd/mcp.go` is a thin wrapper that builds the client via `withClient` and runs the server (`--read-only`, `--log-level`). Pagination defaults to 20 (max 100) in the same `{items, total, page, pages}` envelope. Domain failures ride the output envelope as a structured `ToolError` (`invalid_input`/`not_found`/`ambiguous`/`execution_failed`); Go errors (hence MCP `isError`) are reserved for transport failures. `--read-only` registers only the read tools (write tools and `open` are never registered). One long-lived client serves the whole session: reads run concurrently, writes serialize under a mutex. Both stdin EOF and SIGINT/SIGTERM exit 0. Logs are `slog` to stderr; stdout is the protocol.
+
 ## Development Workflow
 
-1. **Design first**: significant changes start as an RFC in `rfcs/NNN_snake_case_title.md` (header: Status/Author/Date; sections: Summary, Design, Implementation Notes). Current specs: RFC 009 (library query/model), RFC 012 (CLI) as amended by RFC 013 (list pagination, output envelope).
+1. **Design first**: significant changes start as an RFC in `rfcs/NNN_snake_case_title.md` (header: Status/Author/Date; sections: Summary, Design, Implementation Notes). Current specs: RFC 009 (library query/model), RFC 012 (CLI) as amended by RFC 013 (list pagination, output envelope), RFC 014 (MCP server, implemented).
 2. **Implement library before CLI** when a change spans both; keep the CLI a thin consumer.
 3. **Verify in both modules**: `go build`, `go test`, `golangci-lint run`, `gofumpt` before finishing.
 4. **Sync docs**: `README.md` and `cmd/things3/README.md` must match implemented behavior. Release notes use Library and CLI bullet sections with PR references.
@@ -79,7 +84,7 @@ House rules for every artifact: English only, no emoji, no local machine paths. 
 ## Testing
 
 - Table-driven throughout; integration tests run against the fixture in `testdata/` via `thingstest.DatabasePath(t)` with `t.Setenv("THINGSDB", ...)` or `--db`.
-- **Action-command tests never execute osascript**: they assert `--dry-run` URLs and error paths only. No test requires Things to be installed; resolve/verify are covered directly against the fixture.
+- **Action-command tests never execute osascript**: they assert `--dry-run` URLs and error paths only. No test requires Things to be installed; resolve/verify are covered directly against the fixture. MCP write-tool tests do the same through an injected `Execute` recorder; protocol concerns (schema/enum enforcement, structured content, read-only tool listing) and the verified-write path run over an in-memory MCP transport, the latter by bumping fixture timestamps.
 - Every exported identifier gets a doc comment starting with its name. Real end-to-end write verification is manual, against a live Things app.
 
 ## Reference

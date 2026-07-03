@@ -20,6 +20,7 @@ import (
 const (
 	flagReadOnly = "read-only"
 	flagLogLevel = "log-level"
+	flagMaxLimit = "max-limit"
 )
 
 func newMCPCmd() *cobra.Command {
@@ -32,18 +33,20 @@ verbs as the CLI as MCP tools. Configure an MCP client to launch it with
 {"command": "things3", "args": ["mcp"]}. Reads query the database; writes run
 through the Things URL scheme and are verified. Logs go to stderr; stdout carries
 the protocol. The server stops on stdin EOF or SIGINT/SIGTERM.`,
-		Example: "  things3 mcp\n  things3 mcp --read-only\n  things3 mcp --log-level debug",
+		Example: "  things3 mcp\n  things3 mcp --read-only\n  things3 mcp --max-limit 20\n  things3 mcp --log-level debug",
 		Args:    cobra.NoArgs,
 		RunE:    withClient(runMCP),
 	}
 	cmd.Flags().Bool(flagReadOnly, false, "register only the read tools; never execute the URL scheme")
 	cmd.Flags().String(flagLogLevel, "info", "log level: debug, info, warn, or error")
+	cmd.Flags().Int(flagMaxLimit, 0, "cap the list page size for the session; 0 uses the built-in maximum")
 	return cmd
 }
 
 func runMCP(cmd *cobra.Command, _ []string, client *things3.Client) error {
 	readOnly, _ := cmd.Flags().GetBool(flagReadOnly)
 	levelName, _ := cmd.Flags().GetString(flagLogLevel)
+	maxLimit, _ := cmd.Flags().GetInt(flagMaxLimit)
 	level, err := parseLogLevel(levelName)
 	if err != nil {
 		return err
@@ -54,6 +57,7 @@ func runMCP(cmd *cobra.Command, _ []string, client *things3.Client) error {
 		Version:  version,
 		ReadOnly: readOnly,
 		Logger:   logger,
+		MaxLimit: maxLimit,
 	})
 	if err != nil {
 		return err

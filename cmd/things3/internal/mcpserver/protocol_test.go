@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -231,4 +233,107 @@ func TestReadOnlyToolListing(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestLimitSchemaKeywords proves the pagination bounds are stamped as
+// machine-readable schema keywords (default/minimum/maximum), not prose, so the
+// SDK enforces them and a model reads the real cap.
+func TestLimitSchemaKeywords(t *testing.T) {
+	schema, err := inputSchemaFor[ListTodosInput](MaxLimit, DefaultLimit)
+	if err != nil {
+		t.Fatalf("input schema: %v", err)
+	}
+	lim := schema.Properties["limit"]
+	if lim == nil {
+		t.Fatal("limit property missing from schema")
+	}
+	if lim.Maximum == nil || *lim.Maximum != float64(MaxLimit) {
+		t.Errorf("limit.maximum = %v, want %d", lim.Maximum, MaxLimit)
+	}
+	if lim.Minimum == nil || *lim.Minimum != 1 {
+		t.Errorf("limit.minimum = %v, want 1", lim.Minimum)
+	}
+	if string(lim.Default) != strconv.Itoa(DefaultLimit) {
+		t.Errorf("limit.default = %q, want %d", lim.Default, DefaultLimit)
+	}
+	page := schema.Properties["page"]
+	if page == nil || page.Minimum == nil || *page.Minimum != 1 || string(page.Default) != "1" {
+		t.Errorf("page bounds wrong: %+v", page)
+	}
+}
+
+// TestLimitSchemaEnforcement proves the SDK enforces the stamped bounds: an
+// over-cap limit is rejected before the handler runs (replacing the old silent
+// clamp), and an omitted limit pages at the default.
+func TestLimitSchemaEnforcement(t *testing.T) {
+	srv := newTestServer(t, Config{Version: "test"})
+	session, ctx := connect(t, srv)
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "list_todos",
+		Arguments: map[string]any{"view": "inbox", "limit": MaxLimit + 100},
+	})
+	if err == nil && (res == nil || !res.IsError) {
+		t.Fatalf("limit over the maximum should be rejected, got err=%v res=%+v", err, res)
+	}
+
+	// An omitted limit pages at the default: all-history logbook has > 20 rows.
+	full := callTool(t, session, ctx, "list_todos", map[string]any{"view": "logbook", "days": 0})
+	page := structured[PageResult[Item]](t, full)
+	if page.Total <= DefaultLimit {
+		t.Fatalf("need > %d logbook rows to prove default paging, got %d", DefaultLimit, page.Total)
+	}
+	if len(page.Items) != DefaultLimit {
+		t.Errorf("omitted limit should page at the default %d, got %d", DefaultLimit, len(page.Items))
+	}
+}
+
+// TestMaxLimitConfig proves --max-limit lowers both the advertised and enforced
+// cap, that a cap below the built-in default is clamped so construction does not
+// panic (the SDK rejects default > maximum at registration), and that the
+// built-in default is not itself configurable.
+func TestMaxLimitConfig(t *testing.T) {
+	cases := []struct {
+		cap, wantDefault, wantMax int
+	}{
+		{0, DefaultLimit, MaxLimit}, // unset: built-in bounds
+		{20, 20, 20},                // cap at the default
+		{5, 5, 5},                   // cap below the default clamps the default down
+	}
+	for _, tc := range cases {
+		def, mx := resolveLimits(Config{MaxLimit: tc.cap})
+		if def != tc.wantDefault || mx != tc.wantMax {
+			t.Errorf("resolveLimits(%d) = (default %d, max %d), want (%d, %d)", tc.cap, def, mx, tc.wantDefault, tc.wantMax)
+		}
+	}
+
+	// A low cap must construct without panicking inside mcp.AddTool and advertise
+	// the low cap on the limit schema.
+	srv := newTestServer(t, Config{Version: "test", MaxLimit: 5})
+	schema, err := inputSchemaFor[ListTodosInput](srv.maxLimit, srv.defaultLimit)
+	if err != nil {
+		t.Fatalf("schema: %v", err)
+	}
+	lim := schema.Properties["limit"]
+	if lim.Maximum == nil || *lim.Maximum != 5 || string(lim.Default) != "5" {
+		t.Errorf("capped limit schema = max %v default %q, want max 5 default 5", lim.Maximum, lim.Default)
+	}
+	if DefaultLimit != 20 {
+		t.Errorf("DefaultLimit is not configurable, but changed to %d", DefaultLimit)
+	}
+}
+
+// TestToolProse asserts the load-bearing steering tokens survive in the tool
+// descriptions and instructions, at substring level so wording can still evolve.
+func TestToolProse(t *testing.T) {
+	for _, tok := range []string{"days", "30", "notes_truncated"} {
+		if !strings.Contains(descListTodos, tok) {
+			t.Errorf("descListTodos missing %q", tok)
+		}
+	}
+	for _, tok := range []string{"limit 1", "days", "notes"} {
+		if !strings.Contains(instructions, tok) {
+			t.Errorf("instructions missing %q", tok)
+		}
+	}
 }

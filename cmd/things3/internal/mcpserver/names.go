@@ -41,4 +41,9 @@ Wherever a tool accepts an id, target, or destination it resolves a full UUID, a
 more characters, an exact title, or a title substring. An ambiguous match returns candidate UUIDs to retry
 with. Dates use YYYY-MM-DD; when also accepts today, tomorrow, evening, anytime, and someday; reminder uses
 HH:MM. Inherited URL-scheme limits: no delete or trash, no move to Inbox, checklists replace rather than
-append, repeating series are read-only, and unknown tags are ignored by Things.`
+append, repeating series are read-only, and unknown tags are ignored by Things.
+
+Lists report total and pages. Start with the default page size, which answers most questions, and fetch
+further pages only when the question needs them. When only the count matters, pass limit 1 and read total.
+For a date-scoped question on upcoming, logbook, or deadlines, pass days rather than paging the whole view.
+List and search items shorten notes; get returns the full note.`

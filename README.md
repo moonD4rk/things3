@@ -118,6 +118,23 @@ Targets resolve by exact UUID, UUID prefix (4+ chars), exact title, then title s
 
 Inherited URL-scheme limits (not worked around): no delete or trash, no move to Inbox, checklist is replace-only, repeating rules are read-only, and unknown tags are silently ignored by Things.
 
+### MCP server
+
+`things3 mcp` runs a local [Model Context Protocol](https://modelcontextprotocol.io) server over stdio, exposing the same verbs as MCP tools so an AI assistant reads and writes Things through the one brew-installed binary. Point an MCP client at it:
+
+```json
+{
+  "mcpServers": {
+    "things3": {
+      "command": "things3",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Add `"--read-only"` after `"mcp"` to register only the read tools, or `"--max-limit"` to cap the list page size. The full tool list (including the `days` window on upcoming/logbook/deadlines and notes truncation) and Claude Code / Claude Desktop setup are in [`cmd/things3/README.md`](cmd/things3/README.md#mcp-server).
+
 ## Library
 
 ### Install

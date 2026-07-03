@@ -86,11 +86,11 @@ The `next:` hint disappears on the last page (`-- 10-10 of 10 (page 4/4) | all: 
 | --- | --- | --- | --- |
 | `today` | - | Today's todos, with a This Evening section when present | `things3 today` |
 | `inbox` | - | Incomplete todos in the Inbox | `things3 inbox` |
-| `upcoming` | - | Scheduled future todos plus repeating tasks at their next occurrence, grouped by date | `things3 upcoming --tag work` |
+| `upcoming` | `--days N` (0 = all) | Scheduled future todos plus repeating tasks at their next occurrence, grouped by date | `things3 upcoming --days 7` |
 | `anytime` | - | Anytime todos, grouped by project or area | `things3 anytime` |
 | `someday` | - | Someday todos with no scheduled date | `things3 someday` |
 | `logbook` | `--days N` (default 30, 0 = all) | Completed and canceled todos, most recent first | `things3 logbook --days 7` |
-| `deadlines` | - | Incomplete todos with deadlines, soonest first | `things3 deadlines` |
+| `deadlines` | `--days N` (0 = all, keeps overdue) | Incomplete todos with deadlines, soonest first | `things3 deadlines --days 7` |
 | `trash` | - | Trashed todos and projects (mixed list) | `things3 trash` |
 
 The **Flags** column lists view-specific flags only; every view also accepts the shared [List flags](#list-flags) (`--page`, `--all`, `--sort`, `--desc`, `--tag`). For example:
@@ -353,6 +353,57 @@ things3 done "$uuid" --json | jq '.verified'   # -> true
 ```
 
 Combine with exit codes for control flow: `things3 show "$uuid" --json >/dev/null || echo "gone"`.
+
+## MCP server
+
+`things3 mcp` serves a local [Model Context Protocol](https://modelcontextprotocol.io) server over stdio, exposing the same verbs as MCP tools so an AI assistant drives Things through the same binary. Reads query the database; writes run resolve -> execute -> verify, exactly like the CLI. Logs go to stderr; stdout carries the protocol. The server stops cleanly on stdin EOF or SIGINT/SIGTERM.
+
+### Tools
+
+Thirteen verb-shaped tools mirror the CLI:
+
+| Tool | Kind | Purpose |
+| --- | --- | --- |
+| `list_todos` | read | a sidebar view (`view`: inbox, today, upcoming, anytime, someday, logbook, deadlines, trash), optionally narrowed by project, area, or tag, or a `days` window on upcoming/logbook/deadlines (logbook defaults to the last 30 days, 0 = all) |
+| `list_projects`, `list_areas`, `list_tags` | read | the collections, paginated |
+| `search` | read | quick find across todos and projects |
+| `get` | read | resolve one item; a project answer nests its incomplete todos and headings |
+| `add_todo`, `add_project` | write | create, with when / deadline / reminder / tags / checklist |
+| `complete` | write | done, cancel, or reopen via a status enum |
+| `schedule`, `move`, `edit` | write | reschedule, refile, or change attributes |
+| `open` | nav | reveal an item or list in the app |
+
+Every id, target, and destination resolves by UUID, 4+ char prefix, exact title, then title substring; an ambiguous match returns candidate UUIDs to retry with. Lists paginate with `limit` and 1-based `page` in the `{items, total, page, pages}` envelope; `limit` carries machine-readable schema bounds (default 20, minimum 1, maximum 100), so an omitted `limit` is stamped to 20 and an over-cap value is rejected rather than silently clamped. List and search items shorten notes to 200 characters and set `notes_truncated`; `get` returns the full note. Writes are verified against the database and report `verified: true|false`; an accepted-but-unconfirmed send is still a success. Domain failures ride the envelope as a structured error (`invalid_input`, `not_found`, `ambiguous`, `execution_failed`) so a model can self-correct.
+
+### Flags
+
+- `--read-only` registers only the six read tools; the write tools and `open` are not exposed at all.
+- `--max-limit N` caps the list page size for the session (0 uses the built-in maximum of 100), lowering both the advertised schema maximum and the enforced cap.
+- `--log-level debug|info|warn|error` (default `info`) sets the stderr log level.
+- `--db <path>` selects the database, like every other command.
+
+### Client configuration
+
+**Claude Code** — register the server once:
+
+```bash
+claude mcp add things3 -- things3 mcp
+```
+
+**Claude Desktop** — add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "things3": {
+      "command": "things3",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Use `"args": ["mcp", "--read-only"]` to expose only the read tools.
 
 ## Development
 

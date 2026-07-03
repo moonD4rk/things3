@@ -53,23 +53,26 @@ type ChecklistItem struct {
 // as Refs. It never nests another Item, keeping the output schema acyclic; a
 // project's todos and headings ride on the enclosing GetResult instead.
 type Item struct {
-	Type        string          `json:"type" jsonschema:"todo or project"`
-	UUID        string          `json:"uuid"`
-	Title       string          `json:"title"`
-	Status      string          `json:"status" jsonschema:"incomplete, completed, or canceled"`
-	Start       string          `json:"start" jsonschema:"the start bucket: inbox, anytime, or someday"`
-	Notes       string          `json:"notes,omitempty"`
-	Project     *Ref            `json:"project,omitempty"`
-	Area        *Ref            `json:"area,omitempty"`
-	Heading     *Ref            `json:"heading,omitempty"`
-	Tags        []string        `json:"tags,omitempty"`
-	When        string          `json:"when,omitempty" jsonschema:"the scheduled start date, YYYY-MM-DD"`
-	Deadline    string          `json:"deadline,omitempty" jsonschema:"the deadline date, YYYY-MM-DD"`
-	Reminder    string          `json:"reminder,omitempty" jsonschema:"the reminder time, HH:MM"`
-	Checklist   []ChecklistItem `json:"checklist,omitempty"`
-	Evening     bool            `json:"evening,omitempty" jsonschema:"true when the todo is in the This Evening section of Today"`
-	Repeating   bool            `json:"repeating,omitempty" jsonschema:"true when the item belongs to a repeating series"`
-	CompletedAt string          `json:"completed_at,omitempty" jsonschema:"when the item was completed or canceled, RFC 3339"`
+	Type   string `json:"type" jsonschema:"todo or project"`
+	UUID   string `json:"uuid"`
+	Title  string `json:"title"`
+	Status string `json:"status" jsonschema:"incomplete, completed, or canceled"`
+	Start  string `json:"start" jsonschema:"the start bucket: inbox, anytime, or someday"`
+	Notes  string `json:"notes,omitempty"`
+	// NotesTruncated marks a list or search item whose notes were shortened; the
+	// full text is available through get. Detail views never truncate.
+	NotesTruncated bool            `json:"notes_truncated,omitempty" jsonschema:"true when notes were shortened; use get for full text"`
+	Project        *Ref            `json:"project,omitempty"`
+	Area           *Ref            `json:"area,omitempty"`
+	Heading        *Ref            `json:"heading,omitempty"`
+	Tags           []string        `json:"tags,omitempty"`
+	When           string          `json:"when,omitempty" jsonschema:"the scheduled start date, YYYY-MM-DD"`
+	Deadline       string          `json:"deadline,omitempty" jsonschema:"the deadline date, YYYY-MM-DD"`
+	Reminder       string          `json:"reminder,omitempty" jsonschema:"the reminder time, HH:MM"`
+	Checklist      []ChecklistItem `json:"checklist,omitempty"`
+	Evening        bool            `json:"evening,omitempty" jsonschema:"true when the todo is in the This Evening section of Today"`
+	Repeating      bool            `json:"repeating,omitempty" jsonschema:"true when the item belongs to a repeating series"`
+	CompletedAt    string          `json:"completed_at,omitempty" jsonschema:"when the item was completed or canceled, RFC 3339"`
 }
 
 // Area is the small shape for a Things area.

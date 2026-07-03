@@ -83,6 +83,7 @@ func registerCommands(root *cobra.Command) {
 		newMoveCmd(),
 		newEditCmd(),
 		newOpenCmd(),
+		newMCPCmd(),
 		NewVersionCmd(),
 	)
 }

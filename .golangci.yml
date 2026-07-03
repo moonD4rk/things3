@@ -124,6 +124,12 @@ linters:
       - path: cmd/version\.go
         linters:
           - gochecknoinits
+      # MCP tool handlers must take their input struct by value to satisfy the SDK's
+      # ToolHandlerFor signature; the mirrored test helpers do the same.
+      - path: internal/mcpserver/
+        linters:
+          - gocritic
+        text: hugeParam
 
 formatters:
   enable:

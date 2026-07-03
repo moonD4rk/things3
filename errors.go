@@ -41,6 +41,15 @@ var (
 	ErrTooManyChecklistItems = scheme.ErrTooManyChecklistItems
 	// ErrInvalidReminderTime is returned when reminder hour or minute is out of range.
 	ErrInvalidReminderTime = scheme.ErrInvalidReminderTime
+	// ErrReminderNeedsDate is returned when a reminder is set without a concrete
+	// start date (someday and anytime cannot carry one).
+	ErrReminderNeedsDate = scheme.ErrReminderNeedsDate
+	// ErrTagContainsComma is returned when a tag name contains a comma.
+	ErrTagContainsComma = scheme.ErrTagContainsComma
+	// ErrTitleContainsNewline is returned when a title contains a newline.
+	ErrTitleContainsNewline = scheme.ErrTitleContainsNewline
+	// ErrChecklistItemContainsNewline is returned when a checklist item contains a newline.
+	ErrChecklistItemContainsNewline = scheme.ErrChecklistItemContainsNewline
 )
 
 // URL Scheme Operation Errors - aliased from internal/scheme.

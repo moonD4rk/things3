@@ -27,7 +27,7 @@ RFC 012's pivotal rule was "knowing the sidebar is knowing the commands". This R
 
 | Tool | Kind | Parameters (all optional unless noted) | CLI counterpart |
 | --- | --- | --- | --- |
-| `list_todos` | read | `view` (required enum: `inbox`, `today`, `upcoming`, `anytime`, `someday`, `logbook`, `deadlines`, `trash`), `project`, `area`, `tag`, `limit`, `page` | the eight view commands |
+| `list_todos` | read | `view` (required enum: `inbox`, `today`, `upcoming`, `anytime`, `someday`, `logbook`, `deadlines`, `trash`), `project`, `area`, `tag`, `days` (upcoming/logbook/deadlines only), `limit`, `page` | the eight view commands |
 | `list_projects` | read | `area`, `tag`, `status` (enum, default `incomplete`), `limit`, `page` | `projects` |
 | `list_areas` | read | `limit`, `page` | `areas` |
 | `list_tags` | read | `limit`, `page` | `tags` |
@@ -47,11 +47,11 @@ Notes on the shape:
 - `get` is Quick Find: fuzzy resolution across todos and projects; a todo answer includes its checklist, a project answer nests its incomplete todos and headings. Because project detail carries headings, no dedicated heading tool is needed (`add_todo.heading` names one within the destination project).
 - `complete` folds done/cancel/reopen into one status enum; `incomplete` reopens.
 - `open` is the only tool that touches the app UI; `get` never does. The old server's `show` conflated the two names; here lookup is `get` and navigation is `open`, exactly like the CLI. Its `view` enum is the navigable `list_todos` views plus `projects`, minus `trash`: the URL scheme exposes no trash list id, so trash is not a navigation target.
-- Backends mirror the CLI verbatim: `today` and `upcoming` call `Client.Today`/`Client.Upcoming`, so `upcoming` includes repeating tasks at their next occurrence; `logbook` sorts by stop time descending, `deadlines` by deadline ascending.
+- Backends mirror the CLI verbatim: `today` and `upcoming` call `Client.Today`/`Client.Upcoming`, so `upcoming` includes repeating tasks at their next occurrence; `logbook` sorts by stop time descending and defaults to the last 30 days, `deadlines` by deadline ascending.
 
 Cross-cutting behavior:
 
-- Pagination on every list/search tool: `limit` (default 20, max 100) and 1-based `page`, returning the `{items, total, page, pages}` envelope. There is deliberately no unlimited mode: MCP output lands in a model context window. An out-of-range page returns empty `items` with intact metadata. The default is 20 rather than the CLI's 10 because a tool round trip costs more than a terminal keystroke.
+- Pagination on every list/search tool: `limit` and 1-based `page`, returning the `{items, total, page, pages}` envelope. `limit` carries machine-readable schema bounds (default 20, minimum 1, maximum 100) that the SDK applies and validates, so an omitted `limit` is stamped to 20 and an over-cap value is rejected before the handler runs rather than silently clamped. There is deliberately no unlimited mode: MCP output lands in a model context window. An out-of-range page returns empty `items` with intact metadata. The default is 20 rather than the CLI's 10 because a tool round trip costs more than a terminal keystroke.
 - Fuzzy resolution wherever an id is accepted (`id`, `target`, `to`, `project`, `area`, `heading`): exact UUID, then UUID prefix of 4+ characters, then exact title, then title substring, narrowed by the parameter's entity type before the one-match decision (a `move.to` matching one project and one todo is not ambiguous). Ambiguity returns up to 10 full-UUID candidates plus a hint to retry with a UUID.
 - Strict input parsing: invalid `when`, `deadline`, or `reminder` values produce a structured `invalid_input` error before anything executes. Nothing is silently dropped.
 - Verified writes: after executing the URL scheme, the handler polls the database through `internal/verify` (`AddedTodo`/`AddedProject` for the add tools, `TodoStatus`/`ProjectStatus` for `complete`, `TodoModified`/`ProjectModified` for `schedule`/`move`/`edit`). Results carry `verified: true|false`; an unconfirmed send is still `success: true` with an explanatory message, matching the CLI's exit-0 semantics. A server-level mutex serializes execute-plus-verify pairs so concurrent tool calls cannot cross-confirm same-title creates.
@@ -60,6 +60,17 @@ Cross-cutting behavior:
 Item shape: one unified `Item` struct for todos and projects (type-discriminated), dates as `YYYY-MM-DD` strings, reminder as `HH:MM`, full UUIDs, inline `project`/`area`/`heading` titles and UUIDs, `evening` and `repeating` flags; separate small shapes for areas and tags.
 
 Inherited URL-scheme limits apply unchanged and are stated in tool descriptions rather than worked around: no delete or trash, no move to Inbox, checklist is replace-only, repeating rules are read-only (a write targeting a repeating template sends and then reports `verified: false`; documented, not pre-blocked, because the repeating flag also marks writable instances), and unknown tags are silently ignored by Things.
+
+### Token efficiency
+
+MCP output lands in a model context window, and early use showed models defaulting to the maximum `limit` with no date filter, so a plain "what did I finish" pulled the entire logbook. Four measures keep a typical answer small without hiding data:
+
+- Schema-enforced pagination (above): `limit` and `page` carry `default`/`minimum`/`maximum` as real JSON Schema keywords, so the model reads the true cap and the SDK enforces it, replacing a silent server-side clamp the model never saw.
+- A `days` window on the three date-ordered views (`upcoming`, `logbook`, `deadlines`), whose default result is otherwise unbounded in time. `logbook` defaults to the last 30 days (mirroring the CLI); `0` means all history; the other two default to no window. `days` on any other view is a structured `invalid_input`, rejected before any fetch touches the database.
+- Notes truncation: list and search items cap `notes` at 200 runes (rune-safe, never splitting a codepoint) and set `notes_truncated`; `get` returns the full note, so nothing is lost, only deferred to the detail call.
+- `--max-limit` (see configuration): the operator can lower the session's page-size cap further, and can only tighten it.
+
+Two structural changes back these up. Project and area scoping for the single-builder views is pushed into SQL through the library's `InProject`/`InArea` builders, whose heading-aware OR-semantics (a todo directly in the project or under one of its headings) match the in-memory filter the composed views still use, rather than fetching a whole view and filtering in Go, so a scoped query reads only its rows. For the date-ordered views the `days` window is likewise pushed into SQL (`StopDate().After`, `Deadline().OnOrBefore`). The composed views (`today`, `upcoming`) stay materialized-then-filtered, exactly as they compose in the app; `upcoming`'s window is applied in memory because it cannot be pushed without breaking the scheduled-plus-repeating-template merge.
 
 ### Error contract
 
@@ -77,6 +88,7 @@ ToolError{Code, Message, Hint, Candidates}
 - `things3 mcp` registers in the Actions group. stdio transport only in v1; the process exits on stdin EOF or SIGINT/SIGTERM via the existing signal context in `main.go`.
 - The global `--db` flag is inherited through `withClient`; the other global list/format flags are accepted and ignored per the CLI's uniform-surface convention.
 - `--read-only`: registers only the six read tools. The write tools and `open` are not registered at all (not merely rejected), so clients cannot even list them. Read-only is defined as "never executes the URL scheme", which is why `open` - harmless but scheme-executing - is excluded.
+- `--max-limit N`: lowers the list page-size cap for the whole session (the default page size is clamped down with it); `0` uses the built-in maximum of 100. It can only tighten the cap, never raise it, so a model can never request a larger page than the operator allows.
 - `--log-level debug|info|warn|error` (default `info`): structured `slog` to stderr. stdout belongs exclusively to the protocol.
 - Server identity: name `things3`, version from the CLI's ldflags version variable.
 

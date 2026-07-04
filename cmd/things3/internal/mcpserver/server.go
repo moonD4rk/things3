@@ -93,13 +93,15 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 // resolveLimits fixes the session's effective page-size bounds once. A positive
-// Config.MaxLimit lowers the cap (the --max-limit flag); zero uses the built-in
-// maximum. The default page size is clamped to the cap, because the SDK rejects
-// a schema whose default exceeds its maximum and would panic at registration.
+// Config.MaxLimit lowers the cap (the --max-limit flag); it can only tighten,
+// never raise the cap above the built-in MaxLimit, so a model can never request
+// a larger page than the built-in ceiling. Zero uses the built-in maximum. The
+// default page size is clamped to the cap, because the SDK rejects a schema
+// whose default exceeds its maximum and would panic at registration.
 func resolveLimits(cfg Config) (defaultLimit, maxLimit int) {
 	maxLimit = MaxLimit
 	if cfg.MaxLimit > 0 {
-		maxLimit = cfg.MaxLimit
+		maxLimit = min(cfg.MaxLimit, MaxLimit)
 	}
 	return min(DefaultLimit, maxLimit), maxLimit
 }

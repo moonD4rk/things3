@@ -290,15 +290,17 @@ func TestLimitSchemaEnforcement(t *testing.T) {
 
 // TestMaxLimitConfig proves --max-limit lowers both the advertised and enforced
 // cap, that a cap below the built-in default is clamped so construction does not
-// panic (the SDK rejects default > maximum at registration), and that the
+// panic (the SDK rejects default > maximum at registration), that a cap above
+// the built-in maximum cannot raise it (the flag only tightens), and that the
 // built-in default is not itself configurable.
 func TestMaxLimitConfig(t *testing.T) {
 	cases := []struct {
 		cap, wantDefault, wantMax int
 	}{
-		{0, DefaultLimit, MaxLimit}, // unset: built-in bounds
-		{20, 20, 20},                // cap at the default
-		{5, 5, 5},                   // cap below the default clamps the default down
+		{0, DefaultLimit, MaxLimit},              // unset: built-in bounds
+		{20, 20, 20},                             // cap at the default
+		{5, 5, 5},                                // cap below the default clamps the default down
+		{MaxLimit + 100, DefaultLimit, MaxLimit}, // a cap above the ceiling cannot raise it
 	}
 	for _, tc := range cases {
 		def, mx := resolveLimits(Config{MaxLimit: tc.cap})

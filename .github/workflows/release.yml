@@ -78,7 +78,19 @@ jobs:
           git tag "cmd/things3/${{ inputs.version }}"
           git push origin "cmd/things3/${{ inputs.version }}"
 
-      # Step 5: Build and publish binaries via GoReleaser
+      # Step 5: Mint a short-lived token scoped to the homebrew-tap repo so
+      # GoReleaser pushes the formula update via the moond4rk-ci app instead of
+      # a long-lived PAT.
+      - name: Mint homebrew-tap token
+        id: tap-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MOOND4RK_CI_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MOOND4RK_CI_RELEASE_APP_PRIVATE_KEY }}
+          owner: moonD4rk
+          repositories: homebrew-tap
+
+      # Step 6: Build and publish binaries via GoReleaser
       # GORELEASER_CURRENT_TAG overrides tag auto-detection so GoReleaser
       # uses the library tag (v0.5.0) as the release version, even though
       # HEAD is one commit ahead (the CLI go.mod update commit).
@@ -91,4 +103,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ inputs.version }}
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.MOOND4RK_HOMEBREW_TAP_GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ steps.tap-token.outputs.token }}

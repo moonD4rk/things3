@@ -37,7 +37,7 @@ jobs:
           fi
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ steps.release-token.outputs.token }}
@@ -110,7 +110,7 @@ jobs:
       # GORELEASER_CURRENT_TAG pins the release version to the library tag even
       # though HEAD is the release branch (one commit ahead of that tag).
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: '~> v2'

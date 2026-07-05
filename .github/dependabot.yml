@@ -1,0 +1,53 @@
+version: 2
+updates:
+  # Root library module: github.com/moond4rk/things3
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+    groups:
+      # Batch minor/patch bumps into one PR; majors stay individual for review.
+      go-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # CLI module: github.com/moond4rk/things3/cmd/things3
+  - package-ecosystem: gomod
+    directory: "/cmd/things3"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+    groups:
+      go-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Intra-repo dependency. The require line is owned and bumped by the
+      # release workflow (release.yml runs `go mod edit -require` and tags
+      # cmd/things3/vX); go.work links the local library for development. Never
+      # let Dependabot touch it.
+      - dependency-name: "github.com/moond4rk/things3"
+
+  # GitHub Actions used by ci.yml and release.yml
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch

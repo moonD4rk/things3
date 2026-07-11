@@ -30,11 +30,12 @@ jobs:
         run: |
           diff -u <(echo -n) <(gofmt -d .)
 
-      # Use latest golangci-lint with optimized settings
+      # Pin the version developers run locally: the config schema is version-specific,
+      # so a skew here makes a locally clean tree fail CI on config verification alone.
       - name: Run Linter
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.10.1
+          version: v2.12.2
           skip-cache: false
           skip-save-cache: false
 

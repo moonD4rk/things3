@@ -10,14 +10,16 @@ const (
 	MaxLimit = 100
 )
 
-// clampLimit resolves a requested limit into the range [1, MaxLimit], mapping a
-// non-positive request to DefaultLimit.
-func clampLimit(n int) int {
+// clampLimit resolves a requested limit into the range [1, maxLimit], mapping a
+// non-positive request to defaultLimit. The SDK's schema validation normally
+// rejects an over-cap limit before a handler runs; this stays as the backstop
+// for direct handler tests and any path that bypasses the schema.
+func clampLimit(n, defaultLimit, maxLimit int) int {
 	switch {
 	case n <= 0:
-		return DefaultLimit
-	case n > MaxLimit:
-		return MaxLimit
+		return defaultLimit
+	case n > maxLimit:
+		return maxLimit
 	default:
 		return n
 	}
@@ -25,8 +27,8 @@ func clampLimit(n int) int {
 
 // paginate returns the 1-based page slice of items and its metadata. An
 // out-of-range page yields an empty slice with intact total/page/pages.
-func paginate[T any](items []T, page, limit int) (slice []T, total, pageOut, pages int) {
-	limit = clampLimit(limit)
+func paginate[T any](items []T, page, limit, defaultLimit, maxLimit int) (slice []T, total, pageOut, pages int) {
+	limit = clampLimit(limit, defaultLimit, maxLimit)
 	if page < 1 {
 		page = 1
 	}
@@ -43,8 +45,8 @@ func paginate[T any](items []T, page, limit int) (slice []T, total, pageOut, pag
 
 // pageResult paginates a full result slice into a success envelope, guaranteeing
 // a non-nil Items array.
-func pageResult[T any](items []T, page, limit int) PageResult[T] {
-	slice, total, pageOut, pages := paginate(items, page, limit)
+func pageResult[T any](items []T, page, limit, defaultLimit, maxLimit int) PageResult[T] {
+	slice, total, pageOut, pages := paginate(items, page, limit, defaultLimit, maxLimit)
 	if slice == nil {
 		slice = []T{}
 	}
@@ -55,4 +57,15 @@ func pageResult[T any](items []T, page, limit int) PageResult[T] {
 // Items array so the shape validates against the tool's output schema.
 func pageError[T any](te *ToolError) PageResult[T] {
 	return PageResult[T]{Success: false, Error: te, Items: []T{}, Page: 1, Pages: 1}
+}
+
+// pageItems converts a fetched slice with conv and paginates it into a success
+// envelope, sharing the convert-and-page step the simple list tools would
+// otherwise each repeat.
+func pageItems[E, T any](src []E, conv func(*E) T, page, limit, defaultLimit, maxLimit int) PageResult[T] {
+	items := make([]T, len(src))
+	for i := range src {
+		items[i] = conv(&src[i])
+	}
+	return pageResult(items, page, limit, defaultLimit, maxLimit)
 }

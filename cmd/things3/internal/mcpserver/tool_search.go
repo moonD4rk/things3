@@ -10,7 +10,8 @@ import (
 
 const descSearch = "Full-text search across todos and projects. type narrows to todo, project, or any " +
 	"(default). status selects incomplete, completed, canceled, or any (default). tag keeps only items " +
-	"carrying that tag. Paginated: limit defaults to 20, caps at 100."
+	"carrying that tag. Results are paginated: read total and pages and fetch more only when needed. Notes " +
+	"are shortened here (notes_truncated); use get for full text."
 
 // SearchInput is the search parameter set.
 type SearchInput struct {
@@ -18,7 +19,7 @@ type SearchInput struct {
 	Type   SearchType   `json:"type,omitempty" jsonschema:"todo, project, or any (default)"`
 	Status StatusFilter `json:"status,omitempty" jsonschema:"incomplete, completed, canceled, or any (default)"`
 	Tag    string       `json:"tag,omitempty" jsonschema:"keep only items carrying this tag, case-insensitive"`
-	Limit  int          `json:"limit,omitempty" jsonschema:"page size, default 20, maximum 100"`
+	Limit  int          `json:"limit,omitempty" jsonschema:"page size"`
 	Page   int          `json:"page,omitempty" jsonschema:"1-based page number"`
 }
 
@@ -52,7 +53,9 @@ func (s *Server) handleSearch(ctx context.Context, _ *mcp.CallToolRequest, in Se
 		}
 		items = append(items, projectItems(projects)...)
 	}
-	return nil, pageResult(items, in.Page, in.Limit), nil
+	res := pageResult(items, in.Page, in.Limit, s.defaultLimit, s.maxLimit)
+	truncateNotes(res.Items)
+	return nil, res, nil
 }
 
 // applyStatus applies a status string to any typed status sub-builder, defaulting

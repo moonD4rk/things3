@@ -758,6 +758,55 @@ func TestDeadlinesAscending(t *testing.T) {
 	}
 }
 
+// TestDeadlinesDaysWindow covers the --days flag on deadlines: a tight window
+// narrows the list, and a window so wide it leaves the encodable date range still
+// yields only todos that actually carry a deadline. Before the date clamp such a
+// window dropped the deadline condition entirely and printed every incomplete todo.
+func TestDeadlinesDaysWindow(t *testing.T) {
+	setupFixtureDB(t)
+	deadlineTotals := func(args ...string) (total, undated int) {
+		t.Helper()
+		out := runJSON(t, append([]string{"deadlines", "--json", "--all"}, args...)...)
+		var rows []struct {
+			Deadline *time.Time `json:"deadline"`
+		}
+		decodeItems(t, out, &rows)
+		for _, r := range rows {
+			if r.Deadline == nil {
+				undated++
+			}
+		}
+		return decodeList(t, out).Total, undated
+	}
+
+	all, undated := deadlineTotals()
+	if all != thingstest.Deadlines || undated != 0 {
+		t.Fatalf("deadlines = %d rows (%d undated), want %d with none undated", all, undated, thingstest.Deadlines)
+	}
+	if near, _ := deadlineTotals("--days", "1"); near >= all {
+		t.Errorf("--days 1 = %d rows, want fewer than the unwindowed %d", near, all)
+	}
+	absurd, absurdUndated := deadlineTotals("--days", "3000000")
+	if absurd != all || absurdUndated != 0 {
+		t.Errorf("--days 3000000 = %d rows (%d undated), want all %d deadlines and no undated todo", absurd, absurdUndated, all)
+	}
+}
+
+// TestDaysRejectsNegative pins the flag contract shared with the MCP days
+// argument: a negative window is an error, not a silently ignored no-op.
+func TestDaysRejectsNegative(t *testing.T) {
+	setupFixtureDB(t)
+	for _, view := range []string{"upcoming", "logbook", "deadlines"} {
+		t.Run(view, func(t *testing.T) {
+			_, _, err := executeCommand(t, view, "--days", "-7")
+			if err == nil {
+				t.Fatalf("%s --days -7 should be rejected", view)
+			}
+			assertExitCode(t, err, 1)
+		})
+	}
+}
+
 func TestGroupedViewsJSONFlat(t *testing.T) {
 	dbPath := setupFixtureDB(t)
 	ctx := context.Background()

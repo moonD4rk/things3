@@ -18,11 +18,14 @@ const (
 	descListTodos = "List todos from a Things sidebar view. 'view' is required: inbox, today, upcoming, " +
 		"anytime, someday, logbook, deadlines, or trash. today and upcoming match the app (upcoming includes " +
 		"repeating tasks at their next occurrence); logbook is newest-first, deadlines soonest-first. Narrow " +
-		"further by project, area, or tag. Paginated: limit defaults to 20, caps at 100."
+		"further by project, area, or tag. For a date-scoped question pass days on upcoming, logbook, or " +
+		"deadlines; logbook defaults to the last 30 days. Results are paginated: read total and pages and fetch " +
+		"more pages only when the question needs them. Notes are shortened here (notes_truncated); use get for full text."
 	descListProjects = "List projects, optionally filtered by area or tag. status selects incomplete " +
-		"(default), completed, canceled, or any. Paginated: limit defaults to 20, caps at 100."
-	descListAreas = "List all areas. Paginated: limit defaults to 20, caps at 100."
-	descListTags  = "List all tags. Paginated: limit defaults to 20, caps at 100."
+		"(default), completed, canceled, or any. Results are paginated: read total and pages and fetch more " +
+		"only when needed. Notes are shortened here (notes_truncated); use get for full text."
+	descListAreas = "List all areas. Results are paginated: read total and pages and fetch more only when needed."
+	descListTags  = "List all tags. Results are paginated: read total and pages and fetch more only when needed."
 )
 
 // registerRead registers the six read tools, always present regardless of mode.
@@ -41,51 +44,87 @@ type ListTodosInput struct {
 	Project string   `json:"project,omitempty" jsonschema:"keep only todos in this project (UUID, prefix, or title)"`
 	Area    string   `json:"area,omitempty" jsonschema:"keep only todos in this area (UUID, prefix, or title)"`
 	Tag     string   `json:"tag,omitempty" jsonschema:"keep only todos carrying this tag, case-insensitive"`
-	Limit   int      `json:"limit,omitempty" jsonschema:"page size, default 20, maximum 100"`
+	Days    *int     `json:"days,omitempty" jsonschema:"day window for upcoming/logbook/deadlines; logbook defaults to 30, 0 = all"`
+	Limit   int      `json:"limit,omitempty" jsonschema:"page size"`
 	Page    int      `json:"page,omitempty" jsonschema:"1-based page number"`
 }
 
 func (s *Server) handleListTodos(
 	ctx context.Context, _ *mcp.CallToolRequest, in ListTodosInput,
 ) (*mcp.CallToolResult, PageResult[Item], error) {
-	todos, err := s.fetchView(ctx, string(in.View))
+	if in.Days != nil {
+		if te := validateDays(string(in.View), *in.Days); te != nil {
+			return nil, pageError[Item](te), nil
+		}
+	}
+
+	projectUUID, areaUUID, te, err := s.resolveContainers(ctx, in.Project, in.Area)
 	if err != nil {
 		return nil, PageResult[Item]{}, err
 	}
-	if in.Project != "" {
-		p, te, perr := s.resolveProject(ctx, in.Project)
-		if perr != nil {
-			return nil, PageResult[Item]{}, perr
-		}
-		if te != nil {
-			return nil, pageError[Item](te), nil
-		}
-		headings, herr := s.projectHeadingSet(ctx, p.UUID)
-		if herr != nil {
-			return nil, PageResult[Item]{}, herr
-		}
-		todos = filterTodos(todos, func(t *things3.Todo) bool {
-			if t.ProjectUUID == p.UUID {
-				return true
-			}
-			_, ok := headings[t.HeadingUUID]
-			return ok
-		})
+	if te != nil {
+		return nil, pageError[Item](te), nil
 	}
-	if in.Area != "" {
-		a, te, aerr := s.resolveArea(ctx, in.Area)
-		if aerr != nil {
-			return nil, PageResult[Item]{}, aerr
-		}
-		if te != nil {
-			return nil, pageError[Item](te), nil
-		}
-		todos = filterTodos(todos, func(t *things3.Todo) bool { return t.AreaUUID == a.UUID })
+
+	todos, err := s.viewTodos(ctx, string(in.View), projectUUID, areaUUID, in.Days)
+	if err != nil {
+		return nil, PageResult[Item]{}, err
 	}
 	if in.Tag != "" {
 		todos = filterByTag(todos, func(t *things3.Todo) []string { return t.Tags }, in.Tag)
 	}
-	return nil, pageResult(todoItems(todos), in.Page, in.Limit), nil
+	res := pageResult(todoItems(todos), in.Page, in.Limit, s.defaultLimit, s.maxLimit)
+	truncateNotes(res.Items)
+	return nil, res, nil
+}
+
+// validateDays rejects a days window on a view that does not support one, and a
+// negative window, as a structured invalid_input that rides the envelope rather
+// than a transport error. It runs before any fetch, so a bad request touches no
+// database.
+func validateDays(view string, days int) *ToolError {
+	if !viewSupportsDays(view) {
+		return invalidInput("days is only valid for the upcoming, logbook, and deadlines views")
+	}
+	if days < 0 {
+		return invalidInput("days must be zero or positive")
+	}
+	return nil
+}
+
+// viewSupportsDays reports whether a view accepts a days window: the three
+// date-ordered views whose default result is unbounded in time.
+func viewSupportsDays(view string) bool {
+	return view == nameUpcoming || view == nameLogbook || view == nameDeadlines
+}
+
+// resolveContainers resolves the optional project and area filters to UUIDs. A
+// resolution ambiguity or miss rides the envelope (te != nil); a database
+// failure is a transport error.
+func (s *Server) resolveContainers(
+	ctx context.Context, project, area string,
+) (projectUUID, areaUUID string, te *ToolError, err error) {
+	if project != "" {
+		p, pte, perr := s.resolveProject(ctx, project)
+		if perr != nil {
+			return "", "", nil, perr
+		}
+		if pte != nil {
+			return "", "", pte, nil
+		}
+		projectUUID = p.UUID
+	}
+	if area != "" {
+		a, ate, aerr := s.resolveArea(ctx, area)
+		if aerr != nil {
+			return "", "", nil, aerr
+		}
+		if ate != nil {
+			return "", "", ate, nil
+		}
+		areaUUID = a.UUID
+	}
+	return projectUUID, areaUUID, nil, nil
 }
 
 // ListProjectsInput is the list_projects parameter set.
@@ -93,7 +132,7 @@ type ListProjectsInput struct {
 	Area   string       `json:"area,omitempty" jsonschema:"keep only projects in this area (UUID, prefix, or title)"`
 	Tag    string       `json:"tag,omitempty" jsonschema:"keep only projects carrying this tag, case-insensitive"`
 	Status StatusFilter `json:"status,omitempty" jsonschema:"incomplete (default), completed, canceled, or any"`
-	Limit  int          `json:"limit,omitempty" jsonschema:"page size, default 20, maximum 100"`
+	Limit  int          `json:"limit,omitempty" jsonschema:"page size"`
 	Page   int          `json:"page,omitempty" jsonschema:"1-based page number"`
 }
 
@@ -128,12 +167,14 @@ func (s *Server) handleListProjects(
 	if in.Tag != "" {
 		projects = filterByTag(projects, func(p *things3.Project) []string { return p.Tags }, in.Tag)
 	}
-	return nil, pageResult(projectItems(projects), in.Page, in.Limit), nil
+	res := pageResult(projectItems(projects), in.Page, in.Limit, s.defaultLimit, s.maxLimit)
+	truncateNotes(res.Items)
+	return nil, res, nil
 }
 
 // ListAreasInput is the list_areas parameter set.
 type ListAreasInput struct {
-	Limit int `json:"limit,omitempty" jsonschema:"page size, default 20, maximum 100"`
+	Limit int `json:"limit,omitempty" jsonschema:"page size"`
 	Page  int `json:"page,omitempty" jsonschema:"1-based page number"`
 }
 
@@ -144,16 +185,12 @@ func (s *Server) handleListAreas(
 	if err != nil {
 		return nil, PageResult[Area]{}, err
 	}
-	items := make([]Area, len(areas))
-	for i := range areas {
-		items[i] = toArea(&areas[i])
-	}
-	return nil, pageResult(items, in.Page, in.Limit), nil
+	return nil, pageItems(areas, toArea, in.Page, in.Limit, s.defaultLimit, s.maxLimit), nil
 }
 
 // ListTagsInput is the list_tags parameter set.
 type ListTagsInput struct {
-	Limit int `json:"limit,omitempty" jsonschema:"page size, default 20, maximum 100"`
+	Limit int `json:"limit,omitempty" jsonschema:"page size"`
 	Page  int `json:"page,omitempty" jsonschema:"1-based page number"`
 }
 
@@ -164,60 +201,166 @@ func (s *Server) handleListTags(
 	if err != nil {
 		return nil, PageResult[Tag]{}, err
 	}
-	items := make([]Tag, len(tags))
-	for i := range tags {
-		items[i] = toTag(&tags[i])
-	}
-	return nil, pageResult(items, in.Page, in.Limit), nil
+	return nil, pageItems(tags, toTag, in.Page, in.Limit, s.defaultLimit, s.maxLimit), nil
 }
 
-// fetchView returns the todos backing a sidebar view, mirroring the CLI's view
-// commands verbatim so today/upcoming compose exactly as the app does.
-func (s *Server) fetchView(ctx context.Context, view string) ([]things3.Todo, error) {
+// viewTodos returns the todos backing a sidebar view, scoped to an optional
+// project and area. Single-builder views push the scoping into SQL through the
+// library builders; the composed views (today, upcoming) merge several queries
+// and so are materialized and filtered in memory, exactly as the app composes
+// them.
+func (s *Server) viewTodos(ctx context.Context, view, projectUUID, areaUUID string, days *int) ([]things3.Todo, error) {
+	if viewIsComposed(view) {
+		todos, err := s.composedView(ctx, view)
+		if err != nil {
+			return nil, err
+		}
+		if view == nameUpcoming && days != nil && *days > 0 {
+			todos = withinUpcomingWindow(todos, *days)
+		}
+		return s.scopeComposed(ctx, todos, projectUUID, areaUUID)
+	}
+
+	q, err := s.viewBuilder(view)
+	if err != nil {
+		return nil, err
+	}
+	if projectUUID != "" {
+		q = q.InProject(projectUUID)
+	}
+	if areaUUID != "" {
+		q = q.InArea(areaUUID)
+	}
+	q = applyDaysWindow(q, view, days)
+	todos, err := q.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	viewSort(view, todos)
+	return todos, nil
+}
+
+// viewIsComposed reports whether a view is assembled in Go from several queries
+// (today, upcoming) and so cannot be expressed as a single builder.
+func viewIsComposed(view string) bool {
+	return view == nameToday || view == nameUpcoming
+}
+
+// composedView returns the todos for the composed views, which merge and
+// reorder several queries the way the app does.
+func (s *Server) composedView(ctx context.Context, view string) ([]things3.Todo, error) {
+	switch view {
+	case nameToday:
+		return s.client.Today(ctx)
+	case nameUpcoming:
+		return s.client.Upcoming(ctx)
+	default:
+		return nil, fmt.Errorf("unknown composed view %q", view)
+	}
+}
+
+// viewBuilder returns the query builder backing a single-builder view, carrying
+// only its WHERE shape; project/area scoping and the display sort are applied by
+// the caller. The recipes mirror the CLI's view commands verbatim.
+func (s *Server) viewBuilder(view string) (things3.TodoQueryBuilder, error) {
 	c := s.client
 	switch view {
 	case nameInbox:
-		return c.Todos().Start().Inbox().Status().Incomplete().All(ctx)
-	case nameToday:
-		return c.Today(ctx)
-	case nameUpcoming:
-		return c.Upcoming(ctx)
+		return c.Todos().Start().Inbox().Status().Incomplete(), nil
 	case nameAnytime:
-		return c.Todos().Start().Anytime().Status().Incomplete().All(ctx)
+		return c.Todos().Start().Anytime().Status().Incomplete(), nil
 	case nameSomeday:
-		return c.Todos().StartDate().Exists(false).Start().Someday().Status().Incomplete().All(ctx)
+		return c.Todos().StartDate().Exists(false).Start().Someday().Status().Incomplete(), nil
 	case nameLogbook:
-		return s.logbookTodos(ctx)
+		return c.Todos().Status().Any().StopDate().Exists(true), nil
 	case nameDeadlines:
-		return s.deadlineTodos(ctx)
+		return c.Todos().Deadline().Exists(true).Status().Incomplete(), nil
 	case nameTrash:
-		return c.Todos().Trashed(true).Status().Any().All(ctx)
+		return c.Todos().Trashed(true).Status().Any(), nil
 	default:
 		return nil, fmt.Errorf("unknown view %q", view)
 	}
 }
 
-// logbookTodos returns completed and canceled todos, most recent first.
-func (s *Server) logbookTodos(ctx context.Context) ([]things3.Todo, error) {
-	todos, err := s.client.Todos().Status().Any().StopDate().Exists(true).All(ctx)
-	if err != nil {
-		return nil, err
+// viewSort applies the per-view display order the builders cannot express (they
+// order by the sidebar index only): logbook newest-first by stop time,
+// deadlines soonest-first by deadline.
+func viewSort(view string, todos []things3.Todo) {
+	switch view {
+	case nameLogbook:
+		slices.SortStableFunc(todos, func(a, b things3.Todo) int {
+			return compareTimePtrDesc(closeTime(&a), closeTime(&b))
+		})
+	case nameDeadlines:
+		slices.SortStableFunc(todos, func(a, b things3.Todo) int {
+			return compareTimePtrAsc(a.Deadline, b.Deadline)
+		})
 	}
-	slices.SortStableFunc(todos, func(a, b things3.Todo) int {
-		return compareTimePtrDesc(closeTime(&a), closeTime(&b))
-	})
-	return todos, nil
 }
 
-// deadlineTodos returns incomplete todos with a deadline, soonest first.
-func (s *Server) deadlineTodos(ctx context.Context) ([]things3.Todo, error) {
-	todos, err := s.client.Todos().Deadline().Exists(true).Status().Incomplete().All(ctx)
-	if err != nil {
-		return nil, err
+// applyDaysWindow chains the date-window filter onto a builder view that
+// supports days. logbook windows on stop date (defaulting to the last 30 days
+// to mirror the CLI; an explicit 0 means all history); deadlines windows forward
+// on deadline and deliberately keeps overdue items inside the window, since they
+// are still due. now is time.Now, matching the CLI's logbook window.
+func applyDaysWindow(q things3.TodoQueryBuilder, view string, days *int) things3.TodoQueryBuilder {
+	now := time.Now()
+	switch view {
+	case nameLogbook:
+		if w := logbookWindowDays(days); w > 0 {
+			q = q.StopDate().After(now.AddDate(0, 0, -w))
+		}
+	case nameDeadlines:
+		if days != nil && *days > 0 {
+			q = q.Deadline().OnOrBefore(now.AddDate(0, 0, *days))
+		}
 	}
-	slices.SortStableFunc(todos, func(a, b things3.Todo) int {
-		return compareTimePtrAsc(a.Deadline, b.Deadline)
+	return q
+}
+
+// logbookWindowDays resolves the logbook window: an omitted days defaults to 30
+// (the CLI's default), while an explicit value passes through, with 0 meaning
+// all history.
+func logbookWindowDays(days *int) int {
+	if days == nil {
+		return 30
+	}
+	return *days
+}
+
+// withinUpcomingWindow keeps composed upcoming todos whose start date is on or
+// before now+days. Upcoming is already future-scheduled, so an upper bound
+// alone yields the next N days; it cannot be pushed to SQL without breaking the
+// scheduled-plus-repeating-template merge.
+func withinUpcomingWindow(todos []things3.Todo, days int) []things3.Todo {
+	cutoff := time.Now().AddDate(0, 0, days)
+	return filterTodos(todos, func(t *things3.Todo) bool {
+		return t.StartDate != nil && !t.StartDate.After(cutoff)
 	})
+}
+
+// scopeComposed filters composed-view todos by project (heading-aware, matching
+// the library's InProject OR-semantics) and area in memory, since a composed
+// view is already materialized and cannot be re-queried.
+func (s *Server) scopeComposed(
+	ctx context.Context, todos []things3.Todo, projectUUID, areaUUID string,
+) ([]things3.Todo, error) {
+	if projectUUID != "" {
+		headings, err := s.projectHeadingSet(ctx, projectUUID)
+		if err != nil {
+			return nil, err
+		}
+		todos = filterTodos(todos, func(t *things3.Todo) bool {
+			if t.ProjectUUID == projectUUID {
+				return true
+			}
+			_, ok := headings[t.HeadingUUID]
+			return ok
+		})
+	}
+	if areaUUID != "" {
+		todos = filterTodos(todos, func(t *things3.Todo) bool { return t.AreaUUID == areaUUID })
+	}
 	return todos, nil
 }
 

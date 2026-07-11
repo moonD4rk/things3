@@ -4,9 +4,27 @@ import (
 	"context"
 	"slices"
 	"testing"
+	"time"
 
+	"github.com/moond4rk/things3"
 	"github.com/moond4rk/things3/thingstest"
 )
+
+// serverOnPath builds a server over an explicit fixture copy, so a test can both
+// query it and mutate the same file with execFixture.
+func serverOnPath(t *testing.T, path string) *Server {
+	t.Helper()
+	client, err := things3.NewClient(things3.WithDatabasePath(path))
+	if err != nil {
+		t.Fatalf("client: %v", err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+	srv, err := New(client, Config{})
+	if err != nil {
+		t.Fatalf("server: %v", err)
+	}
+	return srv
+}
 
 func listTodos(t *testing.T, srv *Server, in ListTodosInput) PageResult[Item] {
 	t.Helper()
@@ -15,6 +33,14 @@ func listTodos(t *testing.T, srv *Server, in ListTodosInput) PageResult[Item] {
 		t.Fatalf("list_todos %+v: %v", in, err)
 	}
 	return page
+}
+
+// todosWithDays lists a date-ordered view with an explicit days window, building
+// the pointer the input expects from a plain value so call sites stay readable.
+func todosWithDays(t *testing.T, srv *Server, view string, days, limit int) PageResult[Item] {
+	t.Helper()
+	d := days
+	return listTodos(t, srv, ListTodosInput{View: ViewName(view), Days: &d, Limit: limit})
 }
 
 func listProjects(t *testing.T, srv *Server, in ListProjectsInput) PageResult[Item] {
@@ -28,16 +54,26 @@ func listProjects(t *testing.T, srv *Server, in ListProjectsInput) PageResult[It
 
 func TestListTodosViewCounts(t *testing.T) {
 	srv := newTestServer(t, Config{})
+	// The six single-builder views are status/bucket/existence-scoped, so their
+	// totals are stable regardless of the current date (unlike today/upcoming,
+	// which are checked by membership). Pinning every one is the WS1 parity guard
+	// that the push-of-scoping-into-SQL refactor preserved each view's result.
+	zero := 0
 	cases := []struct {
 		view string
+		days *int
 		want int
 	}{
-		{"inbox", thingstest.Inbox},
-		{"deadlines", thingstest.Deadlines},
+		{"inbox", nil, thingstest.Inbox},          // 2
+		{"anytime", nil, thingstest.TodosAnytime}, // 10
+		{"someday", nil, 1},
+		{"logbook", &zero, 22},                   // days:0 = all history; the 30-day default returns 0 on the aged fixture
+		{"deadlines", nil, thingstest.Deadlines}, // 4
+		{"trash", nil, 5},                        // trashed todos of any status; projects excluded
 	}
 	for _, tc := range cases {
 		t.Run(tc.view, func(t *testing.T) {
-			page := listTodos(t, srv, ListTodosInput{View: ViewName(tc.view)})
+			page := listTodos(t, srv, ListTodosInput{View: ViewName(tc.view), Days: tc.days})
 			if page.Total != tc.want {
 				t.Errorf("%s total = %d, want %d", tc.view, page.Total, tc.want)
 			}
@@ -97,7 +133,7 @@ func TestClampLimit(t *testing.T) {
 		{MaxLimit + 50, MaxLimit},
 	}
 	for _, tc := range cases {
-		if got := clampLimit(tc.in); got != tc.want {
+		if got := clampLimit(tc.in, DefaultLimit, MaxLimit); got != tc.want {
 			t.Errorf("clampLimit(%d) = %d, want %d", tc.in, got, tc.want)
 		}
 	}
@@ -142,7 +178,9 @@ func TestListTodosFilters(t *testing.T) {
 
 func TestLogbookDescending(t *testing.T) {
 	srv := newTestServer(t, Config{})
-	page := listTodos(t, srv, ListTodosInput{View: "logbook", Limit: 100})
+	// Days:0 asks for all history; the default 30-day window would return 0 rows
+	// against the aged fixture and silently skip this order check.
+	page := todosWithDays(t, srv, "logbook", 0, 100)
 	if len(page.Items) < 2 {
 		t.Skipf("need >= 2 logbook rows, got %d", len(page.Items))
 	}
@@ -216,8 +254,216 @@ func TestListTodosProjectIncludesHeadingTodos(t *testing.T) {
 	// "To-Do in Heading" is an anytime, incomplete todo whose heading belongs to
 	// UUIDProject; its own project column is empty.
 	const headingTodo = "HbKGAeZKFDkWH5osSBNHvz"
-	page := listTodos(t, srv, ListTodosInput{View: "anytime", Project: thingstest.UUIDProject})
+	all := listTodos(t, srv, ListTodosInput{View: "anytime", Limit: 100})
+	page := listTodos(t, srv, ListTodosInput{View: "anytime", Project: thingstest.UUIDProject, Limit: 100})
 	if !slices.ContainsFunc(page.Items, func(it Item) bool { return it.UUID == headingTodo }) {
 		t.Errorf("project filter dropped heading-todo %s; got %d items", headingTodo, len(page.Items))
+	}
+	// Pushing InProject into SQL must stay a bounded, non-leaking subset: every
+	// item belongs to the project directly or via one of its headings.
+	if page.Total == 0 || page.Total > all.Total {
+		t.Fatalf("project scope total = %d, want 1..%d", page.Total, all.Total)
+	}
+	for i := range page.Items {
+		it := page.Items[i]
+		direct := it.Project != nil && it.Project.UUID == thingstest.UUIDProject
+		if !direct && it.Heading == nil {
+			t.Errorf("project filter leaked %s (project=%v, heading=%v)", it.UUID, it.Project, it.Heading)
+		}
+	}
+}
+
+func TestDaysInvalidView(t *testing.T) {
+	srv := newTestServer(t, Config{})
+	three, negOne := 3, -1
+	// days is meaningless on the non-date-ordered views and rides the envelope as
+	// invalid_input, never a transport error, before any fetch runs.
+	for _, view := range []string{"inbox", "today", "anytime", "someday", "trash"} {
+		_, page, err := srv.handleListTodos(context.Background(), nil, ListTodosInput{View: ViewName(view), Days: &three})
+		if err != nil {
+			t.Fatalf("%s: days rejection must not be a transport error: %v", view, err)
+		}
+		if page.Success || page.Error == nil || page.Error.Code != codeInvalidInput {
+			t.Errorf("%s: want invalid_input envelope, got %+v", view, page)
+		}
+	}
+	// Positive control: the three date views accept a window.
+	for _, view := range []string{"upcoming", "logbook", "deadlines"} {
+		if page := todosWithDays(t, srv, view, 7, 0); !page.Success {
+			t.Errorf("%s: days should be accepted, got %+v", view, page.Error)
+		}
+	}
+	// A negative window is rejected the same way.
+	_, neg, err := srv.handleListTodos(context.Background(), nil, ListTodosInput{View: "logbook", Days: &negOne})
+	if err != nil {
+		t.Fatalf("negative days must not be a transport error: %v", err)
+	}
+	if neg.Success || neg.Error == nil || neg.Error.Code != codeInvalidInput {
+		t.Errorf("negative days: want invalid_input, got %+v", neg)
+	}
+}
+
+func TestDeadlinesWindow(t *testing.T) {
+	srv := newTestServer(t, Config{})
+	const farFuture = "HbKGAeZKFDkWH5osSBNHvz" // deadline 2040-11-04, well beyond any near window
+
+	all := listTodos(t, srv, ListTodosInput{View: "deadlines", Limit: 100})
+	if all.Total != thingstest.Deadlines {
+		t.Fatalf("deadlines (no window) = %d, want %d", all.Total, thingstest.Deadlines)
+	}
+	// A tight forward window keeps the overdue (2021) deadlines and drops the 2040 one.
+	near := todosWithDays(t, srv, "deadlines", 1, 100)
+	if slices.ContainsFunc(near.Items, func(it Item) bool { return it.UUID == farFuture }) {
+		t.Errorf("days:1 must exclude the far-future deadline %s", farFuture)
+	}
+	if near.Total != thingstest.Deadlines-1 {
+		t.Errorf("days:1 deadlines = %d, want %d (overdue kept, far-future dropped)", near.Total, thingstest.Deadlines-1)
+	}
+	// days:0 is the same as omitting the window.
+	if wide := todosWithDays(t, srv, "deadlines", 0, 100); wide.Total != thingstest.Deadlines {
+		t.Errorf("days:0 deadlines = %d, want all %d", wide.Total, thingstest.Deadlines)
+	}
+	// A huge window includes the far-future deadline again.
+	huge := todosWithDays(t, srv, "deadlines", 100000, 100)
+	if !slices.ContainsFunc(huge.Items, func(it Item) bool { return it.UUID == farFuture }) {
+		t.Errorf("days:100000 must include the far-future deadline %s", farFuture)
+	}
+}
+
+func TestUpcomingWindow(t *testing.T) {
+	srv := newTestServer(t, Config{})
+	// Upcoming holds only future-scheduled todos and the fixture dates are
+	// absolute, so the window bounds are derived from a target's actual start date
+	// read at runtime; hardcoding a days offset would rot as the wall clock moves.
+	all := listTodos(t, srv, ListTodosInput{View: "upcoming", Limit: 100})
+	target, daysOut := furthestUpcoming(t, all.Items)
+
+	contains := func(p PageResult[Item]) bool {
+		return slices.ContainsFunc(p.Items, func(it Item) bool { return it.UUID == target })
+	}
+	// A window ending before the target's date excludes it; one ending past it
+	// includes it.
+	near := todosWithDays(t, srv, "upcoming", daysOut/2, 100)
+	if contains(near) {
+		t.Errorf("a %d-day window must exclude the %d-day-out todo %s", daysOut/2, daysOut, target)
+	}
+	wide := todosWithDays(t, srv, "upcoming", daysOut+30, 100)
+	if !contains(wide) {
+		t.Errorf("a %d-day window must include the %d-day-out todo %s", daysOut+30, daysOut, target)
+	}
+	// Total is monotonic in the window width; never assert exact counts, since
+	// repeating next-occurrences float with now.
+	if near.Total > wide.Total {
+		t.Errorf("window totals not monotonic: near=%d wide=%d", near.Total, wide.Total)
+	}
+}
+
+// furthestUpcoming returns the UUID and whole days from today of the upcoming
+// item scheduled furthest out, giving the window math maximal headroom so the
+// test stays clock-independent.
+func furthestUpcoming(t *testing.T, items []Item) (uuid string, daysOut int) {
+	t.Helper()
+	today := time.Now()
+	best := -1
+	for i := range items {
+		if items[i].When == "" {
+			continue
+		}
+		d, err := time.Parse("2006-01-02", items[i].When)
+		if err != nil {
+			continue
+		}
+		if out := int(d.Sub(today).Hours() / 24); out > best {
+			best, uuid = out, items[i].UUID
+		}
+	}
+	if best < 2 {
+		t.Skipf("no upcoming todo far enough out to window (furthest = %d days)", best)
+	}
+	return uuid, best
+}
+
+func TestLogbookDefaultWindow(t *testing.T) {
+	path := thingstest.DatabasePath(t)
+	srv := serverOnPath(t, path)
+
+	full := todosWithDays(t, srv, "logbook", 0, 100)
+	if full.Total == 0 {
+		t.Fatal("fixture has no logbook rows")
+	}
+	// The fixture's stop dates are all years old, so the default 30-day window is
+	// empty until a row is bumped into it.
+	if base := listTodos(t, srv, ListTodosInput{View: "logbook"}); base.Total != 0 {
+		t.Fatalf("default 30-day window on the aged fixture = %d, want 0", base.Total)
+	}
+
+	// stopDate is a float Unix epoch; bump one row to now so the default window sees it.
+	target := full.Items[0].UUID
+	execFixture(t, path, "UPDATE TMTask SET stopDate = ? WHERE uuid = ?", time.Now().Unix(), target)
+
+	windowed := listTodos(t, srv, ListTodosInput{View: "logbook"})
+	if windowed.Total != 1 || windowed.Items[0].UUID != target {
+		t.Fatalf("default-window logbook after bump = %+v, want just %s", windowed, target)
+	}
+	if again := todosWithDays(t, srv, "logbook", 0, 100); again.Total != full.Total {
+		t.Errorf("all-history total = %d, want unchanged %d", again.Total, full.Total)
+	}
+}
+
+// TestLogbookDefaultWindowIsThirtyDays brackets the default window instead of
+// merely proving it is positive: a row stopped 29 days ago falls inside it and
+// one stopped 31 days ago does not. On the aged fixture any default from 1 to
+// ~1000 days looks identical without both bounds, so a silent change to the
+// window would otherwise ship green.
+func TestLogbookDefaultWindowIsThirtyDays(t *testing.T) {
+	path := thingstest.DatabasePath(t)
+	srv := serverOnPath(t, path)
+
+	full := todosWithDays(t, srv, "logbook", 0, 100)
+	if full.Total < 2 {
+		t.Fatalf("fixture needs two logbook rows to bracket the window, has %d", full.Total)
+	}
+	inside, outside := full.Items[0].UUID, full.Items[1].UUID
+	stoppedDaysAgo := func(n int, uuid string) {
+		execFixture(t, path, "UPDATE TMTask SET stopDate = ? WHERE uuid = ?", time.Now().AddDate(0, 0, -n).Unix(), uuid)
+	}
+	stoppedDaysAgo(29, inside)
+	stoppedDaysAgo(31, outside)
+
+	got := listTodos(t, srv, ListTodosInput{View: "logbook", Limit: 100})
+	has := func(uuid string) bool {
+		return slices.ContainsFunc(got.Items, func(it Item) bool { return it.UUID == uuid })
+	}
+	if !has(inside) {
+		t.Errorf("row stopped 29 days ago (%s) must fall inside the default 30-day window", inside)
+	}
+	if has(outside) {
+		t.Errorf("row stopped 31 days ago (%s) must fall outside the default 30-day window", outside)
+	}
+}
+
+// TestDaysWindowBeyondEncodableRange proves an absurd window degrades to "every
+// dated row" rather than corrupting the view. A cutoff past the four-digit-year
+// range used to encode to no SQL condition at all, which dropped the deadlines
+// view's own Deadline().Exists(true) guard and returned every incomplete todo as
+// a deadline; the same overflow ran the logbook cutoff to a negative year, which
+// SQLite reads as NULL, so the view returned nothing.
+func TestDaysWindowBeyondEncodableRange(t *testing.T) {
+	srv := newTestServer(t, Config{})
+	const absurd = 3_000_000 // ~8200 years out, past the year either encoding can express
+
+	deadlines := todosWithDays(t, srv, "deadlines", absurd, 100)
+	if deadlines.Total != thingstest.Deadlines {
+		t.Errorf("deadlines with an absurd window = %d, want all %d", deadlines.Total, thingstest.Deadlines)
+	}
+	for _, it := range deadlines.Items {
+		if it.Deadline == "" {
+			t.Errorf("deadlines view returned %s, which carries no deadline at all", it.UUID)
+		}
+	}
+
+	all := todosWithDays(t, srv, "logbook", 0, 100)
+	if huge := todosWithDays(t, srv, "logbook", absurd, 100); huge.Total != all.Total {
+		t.Errorf("logbook with an absurd window = %d, want all %d rows", huge.Total, all.Total)
 	}
 }

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"slices"
 	"time"
 
@@ -10,6 +11,16 @@ import (
 )
 
 const flagDays = "days"
+
+// daysWindow reads --days, rejecting a negative window rather than ignoring it,
+// so the flag has the same contract as the MCP tools' days argument.
+func daysWindow(cmd *cobra.Command) (int, error) {
+	days, _ := cmd.Flags().GetInt(flagDays)
+	if days < 0 {
+		return 0, fmt.Errorf("invalid --%s %d: the window must be zero or positive", flagDays, days)
+	}
+	return days, nil
+}
 
 func newTodayCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -74,17 +85,28 @@ func newUpcomingCmd() *cobra.Command {
 		Use:     "upcoming",
 		Short:   "List scheduled todos grouped by date",
 		GroupID: groupViews,
-		Example: "  things3 upcoming\n  things3 upcoming -n 10\n  things3 upcoming --tag work",
+		Example: "  things3 upcoming\n  things3 upcoming --days 7\n  things3 upcoming --tag work",
 		Args:    cobra.NoArgs,
 		RunE:    withClient(runUpcoming),
 	}
+	cmd.Flags().Int(flagDays, 0, "limit to todos scheduled within the next N days (0 = all)")
 	return cmd
 }
 
 func runUpcoming(cmd *cobra.Command, _ []string, client *things3.Client) error {
+	days, err := daysWindow(cmd)
+	if err != nil {
+		return err
+	}
 	todos, err := client.Upcoming(cmd.Context())
 	if err != nil {
 		return err
+	}
+	if days > 0 {
+		cutoff := time.Now().AddDate(0, 0, days)
+		todos = slices.DeleteFunc(todos, func(t things3.Todo) bool {
+			return t.StartDate == nil || t.StartDate.After(cutoff)
+		})
 	}
 	return outputTodoList(cmd, todos, groupByStartDate, defaultRow)
 }
@@ -148,7 +170,10 @@ func newLogbookCmd() *cobra.Command {
 }
 
 func runLogbook(cmd *cobra.Command, _ []string, client *things3.Client) error {
-	days, _ := cmd.Flags().GetInt(flagDays)
+	days, err := daysWindow(cmd)
+	if err != nil {
+		return err
+	}
 	q := client.Todos().Status().Any().StopDate().Exists(true)
 	if days > 0 {
 		q = q.StopDate().After(time.Now().AddDate(0, 0, -days))
@@ -166,15 +191,24 @@ func newDeadlinesCmd() *cobra.Command {
 		Use:     nameDeadlines,
 		Short:   "List todos with deadlines, soonest first",
 		GroupID: groupViews,
-		Example: "  things3 deadlines\n  things3 deadlines --json",
+		Example: "  things3 deadlines\n  things3 deadlines --days 7\n  things3 deadlines --json",
 		Args:    cobra.NoArgs,
 		RunE:    withClient(runDeadlines),
 	}
+	cmd.Flags().Int(flagDays, 0, "limit to deadlines within the next N days, including overdue (0 = all)")
 	return cmd
 }
 
 func runDeadlines(cmd *cobra.Command, _ []string, client *things3.Client) error {
-	todos, err := client.Todos().Deadline().Exists(true).Status().Incomplete().All(cmd.Context())
+	days, err := daysWindow(cmd)
+	if err != nil {
+		return err
+	}
+	q := client.Todos().Deadline().Exists(true).Status().Incomplete()
+	if days > 0 {
+		q = q.Deadline().OnOrBefore(time.Now().AddDate(0, 0, days))
+	}
+	todos, err := q.All(cmd.Context())
 	if err != nil {
 		return err
 	}

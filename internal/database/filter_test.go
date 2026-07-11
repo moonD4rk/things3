@@ -313,6 +313,32 @@ func TestWhereBuilder_addDateFilter(t *testing.T) {
 			assert.Equal(t, east.sql(), west.sql(), "isThingsDate=%v", isThingsDate)
 		}
 	})
+
+	// A caller can hand any time.Time to a comparison filter. Out-of-range years
+	// must still produce a condition: dropping it would widen the query instead of
+	// narrowing it, silently discarding whatever guard the filter was chained onto.
+	t.Run("out-of-range date clamps instead of vanishing", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			date time.Time
+			want string
+		}{
+			{"far future", time.Date(12026, 6, 15, 0, 0, 0, 0, time.Local), "date(stopDate, 'unixepoch', 'localtime') <= date('9999-12-31')"},
+			{"negative year", time.Date(-8215, 6, 15, 0, 0, 0, 0, time.Local), "date(stopDate, 'unixepoch', 'localtime') <= date('0001-01-02')"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				var w whereBuilder
+				w.addDateFilter("stopDate", &DateFilterValue{Operator: "<=", Date: new(tc.date)}, false)
+				assert.Equal(t, tc.want, w.sql())
+			})
+
+			t.Run(tc.name+" things date", func(t *testing.T) {
+				var w whereBuilder
+				w.addDateFilter("deadline", &DateFilterValue{Operator: "<=", Date: new(tc.date)}, true)
+				assert.NotEqual(t, sqlTrue, w.sql(), "an unencodable date must not drop the condition")
+			})
+		}
+	})
 }
 
 func TestWhereBuilder_empty(t *testing.T) {

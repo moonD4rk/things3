@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -231,4 +233,138 @@ func TestReadOnlyToolListing(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestLimitSchemaKeywords proves the pagination cap is stamped as
+// machine-readable schema keywords (default/maximum), not prose, so the SDK
+// enforces it and a model reads the real cap. No minimum is stamped: a floor
+// would turn a non-positive limit or page into a schema rejection instead of
+// the documented fallback to the default page.
+func TestLimitSchemaKeywords(t *testing.T) {
+	schema, err := inputSchemaFor[ListTodosInput](MaxLimit, DefaultLimit)
+	if err != nil {
+		t.Fatalf("input schema: %v", err)
+	}
+	lim := schema.Properties["limit"]
+	if lim == nil {
+		t.Fatal("limit property missing from schema")
+	}
+	if lim.Maximum == nil || *lim.Maximum != float64(MaxLimit) {
+		t.Errorf("limit.maximum = %v, want %d", lim.Maximum, MaxLimit)
+	}
+	if string(lim.Default) != strconv.Itoa(DefaultLimit) {
+		t.Errorf("limit.default = %q, want %d", lim.Default, DefaultLimit)
+	}
+	if lim.Minimum != nil {
+		t.Errorf("limit.minimum = %v, want none: a floor rejects limit 0 instead of clamping it", *lim.Minimum)
+	}
+	page := schema.Properties["page"]
+	if page == nil || string(page.Default) != "1" {
+		t.Fatalf("page bounds wrong: %+v", page)
+	}
+	if page.Minimum != nil {
+		t.Errorf("page.minimum = %v, want none: a floor rejects page 0 instead of clamping it", *page.Minimum)
+	}
+}
+
+// TestLimitSchemaEnforcement proves the SDK enforces the stamped cap: an
+// over-cap limit is rejected before the handler runs (replacing the old silent
+// clamp), and an omitted limit pages at the default.
+func TestLimitSchemaEnforcement(t *testing.T) {
+	srv := newTestServer(t, Config{Version: "test"})
+	session, ctx := connect(t, srv)
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "list_todos",
+		Arguments: map[string]any{"view": "inbox", "limit": MaxLimit + 100},
+	})
+	if err == nil && (res == nil || !res.IsError) {
+		t.Fatalf("limit over the maximum should be rejected, got err=%v res=%+v", err, res)
+	}
+
+	// An omitted limit pages at the default: all-history logbook has > 20 rows.
+	full := callTool(t, session, ctx, "list_todos", map[string]any{"view": "logbook", "days": 0})
+	page := structured[PageResult[Item]](t, full)
+	if page.Total <= DefaultLimit {
+		t.Fatalf("need > %d logbook rows to prove default paging, got %d", DefaultLimit, page.Total)
+	}
+	if len(page.Items) != DefaultLimit {
+		t.Errorf("omitted limit should page at the default %d, got %d", DefaultLimit, len(page.Items))
+	}
+}
+
+// TestNonPositivePageArgsClamp proves a limit or page of zero still answers with
+// the default page rather than a schema rejection. Zero is a common model idiom
+// for "no cap", and clampLimit/paginate document that reading; a schema floor
+// would make the call fail with a raw validation string instead.
+func TestNonPositivePageArgsClamp(t *testing.T) {
+	srv := newTestServer(t, Config{Version: "test"})
+	session, ctx := connect(t, srv)
+
+	for _, arg := range []string{"limit", "page"} {
+		t.Run(arg, func(t *testing.T) {
+			res := callTool(t, session, ctx, "list_todos", map[string]any{
+				"view": "logbook", "days": 0, arg: 0,
+			})
+			page := structured[PageResult[Item]](t, res)
+			if !page.Success {
+				t.Fatalf("%s 0 should be clamped, not rejected: %+v", arg, page.Error)
+			}
+			if page.Page != 1 || len(page.Items) != DefaultLimit {
+				t.Errorf("%s 0 = page %d with %d items, want page 1 with %d", arg, page.Page, len(page.Items), DefaultLimit)
+			}
+		})
+	}
+}
+
+// TestMaxLimitConfig proves --max-limit lowers both the advertised and enforced
+// cap, that a cap below the built-in default is clamped so construction does not
+// panic (the SDK rejects default > maximum at registration), that a cap above
+// the built-in maximum cannot raise it (the flag only tightens), and that the
+// built-in default is not itself configurable.
+func TestMaxLimitConfig(t *testing.T) {
+	cases := []struct {
+		cap, wantDefault, wantMax int
+	}{
+		{0, DefaultLimit, MaxLimit},              // unset: built-in bounds
+		{20, 20, 20},                             // cap at the default
+		{5, 5, 5},                                // cap below the default clamps the default down
+		{MaxLimit + 100, DefaultLimit, MaxLimit}, // a cap above the ceiling cannot raise it
+	}
+	for _, tc := range cases {
+		def, mx := resolveLimits(Config{MaxLimit: tc.cap})
+		if def != tc.wantDefault || mx != tc.wantMax {
+			t.Errorf("resolveLimits(%d) = (default %d, max %d), want (%d, %d)", tc.cap, def, mx, tc.wantDefault, tc.wantMax)
+		}
+	}
+
+	// A low cap must construct without panicking inside mcp.AddTool and advertise
+	// the low cap on the limit schema.
+	srv := newTestServer(t, Config{Version: "test", MaxLimit: 5})
+	schema, err := inputSchemaFor[ListTodosInput](srv.maxLimit, srv.defaultLimit)
+	if err != nil {
+		t.Fatalf("schema: %v", err)
+	}
+	lim := schema.Properties["limit"]
+	if lim.Maximum == nil || *lim.Maximum != 5 || string(lim.Default) != "5" {
+		t.Errorf("capped limit schema = max %v default %q, want max 5 default 5", lim.Maximum, lim.Default)
+	}
+	if DefaultLimit != 20 {
+		t.Errorf("DefaultLimit is not configurable, but changed to %d", DefaultLimit)
+	}
+}
+
+// TestToolProse asserts the load-bearing steering tokens survive in the tool
+// descriptions and instructions, at substring level so wording can still evolve.
+func TestToolProse(t *testing.T) {
+	for _, tok := range []string{"days", "30", "notes_truncated"} {
+		if !strings.Contains(descListTodos, tok) {
+			t.Errorf("descListTodos missing %q", tok)
+		}
+	}
+	for _, tok := range []string{"limit 1", "days", "notes"} {
+		if !strings.Contains(instructions, tok) {
+			t.Errorf("instructions missing %q", tok)
+		}
+	}
 }

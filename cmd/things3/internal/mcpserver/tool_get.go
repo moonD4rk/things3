@@ -37,7 +37,11 @@ func (s *Server) handleGet(ctx context.Context, _ *mcp.CallToolRequest, in GetIn
 			return nil, GetResult{}, herr
 		}
 		item := projectItem(m.Project)
-		return nil, GetResult{Success: true, Item: &item, Todos: todoItems(todos), Headings: headingRefs(headings)}, nil
+		// The resolved project keeps its full note; the todos nested under it are a
+		// list like any other, so they shorten the same way list_todos does.
+		nested := todoItems(todos)
+		truncateNotes(nested)
+		return nil, GetResult{Success: true, Item: &item, Todos: nested, Headings: headingRefs(headings)}, nil
 	}
 
 	// Re-fetch to load the checklist, which Resolve does not populate.

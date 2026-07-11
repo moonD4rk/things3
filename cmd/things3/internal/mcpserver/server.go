@@ -41,6 +41,10 @@ type Config struct {
 	Verify verify.Options
 	// Execute runs a scheme builder; tests inject a URL recorder.
 	Execute ExecuteFunc
+	// MaxLimit caps the list page size for the whole session; zero uses the
+	// built-in maximum. The effective default page size is clamped to this cap so
+	// a low cap never leaves default above maximum.
+	MaxLimit int
 }
 
 // Server is a things3 MCP server bound to one database client for its whole
@@ -51,6 +55,12 @@ type Server struct {
 	cfg     Config
 	mcp     *mcp.Server
 	writeMu sync.Mutex
+	// maxLimit and defaultLimit are the effective page-size bounds for the
+	// session, resolved once at construction and threaded into both the input
+	// schemas and the pagination clamp so the advertised cap and the enforced cap
+	// never diverge.
+	maxLimit     int
+	defaultLimit int
 }
 
 // New builds a things3 MCP server over the given client and configuration. It
@@ -65,6 +75,7 @@ func New(client *things3.Client, cfg Config) (*Server, error) {
 	}
 
 	s := &Server{client: client, cfg: cfg}
+	s.defaultLimit, s.maxLimit = resolveLimits(cfg)
 	s.mcp = mcp.NewServer(
 		&mcp.Implementation{Name: serverName, Version: cfg.Version},
 		&mcp.ServerOptions{Instructions: instructions, Logger: cfg.Logger},
@@ -81,11 +92,25 @@ func (s *Server) Run(ctx context.Context) error {
 	return s.mcp.Run(ctx, &mcp.StdioTransport{})
 }
 
+// resolveLimits fixes the session's effective page-size bounds once. A positive
+// Config.MaxLimit lowers the cap (the --max-limit flag); it can only tighten,
+// never raise the cap above the built-in MaxLimit, so a model can never request
+// a larger page than the built-in ceiling. Zero uses the built-in maximum. The
+// default page size is clamped to the cap, because the SDK rejects a schema
+// whose default exceeds its maximum and would panic at registration.
+func resolveLimits(cfg Config) (defaultLimit, maxLimit int) {
+	maxLimit = MaxLimit
+	if cfg.MaxLimit > 0 {
+		maxLimit = min(cfg.MaxLimit, MaxLimit)
+	}
+	return min(DefaultLimit, maxLimit), maxLimit
+}
+
 // register wires every tool. Read tools are always present; write tools and open
 // are registered only when the server is not read-only, so a read-only client
 // cannot even list them.
 func (s *Server) register() error {
-	r := &registrar{srv: s.mcp}
+	r := &registrar{srv: s.mcp, maxLimit: s.maxLimit, defaultLimit: s.defaultLimit}
 	s.registerRead(r)
 	if !s.cfg.ReadOnly {
 		s.registerWrite(r)
@@ -94,19 +119,22 @@ func (s *Server) register() error {
 }
 
 // registrar accumulates tool registrations, short-circuiting on the first schema
-// error so register reports it from a single place.
+// error so register reports it from a single place. It carries the page-size
+// bounds so every list tool's schema advertises the same cap the handler enforces.
 type registrar struct {
-	srv *mcp.Server
-	err error
+	srv          *mcp.Server
+	err          error
+	maxLimit     int
+	defaultLimit int
 }
 
-// regTool builds In's input schema (injecting enum constraints) and adds the
-// tool. It is a no-op once a prior registration has failed.
+// regTool builds In's input schema (injecting enum constraints and pagination
+// bounds) and adds the tool. It is a no-op once a prior registration has failed.
 func regTool[In, Out any](r *registrar, name, desc string, h mcp.ToolHandlerFor[In, Out]) {
 	if r.err != nil {
 		return
 	}
-	schema, err := inputSchemaFor[In]()
+	schema, err := inputSchemaFor[In](r.maxLimit, r.defaultLimit)
 	if err != nil {
 		r.err = fmt.Errorf("mcpserver: input schema for %s: %w", name, err)
 		return

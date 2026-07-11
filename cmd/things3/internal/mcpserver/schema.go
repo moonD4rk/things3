@@ -77,25 +77,25 @@ func inputSchemaFor[In any](maxLimit, defaultLimit int) (*jsonschema.Schema, err
 	return s, nil
 }
 
-// applyPageBounds stamps default/minimum/maximum onto the limit and page
-// properties when a tool has them. The SDK runs ApplyDefaults then Validate on
-// every call, so these are enforced, not merely advertised: an omitted limit
-// arrives as defaultLimit and a limit above maxLimit is rejected before the
-// handler runs. It is a no-op for tools without pagination.
+// applyPageBounds stamps default/maximum onto the limit and page properties
+// when a tool has them. The SDK runs ApplyDefaults then Validate on every call,
+// so the cap is enforced, not merely advertised: an omitted limit arrives as
+// defaultLimit and a limit above maxLimit is rejected before the handler runs.
+// No minimum is stamped: a floor would make the SDK reject limit 0 or page 0
+// outright, while clampLimit and paginate already normalize a non-positive
+// request to the default page, which is the friendlier reading of a model that
+// means "no cap". It is a no-op for tools without pagination.
 func applyPageBounds(s *jsonschema.Schema, maxLimit, defaultLimit int) {
 	if s == nil || s.Properties == nil {
 		return
 	}
 	if lim := s.Properties["limit"]; lim != nil {
-		lo, hi := 1.0, float64(maxLimit)
-		lim.Minimum = &lo
+		hi := float64(maxLimit)
 		lim.Maximum = &hi
 		lim.Default = json.RawMessage(strconv.Itoa(defaultLimit))
 		lim.Description = fmt.Sprintf("page size; defaults to %d, capped at %d", defaultLimit, maxLimit)
 	}
 	if page := s.Properties["page"]; page != nil {
-		lo := 1.0
-		page.Minimum = &lo
 		page.Default = json.RawMessage("1")
 		page.Description = "1-based page number"
 	}

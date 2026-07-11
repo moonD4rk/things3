@@ -12,14 +12,14 @@ import (
 
 // serverOnPath builds a server over an explicit fixture copy, so a test can both
 // query it and mutate the same file with execFixture.
-func serverOnPath(t *testing.T, path string, cfg Config) *Server {
+func serverOnPath(t *testing.T, path string) *Server {
 	t.Helper()
 	client, err := things3.NewClient(things3.WithDatabasePath(path))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}
 	t.Cleanup(func() { _ = client.Close() })
-	srv, err := New(client, cfg)
+	srv, err := New(client, Config{})
 	if err != nil {
 		t.Fatalf("server: %v", err)
 	}
@@ -385,7 +385,7 @@ func furthestUpcoming(t *testing.T, items []Item) (uuid string, daysOut int) {
 
 func TestLogbookDefaultWindow(t *testing.T) {
 	path := thingstest.DatabasePath(t)
-	srv := serverOnPath(t, path, Config{})
+	srv := serverOnPath(t, path)
 
 	full := todosWithDays(t, srv, "logbook", 0, 100)
 	if full.Total == 0 {
@@ -407,5 +407,63 @@ func TestLogbookDefaultWindow(t *testing.T) {
 	}
 	if again := todosWithDays(t, srv, "logbook", 0, 100); again.Total != full.Total {
 		t.Errorf("all-history total = %d, want unchanged %d", again.Total, full.Total)
+	}
+}
+
+// TestLogbookDefaultWindowIsThirtyDays brackets the default window instead of
+// merely proving it is positive: a row stopped 29 days ago falls inside it and
+// one stopped 31 days ago does not. On the aged fixture any default from 1 to
+// ~1000 days looks identical without both bounds, so a silent change to the
+// window would otherwise ship green.
+func TestLogbookDefaultWindowIsThirtyDays(t *testing.T) {
+	path := thingstest.DatabasePath(t)
+	srv := serverOnPath(t, path)
+
+	full := todosWithDays(t, srv, "logbook", 0, 100)
+	if full.Total < 2 {
+		t.Fatalf("fixture needs two logbook rows to bracket the window, has %d", full.Total)
+	}
+	inside, outside := full.Items[0].UUID, full.Items[1].UUID
+	stoppedDaysAgo := func(n int, uuid string) {
+		execFixture(t, path, "UPDATE TMTask SET stopDate = ? WHERE uuid = ?", time.Now().AddDate(0, 0, -n).Unix(), uuid)
+	}
+	stoppedDaysAgo(29, inside)
+	stoppedDaysAgo(31, outside)
+
+	got := listTodos(t, srv, ListTodosInput{View: "logbook", Limit: 100})
+	has := func(uuid string) bool {
+		return slices.ContainsFunc(got.Items, func(it Item) bool { return it.UUID == uuid })
+	}
+	if !has(inside) {
+		t.Errorf("row stopped 29 days ago (%s) must fall inside the default 30-day window", inside)
+	}
+	if has(outside) {
+		t.Errorf("row stopped 31 days ago (%s) must fall outside the default 30-day window", outside)
+	}
+}
+
+// TestDaysWindowBeyondEncodableRange proves an absurd window degrades to "every
+// dated row" rather than corrupting the view. A cutoff past the four-digit-year
+// range used to encode to no SQL condition at all, which dropped the deadlines
+// view's own Deadline().Exists(true) guard and returned every incomplete todo as
+// a deadline; the same overflow ran the logbook cutoff to a negative year, which
+// SQLite reads as NULL, so the view returned nothing.
+func TestDaysWindowBeyondEncodableRange(t *testing.T) {
+	srv := newTestServer(t, Config{})
+	const absurd = 3_000_000 // ~8200 years out, past the year either encoding can express
+
+	deadlines := todosWithDays(t, srv, "deadlines", absurd, 100)
+	if deadlines.Total != thingstest.Deadlines {
+		t.Errorf("deadlines with an absurd window = %d, want all %d", deadlines.Total, thingstest.Deadlines)
+	}
+	for _, it := range deadlines.Items {
+		if it.Deadline == "" {
+			t.Errorf("deadlines view returned %s, which carries no deadline at all", it.UUID)
+		}
+	}
+
+	all := todosWithDays(t, srv, "logbook", 0, 100)
+	if huge := todosWithDays(t, srv, "logbook", absurd, 100); huge.Total != all.Total {
+		t.Errorf("logbook with an absurd window = %d, want all %d rows", huge.Total, all.Total)
 	}
 }

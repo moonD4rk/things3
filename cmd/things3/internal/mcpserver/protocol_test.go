@@ -235,9 +235,11 @@ func TestReadOnlyToolListing(t *testing.T) {
 	})
 }
 
-// TestLimitSchemaKeywords proves the pagination bounds are stamped as
-// machine-readable schema keywords (default/minimum/maximum), not prose, so the
-// SDK enforces them and a model reads the real cap.
+// TestLimitSchemaKeywords proves the pagination cap is stamped as
+// machine-readable schema keywords (default/maximum), not prose, so the SDK
+// enforces it and a model reads the real cap. No minimum is stamped: a floor
+// would turn a non-positive limit or page into a schema rejection instead of
+// the documented fallback to the default page.
 func TestLimitSchemaKeywords(t *testing.T) {
 	schema, err := inputSchemaFor[ListTodosInput](MaxLimit, DefaultLimit)
 	if err != nil {
@@ -250,19 +252,22 @@ func TestLimitSchemaKeywords(t *testing.T) {
 	if lim.Maximum == nil || *lim.Maximum != float64(MaxLimit) {
 		t.Errorf("limit.maximum = %v, want %d", lim.Maximum, MaxLimit)
 	}
-	if lim.Minimum == nil || *lim.Minimum != 1 {
-		t.Errorf("limit.minimum = %v, want 1", lim.Minimum)
-	}
 	if string(lim.Default) != strconv.Itoa(DefaultLimit) {
 		t.Errorf("limit.default = %q, want %d", lim.Default, DefaultLimit)
 	}
+	if lim.Minimum != nil {
+		t.Errorf("limit.minimum = %v, want none: a floor rejects limit 0 instead of clamping it", *lim.Minimum)
+	}
 	page := schema.Properties["page"]
-	if page == nil || page.Minimum == nil || *page.Minimum != 1 || string(page.Default) != "1" {
-		t.Errorf("page bounds wrong: %+v", page)
+	if page == nil || string(page.Default) != "1" {
+		t.Fatalf("page bounds wrong: %+v", page)
+	}
+	if page.Minimum != nil {
+		t.Errorf("page.minimum = %v, want none: a floor rejects page 0 instead of clamping it", *page.Minimum)
 	}
 }
 
-// TestLimitSchemaEnforcement proves the SDK enforces the stamped bounds: an
+// TestLimitSchemaEnforcement proves the SDK enforces the stamped cap: an
 // over-cap limit is rejected before the handler runs (replacing the old silent
 // clamp), and an omitted limit pages at the default.
 func TestLimitSchemaEnforcement(t *testing.T) {
@@ -285,6 +290,30 @@ func TestLimitSchemaEnforcement(t *testing.T) {
 	}
 	if len(page.Items) != DefaultLimit {
 		t.Errorf("omitted limit should page at the default %d, got %d", DefaultLimit, len(page.Items))
+	}
+}
+
+// TestNonPositivePageArgsClamp proves a limit or page of zero still answers with
+// the default page rather than a schema rejection. Zero is a common model idiom
+// for "no cap", and clampLimit/paginate document that reading; a schema floor
+// would make the call fail with a raw validation string instead.
+func TestNonPositivePageArgsClamp(t *testing.T) {
+	srv := newTestServer(t, Config{Version: "test"})
+	session, ctx := connect(t, srv)
+
+	for _, arg := range []string{"limit", "page"} {
+		t.Run(arg, func(t *testing.T) {
+			res := callTool(t, session, ctx, "list_todos", map[string]any{
+				"view": "logbook", "days": 0, arg: 0,
+			})
+			page := structured[PageResult[Item]](t, res)
+			if !page.Success {
+				t.Fatalf("%s 0 should be clamped, not rejected: %+v", arg, page.Error)
+			}
+			if page.Page != 1 || len(page.Items) != DefaultLimit {
+				t.Errorf("%s 0 = page %d with %d items, want page 1 with %d", arg, page.Page, len(page.Items), DefaultLimit)
+			}
+		})
 	}
 }
 

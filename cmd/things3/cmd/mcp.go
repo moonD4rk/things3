@@ -47,6 +47,9 @@ func runMCP(cmd *cobra.Command, _ []string, client *things3.Client) error {
 	readOnly, _ := cmd.Flags().GetBool(flagReadOnly)
 	levelName, _ := cmd.Flags().GetString(flagLogLevel)
 	maxLimit, _ := cmd.Flags().GetInt(flagMaxLimit)
+	if maxLimit < 0 {
+		return fmt.Errorf("invalid --%s %d: use 0 for the built-in maximum, or a positive page size", flagMaxLimit, maxLimit)
+	}
 	level, err := parseLogLevel(levelName)
 	if err != nil {
 		return err

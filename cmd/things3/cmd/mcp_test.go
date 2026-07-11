@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"syscall"
 	"testing"
 )
@@ -69,7 +70,7 @@ func TestNewMCPCmd(t *testing.T) {
 	if cmd.Example == "" {
 		t.Errorf("mcp command should set an Example")
 	}
-	for _, name := range []string{flagReadOnly, flagLogLevel} {
+	for _, name := range []string{flagReadOnly, flagLogLevel, flagMaxLimit} {
 		if cmd.Flags().Lookup(name) == nil {
 			t.Errorf("--%s should be a local flag", name)
 		}
@@ -77,4 +78,19 @@ func TestNewMCPCmd(t *testing.T) {
 			t.Errorf("--%s must not be persistent", name)
 		}
 	}
+}
+
+// TestMCPMaxLimitRejectsNegative proves an out-of-range cap fails loudly. Silently
+// ignoring it would leave the session on the built-in maximum while the operator
+// believes page sizes are capped.
+func TestMCPMaxLimitRejectsNegative(t *testing.T) {
+	setupFixtureDB(t)
+	_, _, err := executeCommand(t, "mcp", "--max-limit", "-1")
+	if err == nil {
+		t.Fatal("--max-limit -1 should be rejected")
+	}
+	if !strings.Contains(err.Error(), flagMaxLimit) {
+		t.Errorf("error should name the flag, got %v", err)
+	}
+	assertExitCode(t, err, 1)
 }

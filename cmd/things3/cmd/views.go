@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"slices"
 	"time"
 
@@ -10,6 +11,16 @@ import (
 )
 
 const flagDays = "days"
+
+// daysWindow reads --days, rejecting a negative window rather than ignoring it,
+// so the flag has the same contract as the MCP tools' days argument.
+func daysWindow(cmd *cobra.Command) (int, error) {
+	days, _ := cmd.Flags().GetInt(flagDays)
+	if days < 0 {
+		return 0, fmt.Errorf("invalid --%s %d: the window must be zero or positive", flagDays, days)
+	}
+	return days, nil
+}
 
 func newTodayCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -83,7 +94,10 @@ func newUpcomingCmd() *cobra.Command {
 }
 
 func runUpcoming(cmd *cobra.Command, _ []string, client *things3.Client) error {
-	days, _ := cmd.Flags().GetInt(flagDays)
+	days, err := daysWindow(cmd)
+	if err != nil {
+		return err
+	}
 	todos, err := client.Upcoming(cmd.Context())
 	if err != nil {
 		return err
@@ -156,7 +170,10 @@ func newLogbookCmd() *cobra.Command {
 }
 
 func runLogbook(cmd *cobra.Command, _ []string, client *things3.Client) error {
-	days, _ := cmd.Flags().GetInt(flagDays)
+	days, err := daysWindow(cmd)
+	if err != nil {
+		return err
+	}
 	q := client.Todos().Status().Any().StopDate().Exists(true)
 	if days > 0 {
 		q = q.StopDate().After(time.Now().AddDate(0, 0, -days))
@@ -183,7 +200,10 @@ func newDeadlinesCmd() *cobra.Command {
 }
 
 func runDeadlines(cmd *cobra.Command, _ []string, client *things3.Client) error {
-	days, _ := cmd.Flags().GetInt(flagDays)
+	days, err := daysWindow(cmd)
+	if err != nil {
+		return err
+	}
 	q := client.Todos().Deadline().Exists(true).Status().Incomplete()
 	if days > 0 {
 		q = q.Deadline().OnOrBefore(time.Now().AddDate(0, 0, days))

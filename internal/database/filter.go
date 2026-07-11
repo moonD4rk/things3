@@ -233,11 +233,36 @@ func (w *whereBuilder) addDateFilter(column string, v *DateFilterValue, isThings
 	if v.Date == nil {
 		return
 	}
-	dateVal, ok := formatDateValue(v.Date.In(time.Local).Format(time.DateOnly), isThingsDate)
+	dateVal, ok := formatDateValue(clampDate(v.Date.In(time.Local)).Format(time.DateOnly), isThingsDate)
 	if !ok {
 		return
 	}
 	w.addRawf("%s %s %s", colExpr, v.Operator, dateVal)
+}
+
+// Year bounds both date encodings can express: the Things encoder parses a
+// four-digit year, and SQLite's date() yields NULL outside the same range.
+const (
+	minDateYear = 1
+	maxDateYear = 9999
+)
+
+// clampDate bounds a comparison date to the representable year range. An
+// out-of-range date would otherwise encode to nothing (dropping the condition,
+// which widens the query instead of narrowing it) or to a literal SQLite reads
+// as NULL (matching no row at all). Clamping keeps the comparison meaningful:
+// a bound past either end of the range simply admits every dated row. The floor
+// is the second of January because the first is Go's zero time, which the Things
+// encoder reads as "no date".
+func clampDate(t time.Time) time.Time {
+	switch {
+	case t.Year() < minDateYear:
+		return time.Date(minDateYear, time.January, 2, 0, 0, 0, 0, t.Location())
+	case t.Year() > maxDateYear:
+		return time.Date(maxDateYear, time.December, 31, 0, 0, 0, 0, t.Location())
+	default:
+		return t
+	}
 }
 
 // formatDateValue converts a date string to the appropriate SQL value.

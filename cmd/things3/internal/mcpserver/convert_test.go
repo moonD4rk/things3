@@ -43,7 +43,7 @@ func TestTruncateNotes(t *testing.T) {
 // results but returned whole by get.
 func TestNotesTruncation(t *testing.T) {
 	path := thingstest.DatabasePath(t)
-	srv := serverOnPath(t, path, Config{})
+	srv := serverOnPath(t, path)
 
 	inbox := listTodos(t, srv, ListTodosInput{View: "inbox", Limit: 100})
 	if len(inbox.Items) == 0 {
@@ -82,6 +82,31 @@ func TestNotesTruncation(t *testing.T) {
 	}
 	if got.Item.NotesTruncated {
 		t.Error("get must never flag truncation")
+	}
+}
+
+// TestGetProjectNestedNotesTruncation proves the todos nested under a fetched
+// project shorten their notes like any other list. Only the resolved item itself
+// is a detail view; letting its children carry full notes would hand a model the
+// whole project's note text in one call.
+func TestGetProjectNestedNotesTruncation(t *testing.T) {
+	path := thingstest.DatabasePath(t)
+	srv := serverOnPath(t, path)
+
+	project := get(t, srv, thingstest.UUIDProject)
+	if len(project.Todos) == 0 {
+		t.Fatal("fixture project has no nested todos to annotate")
+	}
+	target := project.Todos[0].UUID
+	const noteRunes = 250
+	execFixture(t, path, "UPDATE TMTask SET notes = ? WHERE uuid = ?", strings.Repeat("字", noteRunes), target)
+
+	nested := findItem(t, get(t, srv, thingstest.UUIDProject).Todos, target)
+	if n := utf8.RuneCountInString(nested.Notes); n != notesLimit {
+		t.Errorf("nested todo note = %d runes, want %d", n, notesLimit)
+	}
+	if !nested.NotesTruncated {
+		t.Error("nested todo note must be flagged truncated")
 	}
 }
 

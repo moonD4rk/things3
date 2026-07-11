@@ -133,7 +133,7 @@ Inherited URL-scheme limits (not worked around): no delete or trash, no move to 
 }
 ```
 
-Add `"--read-only"` after `"mcp"` to register only the read tools, or `"--max-limit"` to cap the list page size. The full tool list (including the `days` window on upcoming/logbook/deadlines and notes truncation) and Claude Code / Claude Desktop setup are in [`cmd/things3/README.md`](cmd/things3/README.md#mcp-server).
+Add `"--read-only"` after `"mcp"` to register only the read tools, or `"--max-limit", "20"` to cap the list page size. The full tool list (including the `days` window on upcoming/logbook/deadlines and notes truncation) and Claude Code / Claude Desktop setup are in [`cmd/things3/README.md`](cmd/things3/README.md#mcp-server).
 
 ## Library
 

@@ -796,7 +796,7 @@ func TestDeadlinesDaysWindow(t *testing.T) {
 // argument: a negative window is an error, not a silently ignored no-op.
 func TestDaysRejectsNegative(t *testing.T) {
 	setupFixtureDB(t)
-	for _, view := range []string{nameUpcoming, nameLogbook, nameDeadlines} {
+	for _, view := range []string{"upcoming", "logbook", "deadlines"} {
 		t.Run(view, func(t *testing.T) {
 			_, _, err := executeCommand(t, view, "--days", "-7")
 			if err == nil {

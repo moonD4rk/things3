@@ -69,6 +69,10 @@ linters:
     goconst:
       min-len: 2
       min-occurrences: 3
+      # Repeated literals in tests are the test data, not a missing constant. The
+      # _test.go exclusion below cannot cover this: goconst counts occurrences
+      # across the package but reports them against the non-test declaration.
+      ignore-tests: true
     gocritic:
       enabled-tags:
         - diagnostic

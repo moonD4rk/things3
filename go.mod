@@ -3,7 +3,7 @@ module github.com/moond4rk/things3
 go 1.26.0
 
 require (
-	github.com/mattn/go-sqlite3 v1.14.48
+	github.com/mattn/go-sqlite3 v1.14.49
 	github.com/stretchr/testify v1.11.1
 )
 

@@ -43,10 +43,12 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.release-token.outputs.token }}
 
+      # Ship binaries built with the newest stable Go, so releases carry its
+      # security and runtime fixes regardless of the go.mod compatibility floor.
       - name: Setup Go
         uses: actions/setup-go@v7
         with:
-          go-version-file: 'go.mod'
+          go-version: 'stable'
 
       - name: Configure git
         run: |

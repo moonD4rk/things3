@@ -26,10 +26,13 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v7
 
+      # Build with the newest stable Go rather than the go.mod floor. The go
+      # directive states the oldest toolchain consumers may use; CI should prove
+      # the code also builds on the newest one, and picks up its fixes.
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version-file: 'go.mod'
+          go-version: 'stable'
           cache: true
 
       - name: Format Check
@@ -77,7 +80,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version-file: 'go.mod'
+          go-version: 'stable'
           cache: true
 
       # Build first to catch compile errors early

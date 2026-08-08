@@ -100,12 +100,16 @@ jobs:
 
       # Upload coverage only from Ubuntu to avoid duplicate reports. The two
       # modules upload under separate flags so their trends stay separable.
+      # disable_search is required for that: `files` only adds to whatever the
+      # action discovers on its own, so without it both uploads would carry both
+      # modules' profiles and each flag would describe the whole repository.
       - name: Upload library coverage
         if: matrix.os == 'ubuntu-latest'
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.out
+          disable_search: true
           fail_ci_if_error: false
           codecov_yml_path: ./.codecov.yml
           flags: library
@@ -117,6 +121,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./cmd/things3/coverage.out
+          disable_search: true
           fail_ci_if_error: false
           codecov_yml_path: ./.codecov.yml
           flags: cli

@@ -72,7 +72,9 @@ linters:
       # Repeated literals in tests are the test data, not a missing constant. The
       # _test.go exclusion below cannot cover this: goconst counts occurrences
       # across the package but reports them against the non-test declaration.
-      # The key is rejected by golangci-lint 2.10, so the CI pin must stay in step.
+      # The key is rejected by golangci-lint 2.10, so this config only validates
+      # against the version pinned as GOLANGCI_LINT_VERSION in
+      # .github/workflows/ci.yml; the two must stay in step.
       ignore-tests: true
     gocritic:
       enabled-tags:
@@ -130,7 +132,9 @@ linters:
         linters:
           - gochecknoinits
       # MCP tool handlers must take their input struct by value to satisfy the SDK's
-      # ToolHandlerFor signature; the mirrored test helpers do the same.
+      # ToolHandlerFor signature; the mirrored test helpers do the same. This path,
+      # like cmd/version.go above, is relative to the cmd/things3 module directory,
+      # where CI runs the second lint pass.
       - path: internal/mcpserver/
         linters:
           - gocritic

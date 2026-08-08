@@ -37,12 +37,14 @@ comment:
   require_base: false           # Don't require base branch data
   require_head: true            # Require current branch data
 
-# Flags configuration - Categorize different types of tests
+# Flags configuration - one flag per Go module, so library and CLI coverage
+# trends stay separable. Each upload in ci.yml carries only its own module's
+# profile, so no path filter is needed here.
 flags:
-  unittests:
-    paths:
-      - "*.go"                  # Root level library code
+  library:
     carryforward: false         # Don't use previous coverage data
+  cli:
+    carryforward: false
 
 # ===== Configuration Explanation =====
 #
@@ -59,5 +61,5 @@ flags:
 # - Codecov Dashboard: Coverage trends, file-level details, historical data
 # - PR Comments: Detailed coverage changes, file lists, uncovered lines
 # - GitHub Status: Shows coverage info, marked as "Informational"
-# - Flag Classification: See unittest coverage separately
+# - Flag Classification: See library and CLI coverage separately
 # - CI won't fail due to coverage issues (informational only)

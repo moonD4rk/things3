@@ -10,6 +10,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  # Pin the version developers run locally: the config schema is version-specific,
+  # so a skew here makes a locally clean tree fail CI on config verification alone.
+  # Keep in step with the schema notes in .golangci.yml.
+  GOLANGCI_LINT_VERSION: v2.12.2
+
 jobs:
   # Fast checks that can run in parallel
   checks:
@@ -20,22 +26,42 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v7
 
+      # Build with the newest stable Go rather than the go.mod floor. The go
+      # directive states the oldest toolchain consumers may use; CI should prove
+      # the code also builds on the newest one, and picks up its fixes.
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version-file: 'go.mod'
+          go-version: 'stable'
           cache: true
 
       - name: Format Check
         run: |
           diff -u <(echo -n) <(gofmt -d .)
 
-      # Pin the version developers run locally: the config schema is version-specific,
-      # so a skew here makes a locally clean tree fail CI on config verification alone.
+      # go.work is gitignored, so recreate the workspace before linting: it makes
+      # the CLI module below compile against the library in this checkout rather
+      # than the released version its go.mod requires.
+      - name: Create Go workspace
+        run: go work init . ./cmd/things3
+
       - name: Run Linter
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          skip-cache: false
+          skip-save-cache: false
+
+      # The CLI is a nested module, so the root run above never reaches it. Its
+      # exclusion rules in .golangci.yml are written relative to this directory,
+      # and the shared config is found by walking up. Schema verification is off
+      # because the run above already checked that same config.
+      - name: Run Linter (CLI module)
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          working-directory: cmd/things3
+          verify: false
           skip-cache: false
           skip-save-cache: false
 
@@ -54,7 +80,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version-file: 'go.mod'
+          go-version: 'stable'
           cache: true
 
       # Build first to catch compile errors early
@@ -67,21 +93,39 @@ jobs:
 
       # The CLI is a nested module; the root ./... does not reach it, and
       # go.work (which links the local library) is gitignored, so recreate the
-      # workspace here before building and testing the CLI module.
+      # workspace here before building and testing the CLI module. The profile
+      # lands in cmd/things3/, next to the module it covers.
       - name: Test CLI module
         run: |
           go work init . ./cmd/things3
           go -C cmd/things3 build -v ./...
-          go -C cmd/things3 test -v -race ./...
+          go -C cmd/things3 test -v -race -coverprofile=coverage.out ./...
 
-      # Upload coverage only from Ubuntu to avoid duplicate reports
-      - name: Upload coverage reports
+      # Upload coverage only from Ubuntu to avoid duplicate reports. The two
+      # modules upload under separate flags so their trends stay separable.
+      # disable_search is required for that: `files` only adds to whatever the
+      # action discovers on its own, so without it both uploads would carry both
+      # modules' profiles and each flag would describe the whole repository.
+      - name: Upload library coverage
         if: matrix.os == 'ubuntu-latest'
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.out
+          disable_search: true
           fail_ci_if_error: false
           codecov_yml_path: ./.codecov.yml
-          flags: unittests
-          name: codecov-things3
+          flags: library
+          name: codecov-things3-library
+
+      - name: Upload CLI coverage
+        if: matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./cmd/things3/coverage.out
+          disable_search: true
+          fail_ci_if_error: false
+          codecov_yml_path: ./.codecov.yml
+          flags: cli
+          name: codecov-things3-cli

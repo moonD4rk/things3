@@ -4,74 +4,143 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"time"
+)
+
+// TrashScope selects how a task query treats the Trash.
+type TrashScope int
+
+const (
+	// TrashExcluded keeps live items only: neither trashed nor inside a trashed project.
+	TrashExcluded TrashScope = iota
+	// TrashOnly keeps items that are themselves trashed.
+	TrashOnly
+	// TrashAny ignores the Trash entirely.
+	TrashAny
+)
+
+// TemplateScope selects how a task query treats repeating templates, the hidden
+// rows that schedule a repeating series.
+type TemplateScope int
+
+const (
+	// TemplatesExcluded keeps ordinary items only.
+	TemplatesExcluded TemplateScope = iota
+	// TemplatesOnly keeps repeating templates only.
+	TemplatesOnly
+	// TemplatesAny keeps both.
+	TemplatesAny
+)
+
+// TaskOrder selects the ORDER BY of a task query.
+type TaskOrder int
+
+const (
+	// OrderSidebar is the order the app lists items in: by area, then project,
+	// then heading, then the item's own position, with "none" leading each level.
+	OrderSidebar TaskOrder = iota
+	// OrderToday is the order of the Today list.
+	OrderToday
+	// OrderUpcoming is the order of the Upcoming list: by the day an item is
+	// filed under, then by its Today position.
+	OrderUpcoming
+	// OrderDeadline sorts by deadline, soonest first.
+	OrderDeadline
+	// OrderStopDateDesc sorts by completion or cancellation, most recent first.
+	OrderStopDateDesc
+	// OrderModifiedDesc sorts by last modification, most recent first.
+	OrderModifiedDesc
 )
 
 // TaskFilter captures all parameters for a task query.
 type TaskFilter struct {
-	UUID               *string
-	UUIDPrefix         *string
-	Title              *string
-	TaskType           *int
-	Status             *int
-	Start              *int
-	AreaUUID           *string
-	HasArea            *bool
-	ProjectUUID        *string
-	HasProject         *bool
-	HeadingUUID        *string
-	HasHeading         *bool
-	TagTitle           *string
-	HasTags            *bool
-	DeadlineSuppressed *bool
-	Trashed            *bool
-	RepeatingTemplates *bool
-	CreatedAfter       *time.Time
-	SearchQuery        *string
-	Index              string
-	StartDateFilter    *DateFilterValue
-	StopDateFilter     *DateFilterValue
-	DeadlineFilter     *DateFilterValue
-	Limit              *int
+	// Identity.
+	UUID       *string
+	UUIDPrefix *string
+	Title      *string
+
+	// Types restricts the task types (TMTask.type); empty means any.
+	Types  []int
+	Status *int
+	// Closed keeps completed and canceled tasks; it is ignored when Status is set.
+	Closed bool
+	Start  *int
+
+	// Containers and tags. A value takes precedence over its Has counterpart.
+	AreaUUID    *string
+	HasArea     *bool
+	ProjectUUID *string
+	HasProject  *bool
+	HeadingUUID *string
+	HasHeading  *bool
+	TagTitle    *string
+	HasTags     *bool
+
+	// Scopes: both default to excluding.
+	Trash     TrashScope
+	Templates TemplateScope
+
+	// Dates.
+	StartDateFilter *DateFilterValue
+	StopDateFilter  *DateFilterValue
+	DeadlineFilter  *DateFilterValue
+	CreatedAfter    *time.Time
+
+	SearchQuery *string
+
+	// View membership, as the app composes its lists.
+
+	// InToday keeps the tasks the app lists in Today; see inTodaySQL.
+	InToday bool
+	// InUpcoming keeps the tasks the app files under a future day in Upcoming;
+	// see inUpcomingSQL.
+	InUpcoming bool
+	// ContainerNotSomeday drops tasks whose project sits in Someday, which is how
+	// the app hides a shelved project's todos from Anytime.
+	ContainerNotSomeday bool
+	// ContainerOpen drops tasks whose project is completed or canceled: the app
+	// folds them into the project's own Logbook row.
+	ContainerOpen bool
+	// ContainerNotTrashed drops tasks whose project is trashed: the app folds
+	// them into the project's own Trash row.
+	ContainerNotTrashed bool
+
+	Order TaskOrder
+	Limit *int
 }
 
-// wantsTemplates reports whether the query targets repeating templates rather
-// than the default set that excludes them.
-func (f *TaskFilter) wantsTemplates() bool {
-	return f.RepeatingTemplates != nil && *f.RepeatingTemplates
-}
-
-// buildWhere builds the WHERE clause for a task query.
-func (f *TaskFilter) buildWhere() string {
+// buildWhere builds the WHERE clause for a task query. today anchors the
+// relative date filters.
+func (f *TaskFilter) buildWhere(today time.Time) string {
 	var w whereBuilder
 
-	// Recurring templates are excluded by default; a template query inverts the
-	// filter to select only them.
-	if f.wantsTemplates() {
-		w.add("TASK." + filterIsRecurring)
-	} else {
+	switch f.Templates {
+	case TemplatesExcluded:
 		w.add("TASK." + filterIsNotRecurring)
+	case TemplatesOnly:
+		w.add("TASK." + filterIsRecurring)
+	case TemplatesAny:
 	}
 
-	// Trashed filter (default: not trashed)
-	// When viewing trash, only check the task's own trashed flag.
-	// Otherwise, also exclude tasks whose parent project is trashed.
-	if f.Trashed != nil && *f.Trashed {
-		w.add("TASK." + filterIsTrashed)
-	} else {
-		w.add("TASK." + filterIsNotTrashed)
+	switch f.Trash {
+	case TrashExcluded:
 		notTrashed := false
+		w.add("TASK." + filterIsNotTrashed)
 		w.addTruthy("PROJECT.trashed", &notTrashed, 0)
 		w.addTruthy("PROJECT_OF_HEADING.trashed", &notTrashed, 0)
+	case TrashOnly:
+		w.add("TASK." + filterIsTrashed)
+	case TrashAny:
 	}
 
-	// Integer field filters
-	w.addIntEqual("TASK.type", f.TaskType)
-	w.addIntEqual("TASK.status", f.Status)
+	w.addIntIn("TASK.type", f.Types)
+	if f.Status != nil {
+		w.addIntEqual("TASK.status", f.Status)
+	} else if f.Closed {
+		w.add("TASK.status != 0")
+	}
 	w.addIntEqual("TASK.start", f.Start)
 
-	// Identity filters
 	w.addStringEqual("TASK.uuid", f.UUID)
 	if f.UUIDPrefix != nil {
 		w.addLikePrefix("TASK.uuid", *f.UUIDPrefix)
@@ -80,28 +149,31 @@ func (f *TaskFilter) buildWhere() string {
 		w.addLikeContains("TASK.title", *f.Title)
 	}
 
-	// Relation filters
-	w.addFilter("TASK.area", f.AreaUUID, f.HasArea)
-	w.addOrFilter("TASK.project", "PROJECT_OF_HEADING.uuid", f.ProjectUUID, f.HasProject)
+	w.addFilter(sqlAreaUUID, f.AreaUUID, f.HasArea)
+	w.addFilter(sqlProjectUUID, f.ProjectUUID, f.HasProject)
 	w.addFilter("TASK.heading", f.HeadingUUID, f.HasHeading)
-	w.addFilter("TAG.title", f.TagTitle, f.HasTags)
+	w.addTagFilter(taskTagsSQL, f.TagTitle, f.HasTags)
 
-	// Deadline suppressed
-	if f.DeadlineSuppressed != nil {
-		w.addExists("TASK.deadlineSuppressionDate", *f.DeadlineSuppressed)
+	if f.InToday {
+		w.add(inTodaySQL(today))
+	}
+	if f.InUpcoming {
+		w.add(inUpcomingSQL(today))
+	}
+	if f.ContainerNotSomeday {
+		w.add(sqlProjectStart + " != 2")
+	}
+	if f.ContainerOpen {
+		w.add(sqlProjectStatus + " = 0")
+	}
+	if f.ContainerNotTrashed {
+		w.add(sqlProjectTrashed + " = 0")
 	}
 
-	// Date filters. For a template, its next occurrence is its effective start
-	// date, so the start-date filter targets rt1_nextInstanceStartDate.
-	startDateColumn := colStartDate
-	if f.wantsTemplates() {
-		startDateColumn = colNextInstanceStartDate
-	}
-	w.addDateFilter("TASK."+startDateColumn, f.StartDateFilter, true)
-	w.addDateFilter("TASK."+colStopDate, f.StopDateFilter, false)
-	w.addDateFilter("TASK."+colDeadline, f.DeadlineFilter, true)
+	w.addThingsDateFilter("("+sqlStartDate+")", f.StartDateFilter, today)
+	w.addUnixDateFilter("TASK."+colStopDate, f.StopDateFilter, today)
+	w.addThingsDateFilter("TASK."+colDeadline, f.DeadlineFilter, today)
 
-	// Time-based filters
 	if f.CreatedAfter != nil {
 		w.addCreatedAfter("TASK."+colCreationDate, *f.CreatedAfter)
 	}
@@ -112,13 +184,32 @@ func (f *TaskFilter) buildWhere() string {
 	return w.sql()
 }
 
-// buildOrder builds the ORDER BY clause.
+// buildOrder builds the ORDER BY clause. Each order was matched against the
+// order the app itself lists items in.
 func (f *TaskFilter) buildOrder() string {
-	index := f.Index
-	if index == "" {
-		index = IndexDefault
+	const (
+		index    = `TASK."index"`
+		modified = "TASK." + colModificationDate + " DESC"
+	)
+	switch f.Order {
+	case OrderToday:
+		// On equal positions the item that entered Today most recently leads.
+		return "TASK.todayIndex, TASK.todayIndexReferenceDate DESC, " + index
+	case OrderUpcoming:
+		return sqlUpcomingDate + ", TASK.todayIndex, " + index
+	case OrderDeadline:
+		return "TASK." + colDeadline + ", " + index
+	case OrderStopDateDesc:
+		return "TASK." + colStopDate + " DESC, " + index
+	case OrderModifiedDesc:
+		return modified + ", " + index
+	default:
+		// SQLite sorts NULL first, which is where the app lists whatever has no
+		// area, project, or heading. Items sharing a position (new ones all start
+		// at 0) follow most recently modified first.
+		return `AREA."index", COALESCE(PROJECT."index", PROJECT_OF_HEADING."index"), HEADING."index", ` +
+			index + ", " + modified
 	}
-	return fmt.Sprintf("TASK.%q", index)
 }
 
 // AreaFilter captures all parameters for an area query.
@@ -138,7 +229,7 @@ func (f *AreaFilter) buildWhere() string {
 	w.addStringEqual("AREA.title", f.Title)
 	// NULL visible means the user never hid the area, so NULL defaults to 1.
 	w.addTruthy("AREA.visible", f.Visible, 1)
-	w.addFilter("TAG.title", f.TagTitle, f.HasTag)
+	w.addTagFilter(areaTagsSQL, f.TagTitle, f.HasTag)
 
 	return w.sql()
 }
@@ -163,9 +254,7 @@ func (f *TagFilter) buildWhere() string {
 
 // QueryTasks executes a task query and returns matching rows.
 func (d *DB) QueryTasks(ctx context.Context, f *TaskFilter) ([]TaskRow, error) {
-	where := f.buildWhere()
-	order := f.buildOrder()
-	query := buildTasksSQL(where, order, f.Limit, f.wantsTemplates())
+	query := buildTasksSQL(f.buildWhere(d.Now()), f.buildOrder(), f.Limit)
 
 	rows, err := d.ExecuteQuery(ctx, query)
 	if err != nil {
@@ -187,10 +276,7 @@ func (d *DB) QueryTasks(ctx context.Context, f *TaskFilter) ([]TaskRow, error) {
 
 // CountTasks returns the count of tasks matching the filter.
 func (d *DB) CountTasks(ctx context.Context, f *TaskFilter) (int, error) {
-	where := f.buildWhere()
-	order := f.buildOrder()
-	taskSQL := buildTasksSQL(where, order, nil, f.wantsTemplates())
-	countSQL := buildCountSQL(taskSQL)
+	countSQL := buildCountSQL(buildTasksSQL(f.buildWhere(d.Now()), f.buildOrder(), nil))
 
 	var count int
 	if err := d.ExecuteQueryRow(ctx, countSQL).Scan(&count); err != nil {

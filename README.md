@@ -8,11 +8,11 @@ Reads come straight from the Things SQLite database through typed query builders
 
 ## Highlights
 
-- **Complete read API** - typed, chainable query builders for todos, projects, headings, areas, and tags, plus composed `Today` and `Upcoming` views (`Upcoming` includes repeating tasks at their next occurrence, which the raw database does not materialize)
+- **Complete read API** - typed, chainable query builders for todos, projects, headings, areas, and tags, plus the eight sidebar views (`Inbox`, `Today`, `Upcoming`, `Anytime`, `Someday`, `Logbook`, `Deadlines`, `Trash`), each returning what the app lists there, in the app's order
 - **Type-safe writes** - create, update, and batch operations built as fluent URL-scheme builders with automatic auth-token management
 - **Verified writes in the CLI** - every action resolves its target in the database, executes the URL scheme, then polls the database to confirm the write actually landed
 - **Built for automation** - one global flag surface (`--json` / `--yaml` / `--text`), list output wrapped in a `{items, total, page, pages}` envelope so truncation is never silent, exit codes `0`/`1`/`2`, and every printed 8-char UUID usable as a query
-- **App-shaped commands** - the CLI mirrors the Things sidebar (`today`, `inbox`, `upcoming`, ...) and its verbs (`schedule`, `move`, `edit`), so knowing the app is knowing the tool
+- **App-faithful views** - the CLI mirrors the Things sidebar (`today`, `inbox`, `upcoming`, ...) and its verbs (`schedule`, `move`, `edit`), and every view was verified item for item against the app, so what a list shows is what the app shows
 
 > **Requirements**: macOS with Things 3 installed. CGO enabled when building from source (`github.com/mattn/go-sqlite3`). Write commands need Things running; reads only need the database file.
 
@@ -33,14 +33,14 @@ The whole surface, straight from `things3 -h`:
 
 ```text
 Views:
-  anytime     List Anytime todos grouped by project or area
-  deadlines   List todos with deadlines, soonest first
+  anytime     List available todos grouped by project or area
+  deadlines   List open items with deadlines, soonest first
   inbox       List todos in the Inbox
-  logbook     List completed and canceled todos, most recent first
-  someday     List Someday todos with no scheduled date
-  today       List today's todos, including This Evening
+  logbook     List completed and canceled items, most recent first
+  someday     List Someday todos and projects
+  today       List the Today list, This Evening last
   trash       List trashed todos and projects
-  upcoming    List scheduled todos grouped by date
+  upcoming    List scheduled items, repeating series, and deadlines by date
 
 Collections:
   areas       List all areas
@@ -57,7 +57,7 @@ Actions:
   done        Complete a todo or project
   edit        Edit a todo or project's attributes
   move        Move a todo or project to a project or area (the app's Move)
-  open        Reveal an item or built-in list in Things.app
+  open        Reveal an item, built-in list, or search in Things.app
   schedule    Schedule a todo or project (the app's When)
 
 Flags:
@@ -79,12 +79,12 @@ The format switches (`--text` / `--json` / `--yaml`) are mutually exclusive, tex
 ### Read examples
 
 ```bash
-things3 today                        # Today view, This Evening sectioned
-things3 upcoming                     # scheduled todos grouped by date, repeating tasks included
+things3 today                        # the Today list, projects included, This Evening sectioned
+things3 upcoming                     # by date: scheduled items, repeating series, deadlines
 things3 logbook --days 7 -n 5        # five most recent completions this week
 things3 anytime --tag work --sort title
 things3 search meeting --page 2      # paginated full-text search
-things3 show Stzhb3Sc                # any printed 8-char UUID is a valid query
+things3 show Stzhb3Sc                # any printed 8-char UUID is a valid query, trashed items included
 ```
 
 Text lists print rows like
@@ -92,10 +92,11 @@ Text lists print rows like
 ```
 STATUS   UUID      TITLE
 [ ]      52vEKPy3  Buy concert tickets | 2026-07-03 | @Personal | #errand
+( )      8QdfrtG2  Plan the tour | 2026-07-03 | @Personal
 -- 1-10 of 44 (page 1/5) | next: --page 2 | all: --all
 ```
 
-and machine formats wrap every list in a self-describing envelope:
+where a square mark is a todo and a round one a project, as in the app. Every view lists exactly what the app lists there, in the app's order: `anytime` leaves out the todos of a Someday project, `logbook` folds a closed project's todos into the project's row, and so on. Machine formats wrap every list in a self-describing envelope:
 
 ```bash
 $ things3 upcoming --json --page 2 | jq '{total, page, pages, first: .items[0].title}'
@@ -112,11 +113,12 @@ things3 done "Buy milk"              # resolve -> execute -> verify against the 
 things3 schedule "Ship v1" 2026-07-10
 things3 move "Ship v1" --to Launch
 things3 edit "Ship v1" --title "Ship v1.0" --clear-deadline
+things3 edit "Pack" --append-checklist Passport --reminder 08:00
 ```
 
-Targets resolve by exact UUID, UUID prefix (4+ chars), exact title, then title substring. An ambiguous target prints a candidate table with a UUID hint, executes nothing, and exits `2`; success (including a sent-but-unconfirmed write) exits `0`; every other error exits `1`. Under `--json`, errors arrive on stderr as `{"error", "candidates"}`.
+Targets resolve by exact UUID, UUID prefix (4+ chars), exact title, then title substring. When a title names several items, the single open one wins, so `done "Water plants"` reaches today's todo however many completed copies the Logbook holds. A target that is still ambiguous prints a candidate table with a UUID hint, executes nothing, and exits `2`; success (including a sent-but-unconfirmed write) exits `0`; every other error exits `1`. Trashed items and repeating series resolve by UUID and can be shown, but a write to one is refused with an explanation. Under `--json`, errors arrive on stderr as `{"error", "candidates"}`.
 
-Inherited URL-scheme limits (not worked around): no delete or trash, no move to Inbox, checklist is replace-only, repeating rules are read-only, and unknown tags are silently ignored by Things.
+Inherited URL-scheme limits (not worked around): no delete or trash, no move to Inbox, checklist items can be replaced or added but not checked off or changed one by one, a repeating series is read-only, and unknown tags are silently ignored by Things.
 
 ### MCP server
 
@@ -165,9 +167,9 @@ func main() {
 
     ctx := context.Background()
 
-    // Composed views
-    today, _ := client.Today(ctx)
-    upcoming, _ := client.Upcoming(ctx) // includes repeating tasks' next occurrences
+    // Sidebar views: what the app lists, in the app's order
+    today, _ := client.Today(ctx)       // []things3.Item: todos and projects
+    upcoming, _ := client.Upcoming(ctx) // includes repeating series and deadlines
     fmt.Println(len(today), len(upcoming))
 
     // Typed query builders
@@ -187,6 +189,23 @@ func main() {
 }
 ```
 
+### Views
+
+A view returns `[]things3.Item`, where an item is a todo or a project (`item.Todo` or `item.Project`, with accessors such as `UUID()`, `Title()`, and `UpcomingDate()` for what the two share), because that is what the app's lists hold:
+
+```go
+client.Inbox(ctx)
+client.Today(ctx)                       // This Evening last
+client.Upcoming(ctx)                    // by date; series with no next occurrence trail
+client.Anytime(ctx)                     // without the todos of Someday projects
+client.Someday(ctx)                     // Someday projects and standalone Someday todos
+client.Logbook(ctx, time.Time{})        // or pass a day to keep what was closed after it
+client.Deadlines(ctx)
+client.Trash(ctx)
+```
+
+An `Item` marshals to JSON as the todo or project with a leading `"type"` field.
+
 ### Query builders
 
 One builder per domain type; filters chain and copy-on-write, terminals execute:
@@ -196,13 +215,19 @@ client.Todos().Status().Incomplete().All(ctx)          // []Todo
 client.Todos().InProject(uuid).Count(ctx)              // int
 client.Todos().WithUUID(uuid).First(ctx)               // *Todo, checklist loaded
 client.Todos().Deadline().Before(t).All(ctx)           // date filters: Exists, Future, Past, On, Before, After, ...
+client.Todos().InArea(uuid).All(ctx)                   // loose todos and todos in the area's projects
+client.Todos().WithUUID(uuid).IncludeTrashed().IncludeTemplates().First(ctx) // any todo that exists
 client.Projects().InArea(uuid).All(ctx)
 client.Headings().InProject(uuid).All(ctx)
 client.Areas().All(ctx)
 client.Tags().All(ctx)
 ```
 
-Relationships are flat: parent references come inline for free (`todo.ProjectTitle`, `todo.AreaTitle` from SQL JOINs); children are separate queries (`Todos().InProject(uuid)`).
+Relationships are flat: parent references come inline for free (`todo.ProjectTitle`, `todo.AreaTitle` from SQL JOINs); children are separate queries (`Todos().InProject(uuid)`). A todo reports its effective containers: under a heading it carries the heading's project, and inside a project it carries that project's area, although the database stores neither on the todo itself.
+
+Queries return live items by default. `IncludeTrashed()` adds the Trash, and `IncludeTemplates()` adds repeating templates: the hidden items that schedule a repeating series, flagged `Template` and carrying their next occurrence as `StartDate`.
+
+A repeating item carries its rule as `Repeat`, both the series and the copies Things creates from it: the interval, whether it counts from completion, an end date, whether the series is paused or has ended, and a `Summary` in words ("every 2 weeks on Mon, Fri").
 
 ### Writes
 
@@ -221,10 +246,14 @@ client.AddProject().Title("New Project").Tags("work").Execute(ctx)
 client.UpdateTodo(uuid).Completed(true).Execute(ctx)   // auth token managed automatically
 client.UpdateProject(uuid).Notes("Updated").Execute(ctx)
 
+client.UpdateTodo(uuid).AppendChecklistItems("One more").Execute(ctx)
+
 client.Show(ctx, uuid)                                 // navigate the app
-client.Batch().AddTodo(func(t things3.BatchTodoConfigurator) {
-    t.Title("Task 1")
-}).Execute(ctx)                                        // multiple items in one URL
+client.Batch().AddProject(func(p things3.BatchProjectConfigurator) {
+    p.Title("Trip").
+        Heading("Before", func(t things3.BatchTodoConfigurator) { t.Title("Book flights").Reminder(9, 0) }).
+        Heading("After")
+}).Execute(ctx)                                        // several items in one URL; the only way to create headings
 ```
 
 ### Configuration
@@ -236,6 +265,7 @@ client, _ := things3.NewClient(
     things3.WithForegroundExecution(),                // writes bring Things to the foreground
     things3.WithBackgroundNavigation(),               // show/navigation without stealing focus
     things3.WithPreloadToken(),                       // read the auth token at construction
+    things3.WithClock(clock),                         // pin "today" for reproducible reports and tests
 )
 ```
 

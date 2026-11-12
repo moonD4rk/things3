@@ -26,12 +26,20 @@ const (
 	KindHeading Kind = "heading"
 )
 
+// uuidPrefixMinLen guards prefix matching so short words do not collide with the
+// head of a random UUID.
+const uuidPrefixMinLen = 4
+
+// Preference steers which match wins when a query names several items.
+type Preference int
+
 const (
-	// uuidPrefixMinLen guards prefix matching so short words do not collide
-	// with the head of a random UUID.
-	uuidPrefixMinLen = 4
-	// titleQueryLimit caps title scans; resolution is interactive, not a report.
-	titleQueryLimit = 200
+	// PreferOpen picks the single open item among the matches. It is the right
+	// reading of every lookup and write except reopening: "done Buy milk" means
+	// the open "Buy milk", however many completed ones the Logbook holds.
+	PreferOpen Preference = iota
+	// PreferClosed picks the single closed item; it is the reading of "reopen".
+	PreferClosed
 )
 
 // Match is a single resolved item. Exactly one pointer is set, per Kind.
@@ -84,6 +92,37 @@ func (m Match) Open() bool {
 	}
 }
 
+// Trashed reports whether the matched item is in the Trash.
+func (m Match) Trashed() bool {
+	switch m.Kind {
+	case KindProject:
+		return m.Project.Trashed
+	case KindTodo:
+		return m.Todo.Trashed
+	default:
+		return false
+	}
+}
+
+// Template reports whether the matched item is a repeating template rather than
+// an actionable item.
+func (m Match) Template() bool {
+	switch m.Kind {
+	case KindProject:
+		return m.Project.Template
+	case KindTodo:
+		return m.Todo.Template
+	default:
+		return false
+	}
+}
+
+// Live reports whether the matched item shows up in the app's working lists:
+// neither trashed nor a repeating template.
+func (m Match) Live() bool {
+	return !m.Trashed() && !m.Template()
+}
+
 // NotFoundError reports that a query matched no items.
 type NotFoundError struct{ Query string }
 
@@ -99,13 +138,24 @@ func (e *AmbiguousError) Error() string {
 	return fmt.Sprintf("query %q matches %d items", e.Query, len(e.Matches))
 }
 
+// ReadOnlyError reports that a query resolved to an item the URL scheme cannot
+// modify. The item exists and can still be shown.
+type ReadOnlyError struct {
+	Match  Match
+	Reason string
+}
+
+func (e *ReadOnlyError) Error() string {
+	return fmt.Sprintf("%q %s", e.Match.Title(), e.Reason)
+}
+
 // Resolve finds todos and projects matching query via tiered matching: exact
 // UUID, then UUID prefix (>= 4 chars), then exact title (case-insensitive),
 // then title substring. The first tier with any hit wins; later tiers are not
-// consulted. Trashed items never match (library queries exclude them).
+// consulted. The UUID tiers also reach trashed items and repeating templates,
+// so every UUID a view prints resolves; the title tiers match live items only.
 func Resolve(ctx context.Context, c *things3.Client, query string) ([]Match, error) {
-	// Tier 1: exact UUID.
-	matches, err := queryByUUID(ctx, c, query)
+	matches, err := lookup(ctx, identityTodos(c).WithUUID(query), identityProjects(c).WithUUID(query))
 	if err != nil {
 		return nil, err
 	}
@@ -113,9 +163,8 @@ func Resolve(ctx context.Context, c *things3.Client, query string) ([]Match, err
 		return rank(matches), nil
 	}
 
-	// Tier 2: UUID prefix.
 	if len(query) >= uuidPrefixMinLen {
-		matches, err = queryByUUIDPrefix(ctx, c, query)
+		matches, err = lookup(ctx, identityTodos(c).WithUUIDPrefix(query), identityProjects(c).WithUUIDPrefix(query))
 		if err != nil {
 			return nil, err
 		}
@@ -124,60 +173,68 @@ func Resolve(ctx context.Context, c *things3.Client, query string) ([]Match, err
 		}
 	}
 
-	// Tiers 3 and 4: one title query per type (WithTitle is escaped substring
-	// LIKE, a superset of exact-title). Exact-title matches, if any, win.
-	todos, err := c.Todos().WithTitle(query).Status().Any().Limit(titleQueryLimit).All(ctx)
+	// WithTitle is an escaped substring match, a superset of exact-title.
+	all, err := lookup(ctx, c.Todos().WithTitle(query).Status().Any(), c.Projects().WithTitle(query).Status().Any())
 	if err != nil {
 		return nil, err
 	}
-	projects, err := c.Projects().WithTitle(query).Status().Any().Limit(titleQueryLimit).All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	all := toMatches(todos, projects)
-	exact := make([]Match, 0, len(all))
-	for _, m := range all {
-		if strings.EqualFold(m.Title(), query) {
-			exact = append(exact, m)
-		}
-	}
-	if len(exact) > 0 {
+	if exact := exactTitle(all, query); len(exact) > 0 {
 		return rank(exact), nil
 	}
 	return rank(all), nil
 }
 
-// ResolveOne resolves a write target: exactly one match or a typed error.
-func ResolveOne(ctx context.Context, c *things3.Client, query string) (Match, error) {
+// ResolveOne resolves a lookup to exactly one item or a typed error.
+func ResolveOne(ctx context.Context, c *things3.Client, query string, prefer Preference) (Match, error) {
 	matches, err := Resolve(ctx, c, query)
 	if err != nil {
 		return Match{}, err
 	}
-	return one(query, matches)
+	return pick(query, matches, prefer)
 }
 
-// Project resolves a query to exactly one project (UUID, prefix, then title).
+// ResolveTarget resolves the target of a write: exactly one item, and one the
+// URL scheme is able to modify.
+func ResolveTarget(ctx context.Context, c *things3.Client, query string, prefer Preference) (Match, error) {
+	m, err := ResolveOne(ctx, c, query, prefer)
+	if err != nil {
+		return Match{}, err
+	}
+	switch {
+	case m.Trashed():
+		return Match{}, &ReadOnlyError{Match: m, Reason: "is in the Trash; restore it in Things before changing it"}
+	case m.Template():
+		return Match{}, &ReadOnlyError{Match: m, Reason: "is a repeating series, which only the Things app itself can change"}
+	default:
+		return m, nil
+	}
+}
+
+// Project resolves a destination query to exactly one live project (UUID,
+// prefix, exact title, then title substring), preferring an open one.
 func Project(ctx context.Context, c *things3.Client, q string) (*things3.Project, error) {
-	projects, err := c.Projects().WithUUID(q).Status().Any().All(ctx)
+	live := c.Projects().Status().Any()
+	projects, err := live.WithUUID(q).All(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if len(projects) == 0 && len(q) >= uuidPrefixMinLen {
-		if projects, err = c.Projects().WithUUIDPrefix(q).Status().Any().All(ctx); err != nil {
+		if projects, err = live.WithUUIDPrefix(q).All(ctx); err != nil {
 			return nil, err
 		}
 	}
-	if len(projects) == 0 {
-		titled, terr := c.Projects().WithTitle(q).Status().Any().Limit(titleQueryLimit).All(ctx)
+	matches := toMatches(nil, projects)
+	if len(matches) == 0 {
+		titled, terr := live.WithTitle(q).All(ctx)
 		if terr != nil {
 			return nil, terr
 		}
-		projects = filterExactTitleProjects(titled, q)
-		if len(projects) == 0 {
-			projects = titled
+		matches = toMatches(nil, titled)
+		if exact := exactTitle(matches, q); len(exact) > 0 {
+			matches = exact
 		}
 	}
-	m, err := one(q, rank(toMatches(nil, projects)))
+	m, err := pick(q, rank(matches), PreferOpen)
 	if err != nil {
 		return nil, err
 	}
@@ -191,12 +248,14 @@ func Area(ctx context.Context, c *things3.Client, q string) (*things3.Area, erro
 	if err != nil {
 		return nil, err
 	}
-	hits := filterAreas(areas, q)
+	hits := tieredFilter(areas, q,
+		func(a things3.Area) string { return a.UUID },
+		func(a things3.Area) string { return a.Title })
 	matches := make([]Match, len(hits))
 	for i := range hits {
 		matches[i] = Match{Kind: KindArea, Area: &hits[i]}
 	}
-	m, err := one(q, matches)
+	m, err := pick(q, matches, PreferOpen)
 	if err != nil {
 		return nil, err
 	}
@@ -209,36 +268,37 @@ func Heading(ctx context.Context, c *things3.Client, projectUUID, q string) (*th
 	if err != nil {
 		return nil, err
 	}
-	hits := filterHeadings(headings, q)
+	hits := tieredFilter(headings, q,
+		func(h things3.Heading) string { return h.UUID },
+		func(h things3.Heading) string { return h.Title })
 	matches := make([]Match, len(hits))
 	for i := range hits {
 		matches[i] = Match{Kind: KindHeading, Heading: &hits[i]}
 	}
-	m, err := one(q, matches)
+	m, err := pick(q, matches, PreferOpen)
 	if err != nil {
 		return nil, err
 	}
 	return m.Heading, nil
 }
 
-func queryByUUID(ctx context.Context, c *things3.Client, q string) ([]Match, error) {
-	todos, err := c.Todos().WithUUID(q).Status().Any().All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	projects, err := c.Projects().WithUUID(q).Status().Any().All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return toMatches(todos, projects), nil
+// identityTodos is the scope of a lookup by UUID: every todo that exists,
+// including the trashed ones and repeating templates the views print.
+func identityTodos(c *things3.Client) things3.TodoQueryBuilder {
+	return c.Todos().Status().Any().IncludeTrashed().IncludeTemplates()
 }
 
-func queryByUUIDPrefix(ctx context.Context, c *things3.Client, q string) ([]Match, error) {
-	todos, err := c.Todos().WithUUIDPrefix(q).Status().Any().All(ctx)
+// identityProjects mirrors identityTodos for projects.
+func identityProjects(c *things3.Client) things3.ProjectQueryBuilder {
+	return c.Projects().Status().Any().IncludeTrashed().IncludeTemplates()
+}
+
+func lookup(ctx context.Context, todoQuery things3.TodoQueryBuilder, projectQuery things3.ProjectQueryBuilder) ([]Match, error) {
+	todos, err := todoQuery.All(ctx)
 	if err != nil {
 		return nil, err
 	}
-	projects, err := c.Projects().WithUUIDPrefix(q).Status().Any().All(ctx)
+	projects, err := projectQuery.All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -256,46 +316,65 @@ func toMatches(todos []things3.Todo, projects []things3.Project) []Match {
 	return matches
 }
 
-// rank stably orders matches: open before closed, then todos before projects,
-// preserving the original query order for otherwise-equal items.
+func exactTitle(matches []Match, title string) []Match {
+	return keep(matches, func(m Match) bool { return strings.EqualFold(m.Title(), title) })
+}
+
+func keep(matches []Match, want func(Match) bool) []Match {
+	kept := make([]Match, 0, len(matches))
+	for _, m := range matches {
+		if want(m) {
+			kept = append(kept, m)
+		}
+	}
+	return kept
+}
+
+// rank stably orders matches: live before trashed or template, open before
+// closed, then todos before projects, preserving the original query order for
+// otherwise-equal items.
 func rank(matches []Match) []Match {
 	slices.SortStableFunc(matches, func(a, b Match) int {
-		if a.Open() != b.Open() {
-			if a.Open() {
-				return -1
-			}
-			return 1
+		if c := boolFirst(a.Live(), b.Live()); c != 0 {
+			return c
 		}
-		if a.Kind != b.Kind {
-			if a.Kind == KindTodo {
-				return -1
-			}
-			return 1
+		if c := boolFirst(a.Open(), b.Open()); c != 0 {
+			return c
 		}
-		return 0
+		return boolFirst(a.Kind == KindTodo, b.Kind == KindTodo)
 	})
 	return matches
 }
 
-func one(query string, matches []Match) (Match, error) {
-	switch len(matches) {
-	case 0:
-		return Match{}, &NotFoundError{Query: query}
-	case 1:
-		return matches[0], nil
+// boolFirst orders true before false.
+func boolFirst(a, b bool) int {
+	switch {
+	case a == b:
+		return 0
+	case a:
+		return -1
 	default:
-		return Match{}, &AmbiguousError{Query: query, Matches: matches}
+		return 1
 	}
 }
 
-func filterExactTitleProjects(projects []things3.Project, q string) []things3.Project {
-	exact := make([]things3.Project, 0, len(projects))
-	for i := range projects {
-		if strings.EqualFold(projects[i].Title, q) {
-			exact = append(exact, projects[i])
+// pick reduces matches to exactly one. Several matches narrow first to the live
+// ones, then to the preferred status; a narrowing that would leave nothing is
+// skipped, so a lone trashed or closed match is still returned.
+func pick(query string, matches []Match, prefer Preference) (Match, error) {
+	if len(matches) == 0 {
+		return Match{}, &NotFoundError{Query: query}
+	}
+	preferred := func(m Match) bool { return m.Open() == (prefer == PreferOpen) }
+	for _, want := range []func(Match) bool{Match.Live, preferred} {
+		if kept := keep(matches, want); len(kept) > 0 {
+			matches = kept
 		}
 	}
-	return exact
+	if len(matches) > 1 {
+		return Match{}, &AmbiguousError{Query: query, Matches: matches}
+	}
+	return matches[0], nil
 }
 
 // tieredFilter applies the client-side tiers exact UUID, then title EqualFold,
@@ -321,16 +400,4 @@ func tieredFilter[T any](items []T, q string, uuidOf, titleOf func(T) string) []
 	default:
 		return bySubstr
 	}
-}
-
-func filterAreas(areas []things3.Area, q string) []things3.Area {
-	return tieredFilter(areas, q,
-		func(a things3.Area) string { return a.UUID },
-		func(a things3.Area) string { return a.Title })
-}
-
-func filterHeadings(headings []things3.Heading, q string) []things3.Heading {
-	return tieredFilter(headings, q,
-		func(h things3.Heading) string { return h.UUID },
-		func(h things3.Heading) string { return h.Title })
 }

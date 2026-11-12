@@ -15,7 +15,7 @@ var pastT0 = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 
 func newClient(t *testing.T, dbPath string) *things3.Client {
 	t.Helper()
-	client, err := things3.NewClient(things3.WithDatabasePath(dbPath))
+	client, err := things3.NewClient(things3.WithDatabasePath(dbPath), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}

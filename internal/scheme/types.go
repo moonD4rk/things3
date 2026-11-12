@@ -80,6 +80,13 @@ const (
 	JSONItemTypeProject JSONItemType = "project"
 )
 
+// ChecklistEntry is a checklist item with its state, for a batch todo.
+type ChecklistEntry struct {
+	Title     string
+	Completed bool
+	Canceled  bool
+}
+
 // JSONItem represents a single item in a JSON batch operation.
 type JSONItem struct {
 	Type       JSONItemType   `json:"type"`

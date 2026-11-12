@@ -31,29 +31,36 @@ func runShow(cmd *cobra.Command, args []string, client *things3.Client) error {
 	case 1:
 		return showOne(cmd, client, matches[0])
 	default:
-		items := make([]mixedItem, len(matches))
+		items := make([]things3.Item, len(matches))
 		for i, m := range matches {
-			if m.Kind == resolve.KindProject {
-				items[i] = projectMixed(m.Project)
-			} else {
-				items[i] = todoMixed(m.Todo)
-			}
+			items[i] = things3.Item{Todo: m.Todo, Project: m.Project}
 		}
-		return outputMixed(cmd, items)
+		return outputItems(cmd, items, nil, defaultRow)
 	}
+}
+
+// projectTodos selects a project's incomplete todos. The todos of a trashed
+// project are hidden from every live query, so showing that project asks for
+// them explicitly.
+func projectTodos(client *things3.Client, project *things3.Project) things3.TodoQueryBuilder {
+	q := client.Todos().InProject(project.UUID).Status().Incomplete()
+	if project.Trashed {
+		q = q.IncludeTrashed()
+	}
+	return q
 }
 
 func showOne(cmd *cobra.Command, client *things3.Client, m resolve.Match) error {
 	ctx := cmd.Context()
 	if m.Kind == resolve.KindProject {
-		todos, err := client.Todos().InProject(m.UUID()).Status().Incomplete().All(ctx)
+		todos, err := projectTodos(client, m.Project).All(ctx)
 		if err != nil {
 			return err
 		}
 		return outputProjectDetail(cmd, m.Project, todos)
 	}
 	// Re-fetch to load the checklist, which Resolve does not populate.
-	todo, err := client.Todos().WithUUID(m.UUID()).Status().Any().IncludeChecklist().First(ctx)
+	todo, err := client.Todos().WithUUID(m.UUID()).Status().Any().IncludeTrashed().IncludeTemplates().First(ctx)
 	if err != nil {
 		return err
 	}

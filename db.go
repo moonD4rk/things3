@@ -2,6 +2,7 @@ package things3
 
 import (
 	"context"
+	"time"
 
 	"github.com/moond4rk/things3/internal/database"
 )
@@ -30,9 +31,55 @@ func (d *db) Filepath() string {
 	return d.inner.Filepath()
 }
 
+// Now returns the current time on the database clock.
+func (d *db) Now() time.Time {
+	return d.inner.Now()
+}
+
 // Token returns the Things URL scheme authentication token.
 func (d *db) Token(ctx context.Context) (string, error) {
 	return d.inner.AuthToken(ctx)
+}
+
+// items runs one mixed query and converts its rows, in query order, to Items.
+func (d *db) items(ctx context.Context, f *database.TaskFilter) ([]Item, error) {
+	return d.itemsOf(ctx, f)
+}
+
+// itemsOf concatenates the results of several mixed queries, in argument order.
+// The result is never nil.
+func (d *db) itemsOf(ctx context.Context, filters ...*database.TaskFilter) ([]Item, error) {
+	items := []Item{}
+	for _, f := range filters {
+		rows, err := d.inner.QueryTasks(ctx, f)
+		if err != nil {
+			return nil, err
+		}
+		for i := range rows {
+			tags, err := d.tagsOf(ctx, &rows[i])
+			if err != nil {
+				return nil, err
+			}
+			if rows[i].Type == int(taskTypeProject) {
+				project := convertTaskRowToProject(&rows[i])
+				project.Tags = tags
+				items = append(items, Item{Project: &project})
+				continue
+			}
+			todo := convertTaskRowToTodo(&rows[i])
+			todo.Tags = tags
+			items = append(items, Item{Todo: &todo})
+		}
+	}
+	return items, nil
+}
+
+// tagsOf loads a row's tag titles; a row without tags costs no query.
+func (d *db) tagsOf(ctx context.Context, r *database.TaskRow) ([]string, error) {
+	if !r.HasTags {
+		return nil, nil
+	}
+	return d.inner.TagsOfTask(ctx, r.UUID)
 }
 
 // =============================================================================
@@ -42,48 +89,29 @@ func (d *db) Token(ctx context.Context) (string, error) {
 // convertTaskRowToTodo converts an internal TaskRow to a public Todo.
 func convertTaskRowToTodo(r *database.TaskRow) Todo {
 	todo := Todo{
-		UUID:       r.UUID,
-		Title:      r.Title,
-		Notes:      r.Notes,
-		StartDate:  r.StartDate,
-		Deadline:   r.Deadline,
-		Reminder:   r.ReminderTime,
-		CreatedAt:  r.Created,
-		ModifiedAt: r.Modified,
-		Trashed:    r.Trashed,
-		Evening:    r.Evening,
-		Repeating:  r.Repeating,
+		UUID:         r.UUID,
+		Title:        r.Title,
+		Status:       Status(r.Status),
+		Notes:        r.Notes,
+		Start:        StartBucket(r.Start),
+		AreaUUID:     r.AreaUUID,
+		AreaTitle:    r.AreaTitle,
+		ProjectUUID:  r.ProjectUUID,
+		ProjectTitle: r.ProjectTitle,
+		HeadingUUID:  r.HeadingUUID,
+		HeadingTitle: r.HeadingTitle,
+		StartDate:    r.StartDate,
+		Deadline:     r.Deadline,
+		Reminder:     r.ReminderTime,
+		CreatedAt:    r.Created,
+		ModifiedAt:   r.Modified,
+		Trashed:      r.Trashed,
+		Evening:      r.Evening,
+		Repeating:    r.Repeating,
+		Template:     r.Template,
+		Repeat:       convertRepeat(r),
 	}
-
-	// Convert status string to Status enum
-	todo.Status = parseStatusFromString(r.Status)
-
-	// Convert start string to StartBucket enum
-	todo.Start = parseStartBucketFromString(r.Start)
-
-	// Convert nullable relationship fields
-	todo.AreaUUID = ptrToString(r.AreaUUID)
-	todo.AreaTitle = ptrToString(r.AreaTitle)
-	todo.ProjectUUID = ptrToString(r.ProjectUUID)
-	todo.ProjectTitle = ptrToString(r.ProjectTitle)
-	todo.HeadingUUID = ptrToString(r.HeadingUUID)
-	todo.HeadingTitle = ptrToString(r.HeadingTitle)
-
-	// Split stopDate into CompletedAt or CanceledAt based on Status
-	if r.StopDate != nil {
-		switch todo.Status {
-		case StatusCompleted:
-			todo.CompletedAt = r.StopDate
-		case StatusCanceled:
-			todo.CanceledAt = r.StopDate
-		}
-	}
-
-	// Mark if task has tags (actual tag names loaded separately)
-	if r.HasTags {
-		todo.Tags = []string{}
-	}
-
+	todo.CompletedAt, todo.CanceledAt = splitStopDate(todo.Status, r.StopDate)
 	return todo
 }
 
@@ -92,7 +120,11 @@ func convertTaskRowToProject(r *database.TaskRow) Project {
 	project := Project{
 		UUID:       r.UUID,
 		Title:      r.Title,
+		Status:     Status(r.Status),
 		Notes:      r.Notes,
+		Start:      StartBucket(r.Start),
+		AreaUUID:   r.AreaUUID,
+		AreaTitle:  r.AreaTitle,
 		StartDate:  r.StartDate,
 		Deadline:   r.Deadline,
 		Reminder:   r.ReminderTime,
@@ -100,27 +132,10 @@ func convertTaskRowToProject(r *database.TaskRow) Project {
 		ModifiedAt: r.Modified,
 		Trashed:    r.Trashed,
 		Repeating:  r.Repeating,
+		Template:   r.Template,
+		Repeat:     convertRepeat(r),
 	}
-
-	project.Status = parseStatusFromString(r.Status)
-	project.Start = parseStartBucketFromString(r.Start)
-
-	project.AreaUUID = ptrToString(r.AreaUUID)
-	project.AreaTitle = ptrToString(r.AreaTitle)
-
-	if r.StopDate != nil {
-		switch project.Status {
-		case StatusCompleted:
-			project.CompletedAt = r.StopDate
-		case StatusCanceled:
-			project.CanceledAt = r.StopDate
-		}
-	}
-
-	if r.HasTags {
-		project.Tags = []string{}
-	}
-
+	project.CompletedAt, project.CanceledAt = splitStopDate(project.Status, r.StopDate)
 	return project
 }
 
@@ -129,8 +144,8 @@ func convertTaskRowToHeading(r *database.TaskRow) Heading {
 	return Heading{
 		UUID:         r.UUID,
 		Title:        r.Title,
-		ProjectUUID:  ptrToString(r.ProjectUUID),
-		ProjectTitle: ptrToString(r.ProjectTitle),
+		ProjectUUID:  r.ProjectUUID,
+		ProjectTitle: r.ProjectTitle,
 	}
 }
 
@@ -162,58 +177,24 @@ func convertChecklistItemRows(rows []database.ChecklistItemRow) []ChecklistItem 
 		item := ChecklistItem{
 			UUID:       r.UUID,
 			Title:      r.Title,
-			Status:     parseStatusFromString(r.Status),
+			Status:     Status(r.Status),
 			CreatedAt:  r.Created,
 			ModifiedAt: r.Modified,
 		}
-
-		if r.StopDate != nil {
-			switch item.Status {
-			case StatusCompleted:
-				item.CompletedAt = r.StopDate
-			case StatusCanceled:
-				item.CanceledAt = r.StopDate
-			}
-		}
-
+		item.CompletedAt, item.CanceledAt = splitStopDate(item.Status, r.StopDate)
 		items[i] = item
 	}
 	return items
 }
 
-// =============================================================================
-// Conversion Helpers
-// =============================================================================
-
-// ptrToString converts a nullable string pointer to a string value.
-// Returns empty string if the pointer is nil.
-func ptrToString(p *string) string {
-	if p == nil {
-		return ""
-	}
-	return *p
-}
-
-// parseStatusFromString converts a database status string to a Status enum.
-func parseStatusFromString(s string) Status {
-	switch s {
-	case statusStringCompleted:
-		return StatusCompleted
-	case statusStringCanceled:
-		return StatusCanceled
+// splitStopDate assigns a stop date to the field matching the closed status.
+func splitStopDate(status Status, stop *time.Time) (completedAt, canceledAt *time.Time) {
+	switch status {
+	case StatusCompleted:
+		return stop, nil
+	case StatusCanceled:
+		return nil, stop
 	default:
-		return StatusIncomplete
-	}
-}
-
-// parseStartBucketFromString converts a database start string to a StartBucket enum.
-func parseStartBucketFromString(s string) StartBucket {
-	switch s {
-	case "Anytime":
-		return StartAnytime
-	case "Someday":
-		return StartSomeday
-	default:
-		return StartInbox
+		return nil, nil
 	}
 }

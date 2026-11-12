@@ -169,10 +169,15 @@ type BatchTodoConfigurator interface {
 	Deadline(t time.Time) BatchTodoConfigurator
 	Tags(tags ...string) BatchTodoConfigurator
 	AddTags(tags ...string) BatchTodoConfigurator
+	Reminder(hour, minute int) BatchTodoConfigurator
 	ChecklistItems(items ...string) BatchTodoConfigurator
+	Checklist(items ...ChecklistEntry) BatchTodoConfigurator
+	PrependChecklistItems(items ...string) BatchTodoConfigurator
+	AppendChecklistItems(items ...string) BatchTodoConfigurator
 	List(name string) BatchTodoConfigurator
 	ListID(id string) BatchTodoConfigurator
 	Heading(name string) BatchTodoConfigurator
+	HeadingID(id string) BatchTodoConfigurator
 	Completed(completed bool) BatchTodoConfigurator
 	Canceled(canceled bool) BatchTodoConfigurator
 	CreationDate(date time.Time) BatchTodoConfigurator
@@ -190,11 +195,13 @@ type BatchProjectConfigurator interface {
 	WhenAnytime() BatchProjectConfigurator
 	WhenSomeday() BatchProjectConfigurator
 	Deadline(t time.Time) BatchProjectConfigurator
+	Reminder(hour, minute int) BatchProjectConfigurator
 	Tags(tags ...string) BatchProjectConfigurator
 	AddTags(tags ...string) BatchProjectConfigurator
 	Area(name string) BatchProjectConfigurator
 	AreaID(id string) BatchProjectConfigurator
 	Todos(configs ...func(BatchTodoConfigurator)) BatchProjectConfigurator
+	Heading(title string, todos ...func(BatchTodoConfigurator)) BatchProjectConfigurator
 	Completed(completed bool) BatchProjectConfigurator
 	Canceled(canceled bool) BatchProjectConfigurator
 	CreationDate(date time.Time) BatchProjectConfigurator

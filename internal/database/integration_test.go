@@ -19,6 +19,16 @@ const (
 	fixtureTodoInHeading = "HbKGAeZKFDkWH5osSBNHvz" // deadline 2040-11-04
 	fixtureAreaWithTags  = "DciSFacytdrNG1nRaMJPgY" // tags "Errand" and "Important"
 
+	fixtureHeading              = "6QpDLSHZMRAUSAeZ9mNvgt" // in fixtureProjectInArea
+	fixtureProjectInArea        = "3x1QqJqfvZyhtw8NSdnZqG" // "Project in Area 1", in fixtureAreaWithTags
+	fixtureTodoInAreaProject    = "W5JYfjY2xtLdmedQKU6caM" // directly in fixtureProjectInArea
+	fixtureTodoDirectlyInArea   = "Q7uN9y3jp5ChZAGjZJhMfY" // loose in fixtureAreaWithTags
+	fixtureTodoTrashed          = "Tmt3omxtu61wAoTaSLweQy"
+	fixtureTodoInTrashedProject = "NoQLFamrMMooAELuBznao8" // not trashed itself
+	fixtureTemplate             = "N1PJHsbjct4mb1bhcs7aHa" // next occurrence 2040-01-01, sentinel deadline
+	fixtureRepeatingInstance    = "K9bx7h1xCJdevvyWardZDq"
+	fixtureTodoScheduled        = "7F4vqUNiTvGKaCUfv5pqYG" // startDate 2026-09-17
+
 	fixtureTodoInProjectCreationEpoch = int64(1616958920)
 	fixtureIncompleteTodos            = 15
 	fixtureAreas                      = 3
@@ -145,7 +155,7 @@ func TestIntegration_StopDateMatchesLocaltimeCalendarDay(t *testing.T) {
 
 	taskType := typeTodo
 	rows, err := d.QueryTasks(ctx, &TaskFilter{
-		TaskType:       &taskType,
+		Types:          []int{taskType},
 		StopDateFilter: &DateFilterValue{HasDate: new(true)},
 	})
 	require.NoError(t, err)
@@ -173,11 +183,11 @@ func TestIntegration_CreatedAfterLocationInsensitive(t *testing.T) {
 	taskType := typeTodo
 	pivot := time.Date(2021, 3, 29, 6, 0, 0, 0, time.Local)
 
-	local, err := d.QueryTasks(ctx, &TaskFilter{TaskType: &taskType, CreatedAfter: &pivot})
+	local, err := d.QueryTasks(ctx, &TaskFilter{Types: []int{taskType}, CreatedAfter: &pivot})
 	require.NoError(t, err)
 
 	pivotUTC := pivot.UTC()
-	utc, err := d.QueryTasks(ctx, &TaskFilter{TaskType: &taskType, CreatedAfter: &pivotUTC})
+	utc, err := d.QueryTasks(ctx, &TaskFilter{Types: []int{taskType}, CreatedAfter: &pivotUTC})
 	require.NoError(t, err)
 
 	assert.ElementsMatch(t, taskUUIDs(local), taskUUIDs(utc),
@@ -200,7 +210,7 @@ func TestIntegration_HasProjectPartition(t *testing.T) {
 	incompleteTodos := func(hasProject *bool) []TaskRow {
 		taskType, status := typeTodo, statusIncomplete
 		rows, err := d.QueryTasks(ctx, &TaskFilter{
-			TaskType:   &taskType,
+			Types:      []int{taskType},
 			Status:     &status,
 			HasProject: hasProject,
 		})
@@ -219,15 +229,157 @@ func TestIntegration_HasProjectPartition(t *testing.T) {
 		"HasProject(true) and HasProject(false) must partition all incomplete todos")
 
 	for _, row := range withoutProject {
-		assert.Nil(t, row.ProjectUUID,
+		assert.Empty(t, row.ProjectUUID,
 			"HasProject(false) returned todo %s with project", row.UUID)
-		assert.Nil(t, row.HeadingUUID,
+		assert.Empty(t, row.HeadingUUID,
 			"HasProject(false) returned todo %s inside a heading", row.UUID)
 	}
 	for _, row := range withProject {
-		assert.True(t, row.ProjectUUID != nil || row.HeadingUUID != nil,
-			"HasProject(true) returned todo %s without project context", row.UUID)
+		assert.NotEmpty(t, row.ProjectUUID,
+			"HasProject(true) returned todo %s without its project", row.UUID)
 	}
+}
+
+// =============================================================================
+// Effective Containers
+// =============================================================================
+
+// A todo under a heading has no project or area column of its own; a todo in a
+// project has no area column. Both must still report where they live.
+func TestIntegration_EffectiveProjectAndArea(t *testing.T) {
+	d := openFixtureDB(t)
+
+	underHeading := queryTaskByUUID(t, d, fixtureTodoInHeading)
+	assert.Equal(t, fixtureHeading, underHeading.HeadingUUID)
+	assert.Equal(t, fixtureProjectInArea, underHeading.ProjectUUID, "the heading's project")
+	assert.Equal(t, "Project in Area 1", underHeading.ProjectTitle)
+	assert.Equal(t, fixtureAreaWithTags, underHeading.AreaUUID, "the project's area")
+	assert.Equal(t, "Area 1", underHeading.AreaTitle)
+
+	inProject := queryTaskByUUID(t, d, fixtureTodoInAreaProject)
+	assert.Equal(t, fixtureProjectInArea, inProject.ProjectUUID)
+	assert.Equal(t, fixtureAreaWithTags, inProject.AreaUUID, "inherited from the project")
+}
+
+func TestIntegration_AreaFilterReachesProjectChildren(t *testing.T) {
+	d := openFixtureDB(t)
+	taskType, status := typeTodo, statusIncomplete
+	area := fixtureAreaWithTags
+
+	rows, err := d.QueryTasks(t.Context(), &TaskFilter{Types: []int{taskType}, Status: &status, AreaUUID: &area})
+	require.NoError(t, err)
+
+	uuids := taskUUIDs(rows)
+	assert.Contains(t, uuids, fixtureTodoDirectlyInArea)
+	assert.Contains(t, uuids, fixtureTodoInAreaProject, "a todo in one of the area's projects")
+	assert.Contains(t, uuids, fixtureTodoInHeading, "a todo under a heading of one of the area's projects")
+	for _, row := range rows {
+		assert.Equal(t, area, row.AreaUUID, "todo %s", row.UUID)
+	}
+}
+
+// =============================================================================
+// Trash and Template Scopes
+// =============================================================================
+
+func TestIntegration_TrashScopes(t *testing.T) {
+	d := openFixtureDB(t)
+	ctx := t.Context()
+	taskType := typeTodo
+
+	scoped := func(scope TrashScope) []string {
+		rows, err := d.QueryTasks(ctx, &TaskFilter{Types: []int{taskType}, Trash: scope})
+		require.NoError(t, err)
+		return taskUUIDs(rows)
+	}
+	live, trashed, all := scoped(TrashExcluded), scoped(TrashOnly), scoped(TrashAny)
+
+	assert.NotContains(t, live, fixtureTodoTrashed)
+	assert.NotContains(t, live, fixtureTodoInTrashedProject, "a todo inside a trashed project is not live")
+	assert.Contains(t, trashed, fixtureTodoTrashed)
+	assert.NotContains(t, trashed, fixtureTodoInTrashedProject, "it is not trashed itself either")
+	assert.Contains(t, all, fixtureTodoTrashed)
+	assert.Contains(t, all, fixtureTodoInTrashedProject, "only the any scope reaches it")
+	assert.Subset(t, all, live)
+}
+
+// A repeating template carries its next occurrence as its start date and the
+// 4001-01-01 sentinel as its deadline, which is not a date at all.
+func TestIntegration_TemplateScopes(t *testing.T) {
+	d := openFixtureDB(t)
+	ctx := t.Context()
+
+	ordinary, err := d.QueryTasks(ctx, &TaskFilter{})
+	require.NoError(t, err)
+	assert.NotContains(t, taskUUIDs(ordinary), fixtureTemplate)
+
+	only, err := d.QueryTasks(ctx, &TaskFilter{Templates: TemplatesOnly})
+	require.NoError(t, err)
+	require.Len(t, only, 1)
+	template := only[0]
+	assert.Equal(t, fixtureTemplate, template.UUID)
+	assert.True(t, template.Template)
+	assert.True(t, template.Repeating)
+	require.NotNil(t, template.StartDate)
+	assert.True(t, template.StartDate.Equal(time.Date(2040, 1, 1, 0, 0, 0, 0, time.Local)), "its next occurrence")
+	assert.Nil(t, template.Deadline, "the per-occurrence sentinel must not decode as a date")
+
+	both, err := d.QueryTasks(ctx, &TaskFilter{Templates: TemplatesAny})
+	require.NoError(t, err)
+	assert.Len(t, both, len(ordinary)+1)
+
+	instance := queryTaskByUUID(t, d, fixtureRepeatingInstance)
+	assert.True(t, instance.Repeating)
+	assert.False(t, instance.Template)
+}
+
+// =============================================================================
+// Clock
+// =============================================================================
+
+func TestIntegration_RelativeFiltersFollowTheClock(t *testing.T) {
+	path := fixtureDatabasePath(t)
+	scheduled := time.Date(2026, 9, 17, 0, 0, 0, 0, time.Local)
+
+	futureAt := func(now time.Time) []string {
+		d, err := Open(WithPath(path), WithNow(func() time.Time { return now }))
+		require.NoError(t, err)
+		defer d.Close()
+		rows, err := d.QueryTasks(t.Context(), &TaskFilter{StartDateFilter: &DateFilterValue{Relative: DateFuture}})
+		require.NoError(t, err)
+		return taskUUIDs(rows)
+	}
+
+	assert.Contains(t, futureAt(scheduled.AddDate(0, 0, -1)), fixtureTodoScheduled)
+	assert.NotContains(t, futureAt(scheduled), fixtureTodoScheduled, "today is not the future")
+	assert.NotContains(t, futureAt(scheduled.AddDate(0, 0, 1)), fixtureTodoScheduled)
+}
+
+// =============================================================================
+// Row Shape
+// =============================================================================
+
+func TestIntegration_ModifiedFallsBackToCreated(t *testing.T) {
+	path := fixtureDatabasePath(t)
+	mutateFixture(t, path,
+		"UPDATE TMTask SET userModificationDate = NULL WHERE uuid = '"+fixtureTodoInToday+"'")
+	d := openDBAt(t, path)
+
+	row := queryTaskByUUID(t, d, fixtureTodoInToday)
+
+	assert.False(t, row.Created.IsZero())
+	assert.Equal(t, row.Created, row.Modified, "an item never touched since creation was last modified then")
+}
+
+func TestIntegration_TimestampsKeepSubSecondPrecision(t *testing.T) {
+	path := fixtureDatabasePath(t)
+	mutateFixture(t, path,
+		"UPDATE TMTask SET userModificationDate = 1700000000.25 WHERE uuid = '"+fixtureTodoInToday+"'")
+	d := openDBAt(t, path)
+
+	row := queryTaskByUUID(t, d, fixtureTodoInToday)
+
+	assert.Equal(t, time.UnixMilli(1700000000250), row.Modified.UTC().In(time.Local))
 }
 
 // =============================================================================
@@ -240,7 +392,7 @@ func TestIntegration_SearchTreatsWildcardsLiterally(t *testing.T) {
 	taskType := typeTodo
 
 	literalPercent, err := d.QueryTasks(ctx, &TaskFilter{
-		TaskType:    &taskType,
+		Types:       []int{taskType},
 		SearchQuery: new("%"),
 	})
 	require.NoError(t, err)
@@ -248,7 +400,7 @@ func TestIntegration_SearchTreatsWildcardsLiterally(t *testing.T) {
 		"search for literal %% must only match rows containing a percent sign")
 
 	sanity, err := d.QueryTasks(ctx, &TaskFilter{
-		TaskType:    &taskType,
+		Types:       []int{taskType},
 		SearchQuery: new("To-Do"),
 	})
 	require.NoError(t, err)
@@ -261,16 +413,16 @@ func TestIntegration_TitleFilterTreatsUnderscoreLiterally(t *testing.T) {
 	taskType := typeTodo
 
 	underscore, err := d.QueryTasks(ctx, &TaskFilter{
-		TaskType: &taskType,
-		Title:    new("To_Do"),
+		Types: []int{taskType},
+		Title: new("To_Do"),
 	})
 	require.NoError(t, err)
 	assert.Empty(t, underscore,
 		"underscore in a title filter must not act as a single-character wildcard")
 
 	sanity, err := d.QueryTasks(ctx, &TaskFilter{
-		TaskType: &taskType,
-		Title:    new("To-Do"),
+		Types: []int{taskType},
+		Title: new("To-Do"),
 	})
 	require.NoError(t, err)
 	assert.NotEmpty(t, sanity, "plain title filter must still match")
@@ -307,38 +459,7 @@ func TestIntegration_MidnightReminderRoundTrip(t *testing.T) {
 	row := queryTaskByUUID(t, d, fixtureTodoInToday)
 
 	require.NotNil(t, row.ReminderTime, "a 00:00 reminder must not be dropped")
-	assert.Equal(t, "00:00", row.ReminderTime.Format(timeFormat))
-}
-
-func Test_thingsTimeExpressionToISOTime_SQL(t *testing.T) {
-	raw, err := sql.Open("sqlite3", ":memory:")
-	require.NoError(t, err)
-	defer raw.Close()
-
-	tests := []struct {
-		name    string
-		literal string
-		want    *string
-	}{
-		{"null means no reminder", "NULL", nil},
-		{"zero is midnight", "0", new("00:00")},
-		{"packed afternoon time", "840957952", new("12:34")},
-		{"packed end of day", "1605369856", new("23:59")},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var got sql.NullString
-			query := "SELECT " + thingsTimeExpressionToISOTime(tt.literal)
-			require.NoError(t, raw.QueryRowContext(t.Context(), query).Scan(&got))
-			if tt.want == nil {
-				assert.False(t, got.Valid, "expected NULL")
-			} else {
-				require.True(t, got.Valid)
-				assert.Equal(t, *tt.want, got.String)
-			}
-		})
-	}
+	assert.Equal(t, "00:00", row.ReminderTime.Format("15:04"))
 }
 
 // =============================================================================
@@ -367,4 +488,20 @@ func TestIntegration_TagsOfAreaSkipsDanglingTagRef(t *testing.T) {
 
 	require.NoError(t, err, "a dangling tag reference must not fail the query")
 	assert.ElementsMatch(t, []string{"Errand", "Important"}, tags)
+}
+
+// A dangling reference next to a real tag used to split the task into two rows.
+func TestIntegration_DanglingTagRefNeitherDuplicatesNorCounts(t *testing.T) {
+	path := fixtureDatabasePath(t)
+	mutateFixture(t, path,
+		"INSERT INTO TMTaskTag (tasks, tags) VALUES ('"+fixtureTodoInToday+"', 'DanglingTagRef00000003')",
+		"INSERT INTO TMTaskTag (tasks, tags) VALUES ('"+fixtureTodoInProject+"', 'DanglingTagRef00000004')",
+		"DELETE FROM TMTaskTag WHERE tasks = '"+fixtureTodoInProject+"' AND tags != 'DanglingTagRef00000004'")
+	d := openDBAt(t, path)
+
+	tagged := queryTaskByUUID(t, d, fixtureTodoInToday)
+	assert.True(t, tagged.HasTags)
+
+	onlyDangling := queryTaskByUUID(t, d, fixtureTodoInProject)
+	assert.False(t, onlyDangling.HasTags, "a reference to a deleted tag is not a tag")
 }

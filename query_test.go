@@ -502,7 +502,7 @@ func TestDateFilterExists(t *testing.T) {
 func TestDateFilterRelative(t *testing.T) {
 	db := newTestDB(t)
 	ctx := t.Context()
-	now := time.Now()
+	now := db.Now()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
 
 	t.Run("Deadline Past", func(t *testing.T) {

@@ -13,7 +13,7 @@ import (
 // thingstest fixture database.
 func newThingstestClient(t *testing.T) *Client {
 	t.Helper()
-	client, err := NewClient(WithDatabasePath(thingstest.DatabasePath(t)))
+	client, err := NewClient(WithDatabasePath(thingstest.DatabasePath(t)), WithClock(thingstest.Now))
 	require.NoError(t, err)
 	t.Cleanup(func() { client.Close() })
 	return client

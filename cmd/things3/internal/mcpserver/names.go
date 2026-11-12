@@ -38,10 +38,14 @@ confirmed against the database; each result reports verified true or false. open
 in the Things app.
 
 Wherever a tool accepts an id, target, or destination it resolves a full UUID, a UUID prefix of four or
-more characters, an exact title, or a title substring. An ambiguous match returns candidate UUIDs to retry
-with. Dates use YYYY-MM-DD; when also accepts today, tomorrow, evening, anytime, and someday; reminder uses
-HH:MM. Inherited URL-scheme limits: no delete or trash, no move to Inbox, checklists replace rather than
-append, repeating series are read-only, and unknown tags are ignored by Things.
+more characters, an exact title, or a title substring. When a title names several items the single open one
+wins (the single closed one when reopening); a match that is still ambiguous returns candidate UUIDs to
+retry with. A todo reports the project and area it belongs to even when it sits under a heading or inside
+a project. Dates use YYYY-MM-DD; when also accepts today, tomorrow, evening, anytime, and someday; reminder
+uses HH:MM. Inherited URL-scheme limits: no delete or trash, no move to Inbox, checklist items can be
+replaced or added but not checked off or changed one by one, and unknown tags are ignored by Things.
+Trashed items and repeating series (template true) can be read and opened by UUID but not changed; repeat
+says how a series recurs.
 
 Lists report total and pages. Start with the default page size, which answers most questions, and fetch
 further pages only when the question needs them. When only the count matters, pass limit 1 and read total.

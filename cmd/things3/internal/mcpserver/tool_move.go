@@ -28,7 +28,7 @@ func (s *Server) handleMove(ctx context.Context, _ *mcp.CallToolRequest, in Move
 		return nil, writeError(invalidInput(`"to" takes a project or area; use schedule for dates`)), nil
 	}
 
-	m, te, err := s.resolveTarget(ctx, in.Target)
+	m, te, err := s.resolveTarget(ctx, in.Target, resolve.PreferOpen)
 	if err != nil {
 		return nil, WriteResult{}, err
 	}

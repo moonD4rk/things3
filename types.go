@@ -239,6 +239,8 @@ type (
 	JSONOperation = scheme.JSONOperation
 	JSONItemType  = scheme.JSONItemType
 	JSONItem      = scheme.JSONItem
+	// ChecklistEntry is a checklist item with its state, for a batch todo.
+	ChecklistEntry = scheme.ChecklistEntry
 )
 
 // JSON operation constants.

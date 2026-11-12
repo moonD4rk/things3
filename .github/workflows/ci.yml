@@ -14,7 +14,7 @@ env:
   # Pin the version developers run locally: the config schema is version-specific,
   # so a skew here makes a locally clean tree fail CI on config verification alone.
   # Keep in step with the schema notes in .golangci.yml.
-  GOLANGCI_LINT_VERSION: v2.12.2
+  GOLANGCI_LINT_VERSION: v2.15.0
 
 jobs:
   # Fast checks that can run in parallel
@@ -41,9 +41,14 @@ jobs:
 
       # go.work is gitignored, so recreate the workspace before linting: it makes
       # the CLI module below compile against the library in this checkout rather
-      # than the released version its go.mod requires.
+      # than the released version its go.mod requires. `go work init` stamps the
+      # running toolchain's version, which a linter built with an older Go refuses
+      # to load; pinning the workspace to go.mod's version keeps the pinned linter
+      # working when a new Go becomes "stable".
       - name: Create Go workspace
-        run: go work init . ./cmd/things3
+        run: |
+          go work init . ./cmd/things3
+          go work edit -go="$(go mod edit -json | jq -r .Go)"
 
       - name: Run Linter
         uses: golangci/golangci-lint-action@v9
@@ -98,6 +103,7 @@ jobs:
       - name: Test CLI module
         run: |
           go work init . ./cmd/things3
+          go work edit -go="$(go mod edit -json | jq -r .Go)"
           go -C cmd/things3 build -v ./...
           go -C cmd/things3 test -v -race -coverprofile=coverage.out ./...
 

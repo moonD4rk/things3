@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	"github.com/moond4rk/things3"
@@ -9,25 +11,41 @@ import (
 
 const flagArea = "area"
 
+// Values of the projects --status flag.
+const (
+	statusIncomplete = "incomplete"
+	statusCompleted  = "completed"
+	statusCanceled   = "canceled"
+	statusAny        = "any"
+)
+
 func newProjectsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "projects",
 		Short:   "List projects",
 		GroupID: groupCollections,
-		Example: "  things3 projects\n  things3 projects --area Work\n  things3 projects --all --sort title",
+		Example: "  things3 projects\n  things3 projects --area Work\n  things3 projects --status completed --sort date --desc",
 		Args:    cobra.NoArgs,
 		RunE:    withClient(runProjects),
 	}
 	cmd.Flags().String(flagArea, "", "filter by area (name, prefix, or UUID)")
+	cmd.Flags().String(flagStatus, statusIncomplete, "which projects: incomplete, completed, canceled, or any")
 	return cmd
 }
 
 func runProjects(cmd *cobra.Command, _ []string, client *things3.Client) error {
-	// --all doubles as the shared "no pagination" flag and the "include closed
-	// projects" status filter.
-	q := client.Projects().Status().Incomplete()
-	if all, _ := cmd.Flags().GetBool(flagAll); all {
+	var q things3.ProjectQueryBuilder
+	switch status, _ := cmd.Flags().GetString(flagStatus); status {
+	case statusIncomplete:
+		q = client.Projects().Status().Incomplete()
+	case statusCompleted:
+		q = client.Projects().Status().Completed()
+	case statusCanceled:
+		q = client.Projects().Status().Canceled()
+	case statusAny:
 		q = client.Projects().Status().Any()
+	default:
+		return fmt.Errorf("invalid --%s %q: use incomplete, completed, canceled, or any", flagStatus, status)
 	}
 	if area, _ := cmd.Flags().GetString(flagArea); area != "" {
 		a, err := resolve.Area(cmd.Context(), client, area)

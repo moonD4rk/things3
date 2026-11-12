@@ -651,13 +651,13 @@ func TestProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("all includes closed", func(t *testing.T) {
-		out, _, err := executeCommand(t, "projects", "--all", "--json")
+	t.Run("status any includes closed", func(t *testing.T) {
+		out, _, err := executeCommand(t, "projects", "--status", "any", "--json")
 		if err != nil {
-			t.Fatalf("projects --all: %v", err)
+			t.Fatalf("projects --status any: %v", err)
 		}
 		if got := jsonTotal(t, out); got != len(anyStatus) {
-			t.Errorf("projects --all count = %d, want %d", got, len(anyStatus))
+			t.Errorf("projects --status any count = %d, want %d", got, len(anyStatus))
 		}
 		if len(anyStatus) <= len(incomplete) {
 			t.Errorf("fixture should have closed projects (any=%d, incomplete=%d)", len(anyStatus), len(incomplete))
@@ -693,6 +693,56 @@ func TestProjects(t *testing.T) {
 		assertExitCode(t, err, 2)
 		if !strings.Contains(stderrJSON, "candidates") || !strings.Contains(stderrJSON, "area") {
 			t.Errorf("json ambiguity should carry a candidates array:\n%s", stderrJSON)
+		}
+	})
+}
+
+// --all only lifts pagination; which projects are listed is --status's job.
+func TestProjectsStatus(t *testing.T) {
+	dbPath := setupFixtureDB(t)
+	client, err := things3.NewClient(things3.WithDatabasePath(dbPath), things3.WithClock(thingstest.Now))
+	if err != nil {
+		t.Fatalf("client: %v", err)
+	}
+	incomplete, err := client.Projects().Status().Incomplete().Count(context.Background())
+	_ = client.Close()
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+
+	t.Run("all does not change the status filter", func(t *testing.T) {
+		out, _, err := executeCommand(t, "projects", "--all", "--json")
+		if err != nil {
+			t.Fatalf("projects --all: %v", err)
+		}
+		if got := jsonTotal(t, out); got != incomplete {
+			t.Errorf("projects --all count = %d, want the %d incomplete projects", got, incomplete)
+		}
+	})
+
+	t.Run("status selects closed projects", func(t *testing.T) {
+		for status, mark := range map[string]string{"completed": "(x)", "canceled": "(-)"} {
+			out, _, err := executeCommand(t, "projects", "--status", status)
+			if err != nil {
+				t.Fatalf("projects --status %s: %v", status, err)
+			}
+			rows := 0
+			for line := range strings.SplitSeq(strings.TrimSpace(out), "\n") {
+				if strings.HasPrefix(line, "(") {
+					rows++
+					if !strings.HasPrefix(line, mark) {
+						t.Errorf("--status %s listed %q", status, line)
+					}
+				}
+			}
+			if rows == 0 {
+				t.Errorf("fixture drift: no %s project", status)
+			}
+		}
+		_, stderr, err := executeCommand(t, "projects", "--status", "done")
+		assertExitCode(t, err, 1)
+		if !strings.Contains(stderr, "--status") {
+			t.Errorf("an unknown status should be rejected: %s", stderr)
 		}
 	})
 }

@@ -118,7 +118,9 @@ func buildTasksSQL(wherePredicate, orderPredicate string, limit *int) string {
 			TASK.todayIndex AS today_index,
 			TASK.startBucket AS start_bucket,
 			TASK.rt1_repeatingTemplate IS NOT NULL OR TASK.%s AS repeating,
-			TASK.%s AS template
+			TASK.%s AS template,
+			COALESCE(TASK.rt1_recurrenceRule, SERIES.rt1_recurrenceRule) AS repeat_rule,
+			COALESCE(TASK.rt1_instanceCreationPaused, SERIES.rt1_instanceCreationPaused) AS repeat_paused
 		FROM
 			%s AS TASK
 		LEFT OUTER JOIN
@@ -129,6 +131,8 @@ func buildTasksSQL(wherePredicate, orderPredicate string, limit *int) string {
 			%s PROJECT_OF_HEADING ON HEADING.project = PROJECT_OF_HEADING.uuid
 		LEFT OUTER JOIN
 			%s AREA ON AREA.uuid = %s
+		LEFT OUTER JOIN
+			%s SERIES ON TASK.rt1_repeatingTemplate = SERIES.uuid
 		WHERE
 			%s
 		ORDER BY
@@ -139,7 +143,7 @@ func buildTasksSQL(wherePredicate, orderPredicate string, limit *int) string {
 		sqlStartDate, colDeadline, colReminderTime,
 		colStopDate, colCreationDate, colModificationDate, colCreationDate,
 		filterIsRecurring, filterIsRecurring,
-		tableTask, tableTask, tableTask, tableTask, tableArea, sqlAreaUUID,
+		tableTask, tableTask, tableTask, tableTask, tableArea, sqlAreaUUID, tableTask,
 		wherePredicate, orderPredicate,
 	)
 

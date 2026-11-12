@@ -3,10 +3,10 @@ package mcpserver
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/moond4rk/things3"
+	"github.com/moond4rk/things3/cmd/things3/internal/change"
 	"github.com/moond4rk/things3/cmd/things3/internal/resolve"
 	"github.com/moond4rk/things3/cmd/things3/internal/verify"
 )
@@ -153,22 +153,31 @@ func baselineOf(m resolve.Match) time.Time {
 	return m.Todo.ModifiedAt
 }
 
+// changeError maps an error from the shared change rules into a ToolError. A
+// request the rules reject is the caller's to fix.
+func changeError(err error) *ToolError {
+	if _, ok := errors.AsType[*change.InputError](err); ok {
+		return invalidInput(err.Error())
+	}
+	return writeExecError(err)
+}
+
 // parseDate parses a YYYY-MM-DD deadline, returning a structured invalid_input error.
 func parseDate(value string) (time.Time, *ToolError) {
-	d, err := time.Parse(time.DateOnly, value)
+	d, err := change.ParseDate("deadline", value)
 	if err != nil {
-		return time.Time{}, invalidInput(fmt.Sprintf("invalid deadline %q: use YYYY-MM-DD", value))
+		return time.Time{}, invalidInput(err.Error())
 	}
 	return d, nil
 }
 
 // parseReminder parses an HH:MM reminder time into hour and minute.
 func parseReminder(value string) (hour, minute int, te *ToolError) {
-	t, err := time.Parse("15:04", value)
+	clock, err := change.ParseClock(value)
 	if err != nil {
-		return 0, 0, invalidInput(fmt.Sprintf("invalid reminder %q: use HH:MM", value))
+		return 0, 0, invalidInput(err.Error())
 	}
-	return t.Hour(), t.Minute(), nil
+	return clock.Hour, clock.Minute, nil
 }
 
 // now returns the current time; the guard-band anchor for create verification.

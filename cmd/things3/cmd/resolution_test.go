@@ -41,7 +41,7 @@ func TestPrintedUUIDsResolve(t *testing.T) {
 		want string
 	}{
 		"trashed todo from trash":     {view: "trash", uuid: uuidTrashedTodo, want: "Trashed:  yes"},
-		"repeating series from views": {view: "upcoming", uuid: uuidTemplate, want: "the repeating series itself"},
+		"repeating series from views": {view: "upcoming", uuid: uuidTemplate, want: "Series:   the repeating series itself, read-only"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			short := tc.uuid[:8]
@@ -183,5 +183,42 @@ func TestHeadingChildShowsItsProject(t *testing.T) {
 	group, _, _ = strings.Cut(group, "\n\n")
 	if !found || !strings.Contains(group, uuidTodoInHeading[:8]) {
 		t.Errorf("the heading child belongs in its project's group, got:\n%s", anytime)
+	}
+}
+
+// A repeating item says how it repeats, and a series that is not producing
+// occurrences says why.
+func TestRepeatRuleIsShown(t *testing.T) {
+	dbPath := setupFixtureDB(t)
+
+	for _, uuid := range []string{uuidTemplate, uuidTemplateInstance} {
+		detail, _, err := executeCommand(t, "show", uuid)
+		if err != nil {
+			t.Fatalf("show %s: %v", uuid, err)
+		}
+		if !strings.Contains(detail, "Repeats:  every week after completion") {
+			t.Errorf("detail of %s should spell out the rule:\n%s", uuid, detail)
+		}
+	}
+
+	out, _, err := executeCommand(t, "upcoming", "--json")
+	if err != nil {
+		t.Fatalf("upcoming json: %v", err)
+	}
+	if !strings.Contains(out, `"summary": "every week after completion"`) {
+		t.Errorf("json should carry the repeat rule:\n%s", out)
+	}
+
+	execFixture(t, dbPath,
+		"UPDATE TMTask SET rt1_nextInstanceStartDate = NULL, rt1_instanceCreationPaused = 1 WHERE uuid = ?", uuidTemplate)
+	listing, _, err := executeCommand(t, "upcoming", "--all")
+	if err != nil {
+		t.Fatalf("upcoming: %v", err)
+	}
+	if row := lineContaining(t, listing, uuidTemplate[:8]); !strings.HasSuffix(row, "repeats (paused)") {
+		t.Errorf("a paused series should say so: %q", row)
+	}
+	if !strings.Contains(listing, "No date\n") {
+		t.Errorf("a series without a next occurrence is filed under No date:\n%s", listing)
 	}
 }

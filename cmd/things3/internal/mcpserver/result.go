@@ -72,6 +72,7 @@ type Item struct {
 	Checklist      []ChecklistItem `json:"checklist,omitempty"`
 	Evening        bool            `json:"evening,omitempty" jsonschema:"true when the todo is in the This Evening section of Today"`
 	Repeating      bool            `json:"repeating,omitempty" jsonschema:"true when the item belongs to a repeating series"`
+	Repeat         string          `json:"repeat,omitempty" jsonschema:"how the series repeats, e.g. every 2 weeks on Mon (paused)"`
 	Template       bool            `json:"template,omitempty" jsonschema:"the repeating series itself: read-only, when is its next occurrence"`
 	Trashed        bool            `json:"trashed,omitempty" jsonschema:"true when the item is in the Trash, where it is read-only"`
 	CompletedAt    string          `json:"completed_at,omitempty" jsonschema:"when the item was completed or canceled, RFC 3339"`

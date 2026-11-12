@@ -14,7 +14,7 @@ func scanTaskRow(rows *sql.Rows) (*TaskRow, error) {
 		&s.headingUUID, &s.headingTitle, &s.notes, &s.hasTags, &s.start,
 		&s.hasChecklist, &s.startDate, &s.deadline, &s.reminderTime,
 		&s.stopDate, &s.created, &s.modified, &s.index, &s.todayIndex,
-		&s.startBucket, &s.repeating, &s.template,
+		&s.startBucket, &s.repeating, &s.template, &s.repeatRule, &s.repeatPaused,
 	)
 	if err != nil {
 		return nil, err
@@ -34,6 +34,8 @@ type taskScanRow struct {
 	headingUUID, headingTitle                      sql.NullString
 	startDate, deadline, reminderTime              sql.NullInt64
 	stopDate, created, modified                    sql.NullFloat64
+	repeatRule                                     []byte
+	repeatPaused                                   sql.NullInt64
 }
 
 // toTaskRow converts raw scan values into a TaskRow.
@@ -65,7 +67,22 @@ func (s *taskScanRow) toTaskRow() *TaskRow {
 		Evening:      s.startBucket.Valid && s.startBucket.Int64 == startBucketEvening,
 		Repeating:    nullBool(s.repeating),
 		Template:     nullBool(s.template),
+		Repeat:       s.repeat(),
 	}
+}
+
+// repeat decodes the rule of the series the row belongs to. A rule this
+// version cannot read leaves the row merely flagged Repeating.
+func (s *taskScanRow) repeat() *RepeatRule {
+	if len(s.repeatRule) == 0 {
+		return nil
+	}
+	rule, err := parseRepeatRule(s.repeatRule)
+	if err != nil {
+		return nil
+	}
+	rule.Paused = nullBool(s.repeatPaused)
+	return rule
 }
 
 // scanAreaRow scans a sql.Rows into an AreaRow.

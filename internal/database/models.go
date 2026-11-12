@@ -33,6 +33,9 @@ type TaskRow struct {
 	Evening      bool
 	Repeating    bool
 	Template     bool
+	// Repeat is the rule of the series the task belongs to: its own for a
+	// template, its template's for a generated instance.
+	Repeat *RepeatRule
 }
 
 // AreaRow represents a row from an area query result.

@@ -3,6 +3,7 @@ package scheme
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"strconv"
 	"strings"
@@ -293,21 +294,32 @@ func (u *URLAttrs) QueryValues() (url.Values, error) {
 		return query, nil
 	}
 
-	w := u.Params[KeyWhen]
-	if w == "" {
-		w = "today" // default to today if no when specified
+	when, err := whenWithReminder(u.Params[KeyWhen], *u.ReminderHour, *u.ReminderMin)
+	if err != nil {
+		return nil, err
 	}
-	if w == string(WhenSomeday) || w == string(WhenAnytime) {
-		return nil, ErrReminderNeedsDate
-	}
-
-	query.Set(KeyWhen, fmt.Sprintf("%s@%02d:%02d", w, *u.ReminderHour, *u.ReminderMin))
+	query.Set(KeyWhen, when)
 	return query, nil
+}
+
+// whenWithReminder folds a reminder time into a "when" value, the only place
+// the URL scheme carries one: "today@15:30", "2024-03-15@14:00". A missing day
+// defaults to today; someday and anytime have no day to remind on.
+func whenWithReminder(when string, hour, minute int) (string, error) {
+	switch when {
+	case "":
+		when = "today"
+	case string(WhenSomeday), string(WhenAnytime):
+		return "", ErrReminderNeedsDate
+	}
+	return fmt.Sprintf("%s@%02d:%02d", when, hour, minute), nil
 }
 
 // JSONAttrs stores attributes as JSON values (native types).
 type JSONAttrs struct {
-	Attrs map[string]any
+	Attrs        map[string]any
+	ReminderHour *int // nil means not set
+	ReminderMin  *int // nil means not set
 }
 
 // NewJSONAttrs creates a new JSONAttrs with initialized attrs map.
@@ -338,6 +350,28 @@ func (j *JSONAttrs) SetTime(key string, t time.Time) {
 // SetDate formats date as yyyy-mm-dd string.
 func (j *JSONAttrs) SetDate(key string, year int, month time.Month, day int) {
 	j.Attrs[key] = fmt.Sprintf("%04d-%02d-%02d", year, int(month), day)
+}
+
+// SetReminder sets the reminder time (hour and minute).
+func (j *JSONAttrs) SetReminder(hour, minute int) {
+	j.ReminderHour = &hour
+	j.ReminderMin = &minute
+}
+
+// attributes returns the attributes to serialize, with a reminder folded into
+// "when". The stored map is never mutated, so repeated builds agree.
+func (j *JSONAttrs) attributes() (map[string]any, error) {
+	if j.ReminderHour == nil {
+		return j.Attrs, nil
+	}
+	current, _ := j.Attrs[KeyWhen].(string)
+	when, err := whenWithReminder(current, *j.ReminderHour, *j.ReminderMin)
+	if err != nil {
+		return nil, err
+	}
+	attrs := maps.Clone(j.Attrs)
+	attrs[KeyWhen] = when
+	return attrs, nil
 }
 
 // EncodeQuery encodes url.Values for Things URL scheme.

@@ -10,7 +10,7 @@ Guidance for Claude Code when working in this repository.
 - A **CLI** (`cmd/things3`): mirrors the app's sidebar views and interaction verbs on top of the library.
 - An **MCP server** (`things3 mcp`, `cmd/things3/internal/mcpserver`): the same verbs exposed as Model Context Protocol tools over stdio for AI assistants, sharing the CLI's resolve/verify infrastructure. One brew-installed binary serves humans and models alike.
 
-The single most important architectural fact: **reads and writes take different roads**. Reads query the SQLite database directly (`internal/database`). Writes can only go through the fire-and-forget URL scheme (`internal/scheme`) - there is no write access to the database, and the scheme's limits are hard boundaries, never worked around: no delete or trash, no move-to-Inbox, checklist replace-only, repeating items read-only, tags never created, auth token auto-read from the DB.
+The single most important architectural fact: **reads and writes take different roads**. Reads query the SQLite database directly (`internal/database`). Writes can only go through the fire-and-forget URL scheme (`internal/scheme`) - there is no write access to the database, and the scheme's limits are hard boundaries, never worked around: no delete or trash, no move-to-Inbox, checklist items replaced or added but never edited one by one, repeating series read-only, tags never created, auth token auto-read from the DB.
 
 ## Commands
 
@@ -41,7 +41,7 @@ Domain facts that are easy to get wrong:
 - Things stores dates in custom binary formats (`year<<16 | month<<12 | day<<7`, packed time); all conversion is centralized in `internal/database/date.go` - never hand-roll it. The year field is open-ended, not 11 bits: 0001-01-01 means "unset" and 4001-01-01 means "decided per occurrence" (a repeating template's deadline). Neither sentinel is a date.
 - Timestamps are fractional Unix seconds and decode at microsecond precision; write verification depends on it to tell two writes within the same second apart.
 - "Today" comes from the client's clock (`WithClock`, `Client.Now`), never from SQLite's `now` or a bare `time.Now()`, so a pinned clock governs every relative filter and view.
-- Repeating tasks: future occurrences are never materialized as rows. Only the template row (`rt1_recurrenceRule` set) exists, carrying the single next occurrence in `rt1_nextInstanceStartDate`. Normal queries exclude templates; `Upcoming()` opts them back in. A template's `StartDate` is always its next occurrence, and `Template` flags it.
+- Repeating tasks: future occurrences are never materialized as rows. Only the template row (`rt1_recurrenceRule` set) exists, carrying the single next occurrence in `rt1_nextInstanceStartDate`. Normal queries exclude templates; `Upcoming()` opts them back in. A template's `StartDate` is always its next occurrence, and `Template` flags it. The rule itself (`rt1_recurrenceRule`) is an XML property list with two-letter keys, decoded in `internal/database/recurrence.go` and exposed as `Repeat` on the series and on every instance; its day and month offsets are zero-based.
 - View rules that are easy to get wrong: a todo in a Someday project still has `start = 1` itself (Anytime hides it by its project); a Someday todo inside a project is not in the Someday list; the Logbook and the Trash fold a closed or trashed project's todos into the project's row; Upcoming files an unscheduled item under its deadline and lists series without a next occurrence last; the default order is the sidebar's (area, project, heading, index).
 
 ## CLI Architecture (cmd/things3)
@@ -60,9 +60,10 @@ Every list of todos and projects goes through one pipeline (`outputItems`): fetc
 
 ### Resolve -> execute -> verify
 
-Every action follows `runWrite` (`write.go`): resolve the target, execute the URL scheme, poll the database to confirm. Two cobra-free internal packages carry the logic and are candidates for promotion into the library:
+Every action follows `runWrite` (`write.go`): resolve the target, execute the URL scheme, poll the database to confirm. Three cobra-free internal packages carry the logic and are candidates for promotion into the library:
 
 - `internal/resolve`: tiered matching - exact UUID -> UUID prefix (>= 4 chars) -> exact title -> title substring. Several matches narrow to the live ones, then to the single open one (`PreferOpen`; reopening uses `PreferClosed`), because a repeating task leaves same-titled completed copies behind. The UUID tiers reach trashed items and repeating templates so every 8-char UUID the CLI prints is a valid query; `ResolveTarget` then refuses those two for writes (`ReadOnlyError`), since the URL scheme cannot modify them.
+- `internal/change`: what an edit or a schedule means. The CLI flags and the MCP parameters each map onto a `change.Edit` or `change.Schedule`, and `Apply` builds the update, so both surfaces share one set of rules (a field and its clear counterpart are exclusive, a checklist is todo-only, a reminder re-sends the day the item already has). Add a write rule here, never in a command or a tool handler.
 - `internal/verify`: polls the DB (2s budget, injectable clock) to confirm a fire-and-forget write landed.
 
 ### Exit-code contract
@@ -79,7 +80,7 @@ Commands only return errors; `main.go` owns rendering (`RenderError`, format-awa
 
 ## Development Workflow
 
-1. **Design first**: significant changes start as an RFC in `rfcs/NNN_snake_case_title.md` (header: Status/Author/Date; sections: Summary, Design, Implementation Notes). Current specs: RFC 009 (library query/model), RFC 012 (CLI) as amended by RFC 013 (list pagination, output envelope), RFC 014 (MCP server, implemented), RFC 015 (read model and target resolution corrections, implemented), RFC 016 (app-faithful views, implemented).
+1. **Design first**: significant changes start as an RFC in `rfcs/NNN_snake_case_title.md` (header: Status/Author/Date; sections: Summary, Design, Implementation Notes). Current specs: RFC 009 (library query/model), RFC 012 (CLI) as amended by RFC 013 (list pagination, output envelope), RFC 014 (MCP server, implemented), RFC 015 (read model and target resolution corrections, implemented), RFC 016 (app-faithful views, implemented), RFC 017 (repeating rules and the complete edit surface, implemented).
 2. **Implement library before CLI** when a change spans both; keep the CLI a thin consumer.
 3. **Verify in both modules**: `go build`, `go test`, `golangci-lint run`, `gofumpt` before finishing.
 4. **Sync docs**: `README.md` and `cmd/things3/README.md` must match implemented behavior. Release notes use Library and CLI bullet sections with PR references.

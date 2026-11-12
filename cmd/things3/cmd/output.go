@@ -193,18 +193,29 @@ func formatItemLine(it things3.Item, opts rowOptions) string {
 	if opts.showContainer {
 		segments = append(segments, itemContainer(it))
 	}
-	segments = append(segments, formatTags(it.Tags()))
-	if isRepeating(it) {
-		segments = append(segments, "repeats")
-	}
+	segments = append(segments, formatTags(it.Tags()), repeatMarker(it))
 	return strings.Join(slices.DeleteFunc(segments, func(s string) bool { return s == "" }), " | ")
 }
 
-func isRepeating(it things3.Item) bool {
+// repeatMarker flags a repeating item, and says why a series is not producing
+// occurrences when it is paused or has ended.
+func repeatMarker(it things3.Item) string {
+	repeating, repeat := it.Todo != nil && it.Todo.Repeating, (*things3.Repeat)(nil)
 	if it.Project != nil {
-		return it.Project.Repeating
+		repeating, repeat = it.Project.Repeating, it.Project.Repeat
+	} else {
+		repeat = it.Todo.Repeat
 	}
-	return it.Todo.Repeating
+	switch {
+	case !repeating:
+		return ""
+	case repeat != nil && repeat.Paused:
+		return "repeats (paused)"
+	case repeat != nil && repeat.Ended:
+		return "repeats (ended)"
+	default:
+		return "repeats"
+	}
 }
 
 // statusMark draws the row's status the way the app does: a square checkbox for
@@ -290,7 +301,7 @@ func writeTodoDetail(w io.Writer, t *things3.Todo) error {
 	fmt.Fprintf(w, "UUID:     %s\n", t.UUID)
 	fmt.Fprintf(w, "Status:   %s\n", t.Status)
 	fmt.Fprintf(w, "Start:    %s\n", t.Start)
-	writeStateLines(w, t.Trashed, t.Repeating, t.Template)
+	writeStateLines(w, t.Trashed, t.Repeating, t.Template, t.Repeat)
 	if t.ProjectTitle != "" {
 		fmt.Fprintf(w, "Project:  %s\n", t.ProjectTitle)
 	}
@@ -331,16 +342,22 @@ func writeTodoDetail(w io.Writer, t *things3.Todo) error {
 }
 
 // writeStateLines writes the detail lines for the states that set an item apart
-// from an ordinary live one. For a template, When shows its next occurrence.
-func writeStateLines(w io.Writer, trashed, repeating, template bool) {
+// from an ordinary live one. For a repeating series, When is its next
+// occurrence.
+func writeStateLines(w io.Writer, trashed, repeating, template bool, repeat *things3.Repeat) {
 	if trashed {
 		fmt.Fprintf(w, "Trashed:  yes\n")
 	}
-	switch {
-	case template:
-		fmt.Fprintf(w, "Repeats:  yes (the repeating series itself, read-only)\n")
-	case repeating:
-		fmt.Fprintf(w, "Repeats:  yes\n")
+	if !repeating {
+		return
+	}
+	rule := "yes"
+	if repeat != nil {
+		rule = repeat.String()
+	}
+	fmt.Fprintf(w, "Repeats:  %s\n", rule)
+	if template {
+		fmt.Fprintf(w, "Series:   the repeating series itself, read-only\n")
 	}
 }
 
@@ -351,7 +368,7 @@ func writeProjectDetail(w io.Writer, p *things3.Project) error {
 	fmt.Fprintf(w, "UUID:     %s\n", p.UUID)
 	fmt.Fprintf(w, "Status:   %s\n", p.Status)
 	fmt.Fprintf(w, "Start:    %s\n", p.Start)
-	writeStateLines(w, p.Trashed, p.Repeating, p.Template)
+	writeStateLines(w, p.Trashed, p.Repeating, p.Template, p.Repeat)
 	if p.AreaTitle != "" {
 		fmt.Fprintf(w, "Area:     %s\n", p.AreaTitle)
 	}

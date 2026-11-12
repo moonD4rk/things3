@@ -220,3 +220,44 @@ func TestUpcomingWindowCoversDeadlineOnlyItems(t *testing.T) {
 		t.Errorf("the item is filed by its deadline, not a start date: %+v", page.Items)
 	}
 }
+
+func TestItemsSayHowTheyRepeat(t *testing.T) {
+	srv := newTestServer(t, Config{})
+
+	series := get(t, srv, uuidTemplate)
+	if !series.Success || series.Item.Repeat != "every week after completion" {
+		t.Errorf("the series should carry its rule in words, got %+v", series.Item)
+	}
+
+	today := listTodos(t, srv, ListTodosInput{View: "today", Limit: 100})
+	repeating := 0
+	for _, it := range today.Items {
+		if it.Repeating {
+			repeating++
+			if it.Repeat == "" {
+				t.Errorf("repeating item %s has no rule", it.UUID)
+			}
+		} else if it.Repeat != "" {
+			t.Errorf("non-repeating item %s has a rule %q", it.UUID, it.Repeat)
+		}
+	}
+	if repeating == 0 {
+		t.Errorf("fixture drift: Today holds no repeating item")
+	}
+}
+
+func TestAddProjectReminderAndTags(t *testing.T) {
+	srv, rec := newWriteServer(t)
+	_, res, err := srv.handleAddProject(context.Background(), nil,
+		AddProjectInput{Title: "Website", When: "tomorrow", Reminder: "08:15", Tags: []string{"q3"}})
+	if err != nil || !res.Success {
+		t.Fatalf("add_project: %v %+v", err, res.Error)
+	}
+	q := rec.last(t).Query()
+	if when := q.Get("when"); len(when) < 6 || when[len(when)-6:] != "@08:15" {
+		t.Errorf("when = %q, want the reminder folded in", when)
+	}
+	if q.Get("tags") != "q3" {
+		t.Errorf("tags = %q", q.Get("tags"))
+	}
+}

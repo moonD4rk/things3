@@ -15,8 +15,9 @@ const (
 		"checklist take lists. Unknown tags are ignored by Things. The result reports whether the write was " +
 		"verified in the database."
 	descAddProject = "Create a project. title is required. when accepts today, tomorrow, evening, anytime, " +
-		"someday, or YYYY-MM-DD; deadline is YYYY-MM-DD. area places it; todos seeds initial child todos. The " +
-		"result reports whether the write was verified in the database."
+		"someday, or YYYY-MM-DD; deadline is YYYY-MM-DD; reminder is HH:MM. area places it; tags takes a list; " +
+		"todos seeds initial child todos. Unknown tags are ignored by Things. The result reports whether the " +
+		"write was verified in the database."
 )
 
 // AddTodoInput is the add_todo parameter set.
@@ -125,6 +126,7 @@ type AddProjectInput struct {
 	Notes    string   `json:"notes,omitempty" jsonschema:"the project notes"`
 	When     string   `json:"when,omitempty" jsonschema:"schedule: today, tomorrow, evening, anytime, someday, or YYYY-MM-DD"`
 	Deadline string   `json:"deadline,omitempty" jsonschema:"deadline date, YYYY-MM-DD"`
+	Reminder string   `json:"reminder,omitempty" jsonschema:"reminder time, HH:MM"`
 	Tags     []string `json:"tags,omitempty" jsonschema:"tag names; unknown tags are ignored by Things"`
 	Area     string   `json:"area,omitempty" jsonschema:"destination area (UUID, prefix, or title)"`
 	Todos    []string `json:"todos,omitempty" jsonschema:"initial child todo titles"`
@@ -150,6 +152,13 @@ func (s *Server) handleAddProject(
 			return nil, writeError(te), nil
 		}
 		builder = builder.Deadline(d)
+	}
+	if in.Reminder != "" {
+		hour, minute, te := parseReminder(in.Reminder)
+		if te != nil {
+			return nil, writeError(te), nil
+		}
+		builder = builder.Reminder(hour, minute)
 	}
 	if len(in.Tags) > 0 {
 		builder = builder.Tags(in.Tags...)

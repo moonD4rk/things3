@@ -5,11 +5,52 @@ import "fmt"
 // sqlTrue is the default WHERE predicate.
 const sqlTrue = "TRUE"
 
-// buildTasksSQL builds the SQL query for fetching tasks. When templateStartDate
-// is true the start_date column is sourced from rt1_nextInstanceStartDate, so a
-// repeating template surfaces its next occurrence as its start date and flows
-// through the shared scan/convert pipeline unchanged.
-func buildTasksSQL(wherePredicate, orderPredicate string, limit *int, templateStartDate bool) string {
+// Expressions shared by the task SELECT list and WHERE clause, so a filter
+// always tests exactly the value a row reports.
+var (
+	// A todo under a heading has no project of its own; it belongs to the
+	// heading's project.
+	sqlProjectUUID  = "COALESCE(PROJECT.uuid, PROJECT_OF_HEADING.uuid)"
+	sqlProjectTitle = "COALESCE(PROJECT.title, PROJECT_OF_HEADING.title)"
+
+	// Only loose todos and projects carry an area themselves; everything inside a
+	// project inherits the project's area.
+	sqlAreaUUID = "COALESCE(TASK.area, PROJECT.area, PROJECT_OF_HEADING.area)"
+
+	// A repeating template has no start date of its own: its next occurrence
+	// plays that role. Old databases store 0001-01-01 there instead of NULL.
+	sqlStartDate = fmt.Sprintf(
+		"CASE WHEN TASK.%s THEN TASK.%s WHEN TASK.%s >= %d THEN TASK.%s END",
+		filterIsNotRecurring, colStartDate, colNextInstanceStartDate, minThingsDate, colNextInstanceStartDate,
+	)
+
+	sqlHasChecklist = fmt.Sprintf("EXISTS (SELECT 1 FROM %s ITEM WHERE ITEM.task = TASK.uuid)", tableChecklistItem)
+)
+
+// taskTagsSQL is an EXISTS predicate over a task's tags, narrowed by cond (a
+// predicate on TAG) when non-empty. A dangling tag reference never satisfies it.
+func taskTagsSQL(cond string) string {
+	return tagLinkSQL(tableTaskTag, "tasks", "TASK.uuid", cond)
+}
+
+// areaTagsSQL is taskTagsSQL for an area's tags.
+func areaTagsSQL(cond string) string {
+	return tagLinkSQL(tableAreaTag, "areas", "AREA.uuid", cond)
+}
+
+func tagLinkSQL(linkTable, ownerColumn, owner, cond string) string {
+	sql := fmt.Sprintf(
+		"EXISTS (SELECT 1 FROM %s LINK JOIN %s TAG ON TAG.uuid = LINK.tags WHERE LINK.%s = %s",
+		linkTable, tableTag, ownerColumn, owner,
+	)
+	if cond != "" {
+		sql += " AND " + cond
+	}
+	return sql + ")"
+}
+
+// buildTasksSQL builds the SQL query for fetching tasks.
+func buildTasksSQL(wherePredicate, orderPredicate string, limit *int) string {
 	if wherePredicate == "" {
 		wherePredicate = sqlTrue
 	}
@@ -17,102 +58,55 @@ func buildTasksSQL(wherePredicate, orderPredicate string, limit *int, templateSt
 		orderPredicate = fmt.Sprintf("TASK.%q", IndexDefault)
 	}
 
-	startDateColumn := colStartDate
-	if templateStartDate {
-		startDateColumn = colNextInstanceStartDate
-	}
-	startDateExpr := thingsDateExpressionToISODate("TASK." + startDateColumn)
-	deadlineExpr := thingsDateExpressionToISODate("TASK." + colDeadline)
-	reminderTimeExpr := thingsTimeExpressionToISOTime("TASK." + colReminderTime)
-
 	sql := fmt.Sprintf(`
-		SELECT DISTINCT
+		SELECT
 			TASK.uuid,
-			CASE
-				WHEN TASK.%s THEN 'to-do'
-				WHEN TASK.%s THEN 'project'
-				WHEN TASK.%s THEN 'heading'
-			END AS type,
-			CASE
-				WHEN TASK.%s THEN 1
-			END AS trashed,
+			TASK.type,
+			TASK.trashed,
 			TASK.title,
-			CASE
-				WHEN TASK.%s THEN 'incomplete'
-				WHEN TASK.%s THEN 'canceled'
-				WHEN TASK.%s THEN 'completed'
-			END AS status,
-			CASE
-				WHEN AREA.uuid IS NOT NULL THEN AREA.uuid
-			END AS area,
-			CASE
-				WHEN AREA.uuid IS NOT NULL THEN AREA.title
-			END AS area_title,
-			CASE
-				WHEN PROJECT.uuid IS NOT NULL THEN PROJECT.uuid
-			END AS project,
-			CASE
-				WHEN PROJECT.uuid IS NOT NULL THEN PROJECT.title
-			END AS project_title,
-			CASE
-				WHEN HEADING.uuid IS NOT NULL THEN HEADING.uuid
-			END AS heading,
-			CASE
-				WHEN HEADING.uuid IS NOT NULL THEN HEADING.title
-			END AS heading_title,
+			TASK.status,
+			AREA.uuid AS area,
+			AREA.title AS area_title,
+			%s AS project,
+			%s AS project_title,
+			HEADING.uuid AS heading,
+			HEADING.title AS heading_title,
 			TASK.notes,
-			CASE
-				WHEN TAG.uuid IS NOT NULL THEN 1
-			END AS tags,
-			CASE
-				WHEN TASK.%s THEN 'Inbox'
-				WHEN TASK.%s THEN 'Anytime'
-				WHEN TASK.%s THEN 'Someday'
-			END AS start,
-			CASE
-				WHEN CHECKLIST_ITEM.uuid IS NOT NULL THEN 1
-			END AS checklist,
+			%s AS has_tags,
+			TASK.start,
+			%s AS has_checklist,
 			%s AS start_date,
-			%s AS deadline,
-			%s AS reminder_time,
+			TASK.%s AS deadline,
+			TASK.%s AS reminder_time,
 			TASK.%s AS stop_date,
 			TASK.%s AS created,
-			TASK.%s AS modified,
-			TASK.'index',
+			COALESCE(TASK.%s, TASK.%s) AS modified,
+			TASK."index",
 			TASK.todayIndex AS today_index,
 			TASK.startBucket AS start_bucket,
-			CASE
-				WHEN TASK.rt1_repeatingTemplate IS NOT NULL OR TASK.rt1_recurrenceRule IS NOT NULL THEN 1
-			END AS repeating
+			TASK.rt1_repeatingTemplate IS NOT NULL OR TASK.%s AS repeating,
+			TASK.%s AS template
 		FROM
 			%s AS TASK
 		LEFT OUTER JOIN
 			%s PROJECT ON TASK.project = PROJECT.uuid
 		LEFT OUTER JOIN
-			%s AREA ON TASK.area = AREA.uuid
-		LEFT OUTER JOIN
 			%s HEADING ON TASK.heading = HEADING.uuid
 		LEFT OUTER JOIN
 			%s PROJECT_OF_HEADING ON HEADING.project = PROJECT_OF_HEADING.uuid
 		LEFT OUTER JOIN
-			%s TAGS ON TASK.uuid = TAGS.tasks
-		LEFT OUTER JOIN
-			%s TAG ON TAGS.tags = TAG.uuid
-		LEFT OUTER JOIN
-			%s CHECKLIST_ITEM ON TASK.uuid = CHECKLIST_ITEM.task
+			%s AREA ON AREA.uuid = %s
 		WHERE
 			%s
 		ORDER BY
 			%s
 	`,
-		filterIsTodo, filterIsProject, filterIsHeading,
-		filterIsTrashed,
-		filterIsIncomplete, filterIsCanceled, filterIsCompleted,
-		filterIsInbox, filterIsAnytime, filterIsSomeday,
-		startDateExpr, deadlineExpr, reminderTimeExpr,
-		colStopDate, colCreationDate, colModificationDate,
-		tableTask, tableTask, tableArea, tableTask, tableTask,
-		tableTaskTag, tableTag, tableChecklistItem,
+		sqlProjectUUID, sqlProjectTitle,
+		taskTagsSQL(""), sqlHasChecklist,
+		sqlStartDate, colDeadline, colReminderTime,
+		colStopDate, colCreationDate, colModificationDate, colCreationDate,
+		filterIsRecurring, filterIsRecurring,
+		tableTask, tableTask, tableTask, tableTask, tableArea, sqlAreaUUID,
 		wherePredicate, orderPredicate,
 	)
 
@@ -130,23 +124,16 @@ func buildAreasSQL(wherePredicate string) string {
 	}
 
 	return fmt.Sprintf(`
-		SELECT DISTINCT
+		SELECT
 			AREA.uuid,
-			'area' as type,
 			AREA.title,
-			CASE
-				WHEN AREA_TAG.areas IS NOT NULL THEN 1
-			END AS tags
+			%s AS has_tags
 		FROM
 			%s AS AREA
-		LEFT OUTER JOIN
-			%s AREA_TAG ON AREA_TAG.areas = AREA.uuid
-		LEFT OUTER JOIN
-			%s TAG ON TAG.uuid = AREA_TAG.tags
 		WHERE
 			%s
 		ORDER BY AREA."index"
-	`, tableArea, tableAreaTag, tableTag, wherePredicate)
+	`, areaTagsSQL(""), tableArea, wherePredicate)
 }
 
 // buildTagsSQL builds the SQL query for fetching tags.
@@ -157,7 +144,7 @@ func buildTagsSQL(wherePredicate string) string {
 
 	return fmt.Sprintf(`
 		SELECT
-			uuid, 'tag' AS type, title, shortcut
+			uuid, title, shortcut
 		FROM
 			%s
 		WHERE
@@ -170,24 +157,13 @@ func buildTagsSQL(wherePredicate string) string {
 func buildChecklistItemsSQL() string {
 	return fmt.Sprintf(`
 		SELECT
-			CHECKLIST_ITEM.title,
-			CASE
-				WHEN CHECKLIST_ITEM.%s THEN 'incomplete'
-				WHEN CHECKLIST_ITEM.%s THEN 'canceled'
-				WHEN CHECKLIST_ITEM.%s THEN 'completed'
-			END AS status,
-			date(CHECKLIST_ITEM.stopDate, "unixepoch", "localtime") AS stop_date,
-			'checklist-item' as type,
-			CHECKLIST_ITEM.uuid,
-			CHECKLIST_ITEM.%s AS created,
-			CHECKLIST_ITEM.%s AS modified
+			uuid, title, status, %s, %s, COALESCE(%s, %s)
 		FROM
-			%s AS CHECKLIST_ITEM
+			%s
 		WHERE
-			CHECKLIST_ITEM.task = ?
-		ORDER BY CHECKLIST_ITEM."index"
-	`, filterIsIncomplete, filterIsCanceled, filterIsCompleted,
-		colCreationDate, colModificationDate, tableChecklistItem)
+			task = ?
+		ORDER BY "index"
+	`, colStopDate, colCreationDate, colModificationDate, colCreationDate, tableChecklistItem)
 }
 
 // buildTagsOfTaskSQL builds the SQL query for fetching tags of a task.

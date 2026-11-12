@@ -50,6 +50,8 @@ func todoItem(t *things3.Todo) Item {
 		Reminder:    timeStr(t.Reminder),
 		Evening:     t.Evening,
 		Repeating:   t.Repeating,
+		Template:    t.Template,
+		Trashed:     t.Trashed,
 		CompletedAt: stampStr(closeTime(t)),
 	}
 	if t.ProjectUUID != "" {
@@ -82,6 +84,8 @@ func projectItem(p *things3.Project) Item {
 		Deadline:    dateStr(p.Deadline),
 		Reminder:    timeStr(p.Reminder),
 		Repeating:   p.Repeating,
+		Template:    p.Template,
+		Trashed:     p.Trashed,
 		CompletedAt: stampStr(closeTimeProject(p)),
 	}
 	if p.AreaUUID != "" {

@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moond4rk/things3/thingstest"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -52,7 +54,7 @@ func TestClientUpcomingEmptyIsNonNil(t *testing.T) {
 	// the Upcoming view.
 	execFixtureSQL(t, dbPath, "UPDATE TMTask SET status = 3 WHERE status = 0")
 
-	client, err := NewClient(WithDatabasePath(dbPath))
+	client, err := NewClient(WithDatabasePath(dbPath), WithClock(thingstest.Now))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
 

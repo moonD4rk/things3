@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sync/atomic"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
 )
@@ -29,6 +30,7 @@ type DB struct {
 	filepath   string
 	printSQL   bool
 	queryCount atomic.Int64
+	now        func() time.Time
 }
 
 // Open creates a new Things 3 database connection.
@@ -56,10 +58,16 @@ func Open(opts ...Option) (*DB, error) {
 		return nil, err
 	}
 
+	now := options.Now
+	if now == nil {
+		now = time.Now
+	}
+
 	return &DB{
 		sqlDB:    sqlDB,
 		filepath: fp,
 		printSQL: options.PrintSQL,
+		now:      now,
 	}, nil
 }
 
@@ -74,6 +82,11 @@ func (d *DB) Close() error {
 // Filepath returns the path to the Things database file.
 func (d *DB) Filepath() string {
 	return d.filepath
+}
+
+// Now returns the current time on the DB's clock.
+func (d *DB) Now() time.Time {
+	return d.now()
 }
 
 // ExecuteQuery executes a SQL query and returns the results.

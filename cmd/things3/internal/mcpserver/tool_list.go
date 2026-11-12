@@ -216,9 +216,9 @@ func (s *Server) viewTodos(ctx context.Context, view, projectUUID, areaUUID stri
 			return nil, err
 		}
 		if view == nameUpcoming && days != nil && *days > 0 {
-			todos = withinUpcomingWindow(todos, *days)
+			todos = withinUpcomingWindow(todos, *days, s.client.Now())
 		}
-		return s.scopeComposed(ctx, todos, projectUUID, areaUUID)
+		return scopeComposed(todos, projectUUID, areaUUID), nil
 	}
 
 	q, err := s.viewBuilder(view)
@@ -231,7 +231,7 @@ func (s *Server) viewTodos(ctx context.Context, view, projectUUID, areaUUID stri
 	if areaUUID != "" {
 		q = q.InArea(areaUUID)
 	}
-	q = applyDaysWindow(q, view, days)
+	q = applyDaysWindow(q, view, days, s.client.Now())
 	todos, err := q.All(ctx)
 	if err != nil {
 		return nil, err
@@ -302,9 +302,8 @@ func viewSort(view string, todos []things3.Todo) {
 // supports days. logbook windows on stop date (defaulting to the last 30 days
 // to mirror the CLI; an explicit 0 means all history); deadlines windows forward
 // on deadline and deliberately keeps overdue items inside the window, since they
-// are still due. now is time.Now, matching the CLI's logbook window.
-func applyDaysWindow(q things3.TodoQueryBuilder, view string, days *int) things3.TodoQueryBuilder {
-	now := time.Now()
+// are still due. now is the client's clock, matching the CLI's windows.
+func applyDaysWindow(q things3.TodoQueryBuilder, view string, days *int, now time.Time) things3.TodoQueryBuilder {
 	switch view {
 	case nameLogbook:
 		if w := logbookWindowDays(days); w > 0 {
@@ -332,51 +331,24 @@ func logbookWindowDays(days *int) int {
 // before now+days. Upcoming is already future-scheduled, so an upper bound
 // alone yields the next N days; it cannot be pushed to SQL without breaking the
 // scheduled-plus-repeating-template merge.
-func withinUpcomingWindow(todos []things3.Todo, days int) []things3.Todo {
-	cutoff := time.Now().AddDate(0, 0, days)
+func withinUpcomingWindow(todos []things3.Todo, days int, now time.Time) []things3.Todo {
+	cutoff := now.AddDate(0, 0, days)
 	return filterTodos(todos, func(t *things3.Todo) bool {
 		return t.StartDate != nil && !t.StartDate.After(cutoff)
 	})
 }
 
-// scopeComposed filters composed-view todos by project (heading-aware, matching
-// the library's InProject OR-semantics) and area in memory, since a composed
-// view is already materialized and cannot be re-queried.
-func (s *Server) scopeComposed(
-	ctx context.Context, todos []things3.Todo, projectUUID, areaUUID string,
-) ([]things3.Todo, error) {
+// scopeComposed filters composed-view todos by project and area in memory, since
+// a composed view is already materialized. A todo reports its effective project
+// and area, so this matches the library's InProject and InArea filters.
+func scopeComposed(todos []things3.Todo, projectUUID, areaUUID string) []things3.Todo {
 	if projectUUID != "" {
-		headings, err := s.projectHeadingSet(ctx, projectUUID)
-		if err != nil {
-			return nil, err
-		}
-		todos = filterTodos(todos, func(t *things3.Todo) bool {
-			if t.ProjectUUID == projectUUID {
-				return true
-			}
-			_, ok := headings[t.HeadingUUID]
-			return ok
-		})
+		todos = filterTodos(todos, func(t *things3.Todo) bool { return t.ProjectUUID == projectUUID })
 	}
 	if areaUUID != "" {
 		todos = filterTodos(todos, func(t *things3.Todo) bool { return t.AreaUUID == areaUUID })
 	}
-	return todos, nil
-}
-
-// projectHeadingSet returns the UUIDs of a project's headings, so list_todos can
-// include todos filed under a heading (whose ProjectUUID is empty) exactly as the
-// library's InProject filter does with its TASK.project OR heading-project match.
-func (s *Server) projectHeadingSet(ctx context.Context, projectUUID string) (map[string]struct{}, error) {
-	headings, err := s.client.Headings().InProject(projectUUID).All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	set := make(map[string]struct{}, len(headings))
-	for i := range headings {
-		set[headings[i].UUID] = struct{}{}
-	}
-	return set, nil
+	return todos
 }
 
 // filterTodos keeps the todos for which keep returns true.

@@ -103,7 +103,7 @@ func runUpcoming(cmd *cobra.Command, _ []string, client *things3.Client) error {
 		return err
 	}
 	if days > 0 {
-		cutoff := time.Now().AddDate(0, 0, days)
+		cutoff := client.Now().AddDate(0, 0, days)
 		todos = slices.DeleteFunc(todos, func(t things3.Todo) bool {
 			return t.StartDate == nil || t.StartDate.After(cutoff)
 		})
@@ -176,7 +176,7 @@ func runLogbook(cmd *cobra.Command, _ []string, client *things3.Client) error {
 	}
 	q := client.Todos().Status().Any().StopDate().Exists(true)
 	if days > 0 {
-		q = q.StopDate().After(time.Now().AddDate(0, 0, -days))
+		q = q.StopDate().After(client.Now().AddDate(0, 0, -days))
 	}
 	todos, err := q.All(cmd.Context())
 	if err != nil {
@@ -206,7 +206,7 @@ func runDeadlines(cmd *cobra.Command, _ []string, client *things3.Client) error 
 	}
 	q := client.Todos().Deadline().Exists(true).Status().Incomplete()
 	if days > 0 {
-		q = q.Deadline().OnOrBefore(time.Now().AddDate(0, 0, days))
+		q = q.Deadline().OnOrBefore(client.Now().AddDate(0, 0, days))
 	}
 	todos, err := q.All(cmd.Context())
 	if err != nil {

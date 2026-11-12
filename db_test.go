@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/moond4rk/things3/thingstest"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -13,7 +15,7 @@ import (
 func TestNewDB_WithValidPath(t *testing.T) {
 	initTestPaths()
 
-	d, err := newDB(database.WithPath(testDatabasePath))
+	d, err := newDB(database.WithPath(testDatabasePath), database.WithNow(thingstest.Now))
 	require.NoError(t, err)
 	require.NotNil(t, d)
 	defer d.Close()
@@ -30,7 +32,7 @@ func TestNewDB_WithInvalidPath(t *testing.T) {
 func TestNewDB_Close(t *testing.T) {
 	initTestPaths()
 
-	d, err := newDB(database.WithPath(testDatabasePath))
+	d, err := newDB(database.WithPath(testDatabasePath), database.WithNow(thingstest.Now))
 	require.NoError(t, err)
 	require.NotNil(t, d)
 
@@ -46,7 +48,7 @@ func TestNewDB_Close(t *testing.T) {
 func TestDB_Filepath(t *testing.T) {
 	initTestPaths()
 
-	d, err := newDB(database.WithPath(testDatabasePath))
+	d, err := newDB(database.WithPath(testDatabasePath), database.WithNow(thingstest.Now))
 	require.NoError(t, err)
 	defer d.Close()
 

@@ -1,10 +1,13 @@
 package things3
 
+import "time"
+
 // clientOptions holds the configuration options for the Client.
 type clientOptions struct {
 	// Database options
 	databasePath string
 	printSQL     bool
+	clock        func() time.Time
 
 	// Scheme options
 	foreground bool // bring Things to foreground for create/update
@@ -38,6 +41,21 @@ func WithDatabasePath(path string) ClientOption {
 func WithPrintSQL(enabled bool) ClientOption {
 	return func(opts *clientOptions) {
 		opts.printSQL = enabled
+	}
+}
+
+// WithClock replaces the system clock behind every relative date decision: the
+// Past and Future date filters, the composed views, and [Client.Now]. Use it to
+// make a report reproducible or to pin "today" when testing against a fixed
+// database.
+//
+// Example:
+//
+//	fixed := time.Date(2026, time.January, 1, 9, 0, 0, 0, time.Local)
+//	client, err := things3.NewClient(things3.WithClock(func() time.Time { return fixed }))
+func WithClock(now func() time.Time) ClientOption {
+	return func(opts *clientOptions) {
+		opts.clock = now
 	}
 }
 

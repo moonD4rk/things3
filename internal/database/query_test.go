@@ -1,6 +1,7 @@
 package database
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -11,18 +12,18 @@ const testAND = "\n            AND "
 
 func TestTaskFilter_buildWhere(t *testing.T) {
 	and := testAND
-	// defaultPrefix is the common prefix for all non-trashed queries:
-	// recurring excluded + not trashed + parent not trashed
-	defaultPrefix := "TASK.rt1_recurrenceRule IS NULL" + and +
-		"TASK.trashed = 0" + and +
+	today := time.Date(2024, 6, 15, 9, 0, 0, 0, time.Local)
+	const todayPacked = "132671360"
+
+	liveOnly := "TASK.trashed = 0" + and +
 		"NOT IFNULL(PROJECT.trashed, 0)" + and +
 		"NOT IFNULL(PROJECT_OF_HEADING.trashed, 0)"
-	// templatePrefix mirrors defaultPrefix but selects repeating templates
-	// instead of excluding them.
-	templatePrefix := "TASK.rt1_recurrenceRule IS NOT NULL" + and +
-		"TASK.trashed = 0" + and +
-		"NOT IFNULL(PROJECT.trashed, 0)" + and +
-		"NOT IFNULL(PROJECT_OF_HEADING.trashed, 0)"
+	// defaultPrefix is what every unscoped query starts with: no repeating
+	// templates, nothing trashed, nothing inside a trashed project.
+	defaultPrefix := "TASK.rt1_recurrenceRule IS NULL" + and + liveOnly
+	templatePrefix := "TASK.rt1_recurrenceRule IS NOT NULL" + and + liveOnly
+	startDate := "(" + sqlStartDate + ")"
+	createdAfter := time.Date(2024, 6, 15, 10, 30, 0, 0, time.Local)
 
 	tests := []struct {
 		name   string
@@ -30,19 +31,34 @@ func TestTaskFilter_buildWhere(t *testing.T) {
 		want   string
 	}{
 		{
-			name:   "default excludes trashed and parent trashed",
+			name:   "default excludes templates, trashed, and parent trashed",
 			filter: TaskFilter{},
 			want:   defaultPrefix,
 		},
 		{
-			name:   "trashed true skips parent trashed check",
-			filter: TaskFilter{Trashed: new(true)},
+			name:   "trash only skips the parent check",
+			filter: TaskFilter{Trash: TrashOnly},
 			want:   "TASK.rt1_recurrenceRule IS NULL" + and + "TASK.trashed = 1",
 		},
 		{
-			name:   "trashed false explicit",
-			filter: TaskFilter{Trashed: new(false)},
-			want:   defaultPrefix,
+			name:   "trash any drops every trash predicate",
+			filter: TaskFilter{Trash: TrashAny},
+			want:   "TASK.rt1_recurrenceRule IS NULL",
+		},
+		{
+			name:   "templates only inverts the recurrence exclusion",
+			filter: TaskFilter{Templates: TemplatesOnly},
+			want:   templatePrefix,
+		},
+		{
+			name:   "templates any drops the recurrence predicate",
+			filter: TaskFilter{Templates: TemplatesAny},
+			want:   liveOnly,
+		},
+		{
+			name:   "identity scope has no default predicates",
+			filter: TaskFilter{Trash: TrashAny, Templates: TemplatesAny, UUID: new("ABC-123")},
+			want:   "TASK.uuid = 'ABC-123'",
 		},
 		{
 			name:   "task type",
@@ -55,7 +71,7 @@ func TestTaskFilter_buildWhere(t *testing.T) {
 			want:   defaultPrefix + and + "TASK.status = 3",
 		},
 		{
-			name:   "start bucket",
+			name:   "start",
 			filter: TaskFilter{Start: new(1)},
 			want:   defaultPrefix + and + "TASK.start = 1",
 		},
@@ -70,54 +86,54 @@ func TestTaskFilter_buildWhere(t *testing.T) {
 			want:   defaultPrefix + and + `TASK.uuid LIKE 'ABC%' ESCAPE '\'`,
 		},
 		{
-			name:   "uuid prefix escapes wildcards",
+			name:   "uuid prefix escapes like wildcards",
 			filter: TaskFilter{UUIDPrefix: new("AB_C")},
 			want:   defaultPrefix + and + `TASK.uuid LIKE 'AB\_C%' ESCAPE '\'`,
 		},
 		{
-			name:   "title contains",
+			name:   "title",
 			filter: TaskFilter{Title: new("milk")},
 			want:   defaultPrefix + and + `TASK.title LIKE '%milk%' ESCAPE '\'`,
 		},
 		{
-			name:   "title escapes wildcards",
+			name:   "title escapes like wildcards",
 			filter: TaskFilter{Title: new("To_Do")},
 			want:   defaultPrefix + and + `TASK.title LIKE '%To\_Do%' ESCAPE '\'`,
 		},
 		{
-			name:   "area uuid",
+			name:   "area uuid matches the effective area",
 			filter: TaskFilter{AreaUUID: new("area-1")},
-			want:   defaultPrefix + and + "TASK.area = 'area-1'",
+			want:   defaultPrefix + and + sqlAreaUUID + " = 'area-1'",
 		},
 		{
 			name:   "has area true",
 			filter: TaskFilter{HasArea: new(true)},
-			want:   defaultPrefix + and + "TASK.area IS NOT NULL",
+			want:   defaultPrefix + and + sqlAreaUUID + " IS NOT NULL",
 		},
 		{
 			name:   "has area false",
 			filter: TaskFilter{HasArea: new(false)},
-			want:   defaultPrefix + and + "TASK.area IS NULL",
+			want:   defaultPrefix + and + sqlAreaUUID + " IS NULL",
 		},
 		{
 			name:   "area uuid takes precedence over has area",
 			filter: TaskFilter{AreaUUID: new("area-1"), HasArea: new(true)},
-			want:   defaultPrefix + and + "TASK.area = 'area-1'",
+			want:   defaultPrefix + and + sqlAreaUUID + " = 'area-1'",
 		},
 		{
-			name:   "project uuid",
+			name:   "project uuid matches the effective project",
 			filter: TaskFilter{ProjectUUID: new("proj-1")},
-			want:   defaultPrefix + and + "(TASK.project = 'proj-1' OR PROJECT_OF_HEADING.uuid = 'proj-1')",
+			want:   defaultPrefix + and + sqlProjectUUID + " = 'proj-1'",
 		},
 		{
 			name:   "has project true",
 			filter: TaskFilter{HasProject: new(true)},
-			want:   defaultPrefix + and + "(TASK.project IS NOT NULL OR PROJECT_OF_HEADING.uuid IS NOT NULL)",
+			want:   defaultPrefix + and + sqlProjectUUID + " IS NOT NULL",
 		},
 		{
-			name:   "has project false requires both columns NULL",
+			name:   "has project false",
 			filter: TaskFilter{HasProject: new(false)},
-			want:   defaultPrefix + and + "(TASK.project IS NULL AND PROJECT_OF_HEADING.uuid IS NULL)",
+			want:   defaultPrefix + and + sqlProjectUUID + " IS NULL",
 		},
 		{
 			name:   "heading uuid",
@@ -132,12 +148,17 @@ func TestTaskFilter_buildWhere(t *testing.T) {
 		{
 			name:   "tag title",
 			filter: TaskFilter{TagTitle: new("work")},
-			want:   defaultPrefix + and + "TAG.title = 'work'",
+			want:   defaultPrefix + and + taskTagsSQL("TAG.title = 'work'"),
 		},
 		{
 			name:   "has tags true",
 			filter: TaskFilter{HasTags: new(true)},
-			want:   defaultPrefix + and + "TAG.title IS NOT NULL",
+			want:   defaultPrefix + and + taskTagsSQL(""),
+		},
+		{
+			name:   "has tags false",
+			filter: TaskFilter{HasTags: new(false)},
+			want:   defaultPrefix + and + "NOT " + taskTagsSQL(""),
 		},
 		{
 			name:   "deadline suppressed true",
@@ -152,40 +173,30 @@ func TestTaskFilter_buildWhere(t *testing.T) {
 		{
 			name:   "start date exists true",
 			filter: TaskFilter{StartDateFilter: &DateFilterValue{HasDate: new(true)}},
-			want:   defaultPrefix + and + "TASK.startDate IS NOT NULL",
+			want:   defaultPrefix + and + startDate + " IS NOT NULL",
 		},
 		{
 			name:   "start date exists false",
 			filter: TaskFilter{StartDateFilter: &DateFilterValue{HasDate: new(false)}},
-			want:   defaultPrefix + and + "TASK.startDate IS NULL",
+			want:   defaultPrefix + and + startDate + " IS NULL",
 		},
 		{
-			name:   "start date future",
+			name:   "start date future is anchored to the injected today",
 			filter: TaskFilter{StartDateFilter: &DateFilterValue{Relative: DateFuture}},
-			want:   defaultPrefix + and + "TASK.startDate > " + todayThingsDateSQL(),
-		},
-		{
-			name:   "repeating templates inverts recurrence exclusion",
-			filter: TaskFilter{RepeatingTemplates: new(true)},
-			want:   templatePrefix,
-		},
-		{
-			name:   "repeating templates false keeps default exclusion",
-			filter: TaskFilter{RepeatingTemplates: new(false)},
-			want:   defaultPrefix,
-		},
-		{
-			name: "repeating templates remap start date to next occurrence",
-			filter: TaskFilter{
-				RepeatingTemplates: new(true),
-				StartDateFilter:    &DateFilterValue{Relative: DateFuture},
-			},
-			want: templatePrefix + and + "TASK.rt1_nextInstanceStartDate > " + todayThingsDateSQL(),
+			want:   defaultPrefix + and + startDate + " > " + todayPacked,
 		},
 		{
 			name:   "start date past",
 			filter: TaskFilter{StartDateFilter: &DateFilterValue{Relative: DatePast}},
-			want:   defaultPrefix + and + "TASK.startDate <= " + todayThingsDateSQL(),
+			want:   defaultPrefix + and + startDate + " <= " + todayPacked,
+		},
+		{
+			name: "templates filter on the same start date expression",
+			filter: TaskFilter{
+				Templates:       TemplatesOnly,
+				StartDateFilter: &DateFilterValue{Relative: DateFuture},
+			},
+			want: templatePrefix + and + startDate + " > " + todayPacked,
 		},
 		{
 			name: "start date specific comparison",
@@ -193,53 +204,50 @@ func TestTaskFilter_buildWhere(t *testing.T) {
 				Operator: ">=",
 				Date:     new(time.Date(2024, 6, 15, 0, 0, 0, 0, time.Local)),
 			}},
-			want: defaultPrefix + and + "TASK.startDate >= 132671360",
+			want: defaultPrefix + and + startDate + " >= 132671360",
 		},
 		{
 			name:   "stop date future (unix time)",
 			filter: TaskFilter{StopDateFilter: &DateFilterValue{Relative: DateFuture}},
-			want:   defaultPrefix + and + "date(TASK.stopDate, 'unixepoch', 'localtime') > date('now', 'localtime')",
+			want:   defaultPrefix + and + "date(TASK.stopDate, 'unixepoch', 'localtime') > '2024-06-15'",
 		},
 		{
 			name:   "stop date past (unix time)",
 			filter: TaskFilter{StopDateFilter: &DateFilterValue{Relative: DatePast}},
-			want:   defaultPrefix + and + "date(TASK.stopDate, 'unixepoch', 'localtime') <= date('now', 'localtime')",
+			want:   defaultPrefix + and + "date(TASK.stopDate, 'unixepoch', 'localtime') <= '2024-06-15'",
 		},
 		{
 			name: "stop date specific comparison (unix time)",
 			filter: TaskFilter{StopDateFilter: &DateFilterValue{
 				Operator: "=",
-				Date:     new(time.Date(2024, 6, 15, 0, 0, 0, 0, time.Local)),
+				Date:     new(time.Date(2024, 6, 1, 0, 0, 0, 0, time.Local)),
 			}},
-			want: defaultPrefix + and + "date(TASK.stopDate, 'unixepoch', 'localtime') = date('2024-06-15')",
+			want: defaultPrefix + and + "date(TASK.stopDate, 'unixepoch', 'localtime') = '2024-06-01'",
 		},
 		{
 			name:   "deadline future (things date)",
 			filter: TaskFilter{DeadlineFilter: &DateFilterValue{Relative: DateFuture}},
-			want:   defaultPrefix + and + "TASK.deadline > " + todayThingsDateSQL(),
+			want:   defaultPrefix + and + "TASK.deadline > " + todayPacked,
 		},
 		{
-			name:   "created after",
-			filter: TaskFilter{CreatedAfter: new(time.Date(2024, 6, 15, 10, 30, 0, 0, time.Local))},
-			want:   defaultPrefix + and + "datetime(TASK.creationDate, 'unixepoch', 'localtime') > '2024-06-15 10:30:00'",
+			name:   "created after compares raw epochs",
+			filter: TaskFilter{CreatedAfter: &createdAfter},
+			want:   defaultPrefix + and + "TASK.creationDate > " + strconv.FormatInt(createdAfter.Unix(), 10) + ".000000",
 		},
 		{
-			name:   "search query",
+			name:   "search query matches the item's own text",
 			filter: TaskFilter{SearchQuery: new("buy milk")},
-			want: defaultPrefix + and +
-				`(TASK.title LIKE '%buy milk%' ESCAPE '\' OR TASK.notes LIKE '%buy milk%' ESCAPE '\' OR AREA.title LIKE '%buy milk%' ESCAPE '\')`,
+			want:   defaultPrefix + and + `(TASK.title LIKE '%buy milk%' ESCAPE '\' OR TASK.notes LIKE '%buy milk%' ESCAPE '\')`,
 		},
 		{
 			name:   "search with special chars",
 			filter: TaskFilter{SearchQuery: new("it's")},
-			want: defaultPrefix + and +
-				`(TASK.title LIKE '%it''s%' ESCAPE '\' OR TASK.notes LIKE '%it''s%' ESCAPE '\' OR AREA.title LIKE '%it''s%' ESCAPE '\')`,
+			want:   defaultPrefix + and + `(TASK.title LIKE '%it''s%' ESCAPE '\' OR TASK.notes LIKE '%it''s%' ESCAPE '\')`,
 		},
 		{
 			name:   "search escapes like wildcards",
 			filter: TaskFilter{SearchQuery: new("%")},
-			want: defaultPrefix + and +
-				`(TASK.title LIKE '%\%%' ESCAPE '\' OR TASK.notes LIKE '%\%%' ESCAPE '\' OR AREA.title LIKE '%\%%' ESCAPE '\')`,
+			want:   defaultPrefix + and + `(TASK.title LIKE '%\%%' ESCAPE '\' OR TASK.notes LIKE '%\%%' ESCAPE '\')`,
 		},
 		{
 			name: "complex filter combination",
@@ -255,14 +263,13 @@ func TestTaskFilter_buildWhere(t *testing.T) {
 				"TASK.type = 0" + and +
 				"TASK.status = 0" + and +
 				"TASK.start = 1" + and +
-				"TASK.startDate IS NOT NULL",
+				startDate + " IS NOT NULL",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.filter.buildWhere()
-			assert.Equal(t, tt.want, got)
+			assert.Equal(t, tt.want, tt.filter.buildWhere(today))
 		})
 	}
 }
@@ -320,22 +327,22 @@ func TestAreaFilter_buildWhere(t *testing.T) {
 		{
 			name:   "tag title",
 			filter: AreaFilter{TagTitle: new("important")},
-			want:   "TAG.title = 'important'",
+			want:   areaTagsSQL("TAG.title = 'important'"),
 		},
 		{
 			name:   "has tag true",
 			filter: AreaFilter{HasTag: new(true)},
-			want:   "TAG.title IS NOT NULL",
+			want:   areaTagsSQL(""),
 		},
 		{
 			name:   "has tag false",
 			filter: AreaFilter{HasTag: new(false)},
-			want:   "TAG.title IS NULL",
+			want:   "NOT " + areaTagsSQL(""),
 		},
 		{
 			name:   "tag title takes precedence over has tag",
 			filter: AreaFilter{TagTitle: new("work"), HasTag: new(true)},
-			want:   "TAG.title = 'work'",
+			want:   areaTagsSQL("TAG.title = 'work'"),
 		},
 		{
 			name:   "multiple filters",

@@ -58,8 +58,11 @@ func TestOpenTarget(t *testing.T) {
 func TestOpenQuery(t *testing.T) {
 	srv, rec := newWriteServer(t)
 	openTool(t, srv, OpenInput{Query: "milk"})
-	if got := rec.last(t).Query().Get("query"); got != "milk" {
-		t.Errorf("query = %q, want milk", got)
+	// show?query= would jump to an area, project, or tag named "milk"; a text
+	// query has to run the app's search.
+	u := rec.last(t)
+	if u.Path != "/search" || u.Query().Get("query") != "milk" {
+		t.Errorf("want search?query=milk, got %s", u)
 	}
 }
 

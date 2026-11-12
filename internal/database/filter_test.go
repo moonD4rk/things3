@@ -83,30 +83,24 @@ func TestWhereBuilder_addFilter(t *testing.T) {
 	})
 }
 
-func TestWhereBuilder_addOrFilter(t *testing.T) {
-	t.Run("value", func(t *testing.T) {
-		var w whereBuilder
-		w.addOrFilter("a", "b", new("test"), nil)
-		assert.Equal(t, "(a = 'test' OR b = 'test')", w.sql())
-	})
+func TestWhereBuilder_addTagFilter(t *testing.T) {
+	exists := func(cond string) string { return "EXISTS(" + cond + ")" }
 
-	t.Run("exists true", func(t *testing.T) {
-		var w whereBuilder
-		w.addOrFilter("a", "b", nil, new(true))
-		assert.Equal(t, "(a IS NOT NULL OR b IS NOT NULL)", w.sql())
-	})
+	var byTitle whereBuilder
+	byTitle.addTagFilter(exists, new("it's"), new(false))
+	assert.Equal(t, "EXISTS(TAG.title = 'it''s')", byTitle.sql(), "a title wins over has and is escaped")
 
-	t.Run("exists false requires both columns NULL", func(t *testing.T) {
-		var w whereBuilder
-		w.addOrFilter("a", "b", nil, new(false))
-		assert.Equal(t, "(a IS NULL AND b IS NULL)", w.sql())
-	})
+	var has whereBuilder
+	has.addTagFilter(exists, nil, new(true))
+	assert.Equal(t, "EXISTS()", has.sql())
 
-	t.Run("both nil", func(t *testing.T) {
-		var w whereBuilder
-		w.addOrFilter("a", "b", nil, nil)
-		assert.Equal(t, sqlTrue, w.sql())
-	})
+	var hasNot whereBuilder
+	hasNot.addTagFilter(exists, nil, new(false))
+	assert.Equal(t, "NOT EXISTS()", hasNot.sql())
+
+	var unset whereBuilder
+	unset.addTagFilter(exists, nil, nil)
+	assert.Equal(t, sqlTrue, unset.sql())
 }
 
 func TestWhereBuilder_addLikePrefix(t *testing.T) {
@@ -191,25 +185,11 @@ func TestWhereBuilder_addTruthy(t *testing.T) {
 	}
 }
 
-func TestWhereBuilder_addOr(t *testing.T) {
-	var w whereBuilder
-	w.addOr("a = 1", "b = 2")
-	assert.Equal(t, "(a = 1 OR b = 2)", w.sql())
-
-	var w2 whereBuilder
-	w2.addOr("", "b = 2", "")
-	assert.Equal(t, "(b = 2)", w2.sql())
-
-	var w3 whereBuilder
-	w3.addOr("", "")
-	assert.Equal(t, sqlTrue, w3.sql())
-}
-
 func TestWhereBuilder_addSearch(t *testing.T) {
 	var w whereBuilder
 	w.addSearch("buy milk")
 	assert.Equal(t,
-		`(TASK.title LIKE '%buy milk%' ESCAPE '\' OR TASK.notes LIKE '%buy milk%' ESCAPE '\' OR AREA.title LIKE '%buy milk%' ESCAPE '\')`,
+		`(TASK.title LIKE '%buy milk%' ESCAPE '\' OR TASK.notes LIKE '%buy milk%' ESCAPE '\')`,
 		w.sql())
 
 	var w2 whereBuilder
@@ -221,14 +201,14 @@ func TestWhereBuilder_addSearch_escapesLikeMetacharacters(t *testing.T) {
 	var w whereBuilder
 	w.addSearch("%")
 	assert.Equal(t,
-		`(TASK.title LIKE '%\%%' ESCAPE '\' OR TASK.notes LIKE '%\%%' ESCAPE '\' OR AREA.title LIKE '%\%%' ESCAPE '\')`,
+		`(TASK.title LIKE '%\%%' ESCAPE '\' OR TASK.notes LIKE '%\%%' ESCAPE '\')`,
 		w.sql())
 }
 
 func TestWhereBuilder_addCreatedAfter(t *testing.T) {
 	var w whereBuilder
-	w.addCreatedAfter("creationDate", time.Date(2024, 6, 15, 10, 30, 0, 0, time.Local))
-	assert.Equal(t, "datetime(creationDate, 'unixepoch', 'localtime') > '2024-06-15 10:30:00'", w.sql())
+	w.addCreatedAfter("creationDate", time.Unix(1718418600, 250_000_000))
+	assert.Equal(t, "creationDate > 1718418600.250000", w.sql(), "sub-second precision survives")
 
 	var w2 whereBuilder
 	w2.addCreatedAfter("creationDate", time.Time{})
@@ -249,104 +229,70 @@ func TestWhereBuilder_addCreatedAfter_locationInsensitive(t *testing.T) {
 	assert.Equal(t, local.sql(), west.sql())
 }
 
-func TestWhereBuilder_addDateFilter(t *testing.T) {
-	t.Run("nil value", func(t *testing.T) {
+func TestWhereBuilder_dateFilters(t *testing.T) {
+	today := time.Date(2024, 6, 15, 23, 59, 0, 0, time.Local)
+	const todayPacked = "132671360"
+
+	things := func(v *DateFilterValue) string {
 		var w whereBuilder
-		w.addDateFilter("col", nil, true)
-		assert.Equal(t, sqlTrue, w.sql())
+		w.addThingsDateFilter("startDate", v, today)
+		return w.sql()
+	}
+	unix := func(v *DateFilterValue) string {
+		var w whereBuilder
+		w.addUnixDateFilter("stopDate", v, today)
+		return w.sql()
+	}
+
+	t.Run("nil value adds nothing", func(t *testing.T) {
+		assert.Equal(t, sqlTrue, things(nil))
+		assert.Equal(t, sqlTrue, unix(nil))
 	})
 
-	t.Run("exists true", func(t *testing.T) {
-		var w whereBuilder
-		w.addDateFilter("col", &DateFilterValue{HasDate: new(true)}, true)
-		assert.Equal(t, "col IS NOT NULL", w.sql())
+	t.Run("existence", func(t *testing.T) {
+		assert.Equal(t, "startDate IS NOT NULL", things(&DateFilterValue{HasDate: new(true)}))
+		assert.Equal(t, "startDate IS NULL", things(&DateFilterValue{HasDate: new(false)}))
+		assert.Equal(t, "date(stopDate, 'unixepoch', 'localtime') IS NOT NULL", unix(&DateFilterValue{HasDate: new(true)}))
 	})
 
-	t.Run("exists false", func(t *testing.T) {
-		var w whereBuilder
-		w.addDateFilter("col", &DateFilterValue{HasDate: new(false)}, true)
-		assert.Equal(t, "col IS NULL", w.sql())
+	t.Run("relative filters use the injected today, not the wall clock", func(t *testing.T) {
+		assert.Equal(t, "startDate > "+todayPacked, things(&DateFilterValue{Relative: DateFuture}))
+		assert.Equal(t, "startDate <= "+todayPacked, things(&DateFilterValue{Relative: DatePast}))
+		assert.Equal(t, "date(stopDate, 'unixepoch', 'localtime') > '2024-06-15'", unix(&DateFilterValue{Relative: DateFuture}))
+		assert.Equal(t, "date(stopDate, 'unixepoch', 'localtime') <= '2024-06-15'", unix(&DateFilterValue{Relative: DatePast}))
 	})
 
-	t.Run("things date future", func(t *testing.T) {
-		var w whereBuilder
-		w.addDateFilter("startDate", &DateFilterValue{Relative: DateFuture}, true)
-		assert.Equal(t, "startDate > "+todayThingsDateSQL(), w.sql())
-	})
-
-	t.Run("things date past", func(t *testing.T) {
-		var w whereBuilder
-		w.addDateFilter("startDate", &DateFilterValue{Relative: DatePast}, true)
-		assert.Equal(t, "startDate <= "+todayThingsDateSQL(), w.sql())
-	})
-
-	t.Run("unix time future", func(t *testing.T) {
-		var w whereBuilder
-		w.addDateFilter("stopDate", &DateFilterValue{Relative: DateFuture}, false)
-		assert.Equal(t, "date(stopDate, 'unixepoch', 'localtime') > date('now', 'localtime')", w.sql())
-	})
-
-	t.Run("unix time past", func(t *testing.T) {
-		var w whereBuilder
-		w.addDateFilter("stopDate", &DateFilterValue{Relative: DatePast}, false)
-		assert.Equal(t, "date(stopDate, 'unixepoch', 'localtime') <= date('now', 'localtime')", w.sql())
-	})
-
-	t.Run("unix time specific date", func(t *testing.T) {
-		var w whereBuilder
-		w.addDateFilter("stopDate", &DateFilterValue{
-			Operator: "=",
-			Date:     new(time.Date(2024, 6, 15, 0, 0, 0, 0, time.Local)),
-		}, false)
-		assert.Equal(t, "date(stopDate, 'unixepoch', 'localtime') = date('2024-06-15')", w.sql())
+	t.Run("specific date", func(t *testing.T) {
+		day := time.Date(2024, 6, 1, 0, 0, 0, 0, time.Local)
+		assert.Equal(t, "startDate >= 132669568", things(&DateFilterValue{Operator: ">=", Date: &day}))
+		assert.Equal(t, "date(stopDate, 'unixepoch', 'localtime') = '2024-06-01'", unix(&DateFilterValue{Operator: "=", Date: &day}))
 	})
 
 	t.Run("specific date is location insensitive", func(t *testing.T) {
 		instant := time.Date(2024, 6, 15, 12, 0, 0, 0, time.FixedZone("EAST", 14*3600))
-		for _, isThingsDate := range []bool{true, false} {
-			var east, west whereBuilder
-			east.addDateFilter("col", &DateFilterValue{Operator: "=", Date: new(instant)}, isThingsDate)
-			west.addDateFilter("col", &DateFilterValue{
-				Operator: "=",
-				Date:     new(instant.In(time.FixedZone("WEST", -12*3600))),
-			}, isThingsDate)
-			assert.Equal(t, east.sql(), west.sql(), "isThingsDate=%v", isThingsDate)
+		elsewhere := instant.In(time.FixedZone("WEST", -12*3600))
+		for _, build := range []func(*DateFilterValue) string{things, unix} {
+			assert.Equal(t,
+				build(&DateFilterValue{Operator: "=", Date: &instant}),
+				build(&DateFilterValue{Operator: "=", Date: &elsewhere}))
 		}
 	})
 
 	// A caller can hand any time.Time to a comparison filter. Out-of-range years
-	// must still produce a condition: dropping it would widen the query instead of
-	// narrowing it, silently discarding whatever guard the filter was chained onto.
+	// must still produce a meaningful condition: dropping it would widen the query
+	// instead of narrowing it.
 	t.Run("out-of-range date clamps instead of vanishing", func(t *testing.T) {
-		for _, tc := range []struct {
-			name string
-			date time.Time
-			want string
-		}{
-			{"far future", time.Date(12026, 6, 15, 0, 0, 0, 0, time.Local), "date(stopDate, 'unixepoch', 'localtime') <= date('9999-12-31')"},
-			{"negative year", time.Date(-8215, 6, 15, 0, 0, 0, 0, time.Local), "date(stopDate, 'unixepoch', 'localtime') <= date('0001-01-02')"},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				var w whereBuilder
-				w.addDateFilter("stopDate", &DateFilterValue{Operator: "<=", Date: new(tc.date)}, false)
-				assert.Equal(t, tc.want, w.sql())
-			})
+		farFuture := time.Date(12026, 6, 15, 0, 0, 0, 0, time.Local)
+		negative := time.Date(-8215, 6, 15, 0, 0, 0, 0, time.Local)
 
-			t.Run(tc.name+" things date", func(t *testing.T) {
-				var w whereBuilder
-				w.addDateFilter("deadline", &DateFilterValue{Operator: "<=", Date: new(tc.date)}, true)
-				assert.NotEqual(t, sqlTrue, w.sql(), "an unencodable date must not drop the condition")
-			})
-		}
+		assert.Equal(t, "date(stopDate, 'unixepoch', 'localtime') <= '9999-12-31'", unix(&DateFilterValue{Operator: "<=", Date: &farFuture}))
+		assert.Equal(t, "date(stopDate, 'unixepoch', 'localtime') <= '0001-01-02'", unix(&DateFilterValue{Operator: "<=", Date: &negative}))
+		assert.Equal(t, "startDate <= 655347584", things(&DateFilterValue{Operator: "<=", Date: &farFuture}))
+		assert.Equal(t, "startDate <= 69888", things(&DateFilterValue{Operator: "<=", Date: &negative}))
 	})
 }
 
 func TestWhereBuilder_empty(t *testing.T) {
 	var w whereBuilder
 	assert.Equal(t, sqlTrue, w.sql())
-}
-
-func TestExistsSQL(t *testing.T) {
-	assert.Equal(t, "col IS NOT NULL", existsSQL("col", true))
-	assert.Equal(t, "col IS NULL", existsSQL("col", false))
 }

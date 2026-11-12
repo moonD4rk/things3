@@ -95,6 +95,8 @@ type TodoQueryBuilder interface {
 	Status() StatusFilter[TodoQueryBuilder]
 	Start() StartFilter[TodoQueryBuilder]
 	Trashed(trashed bool) TodoQueryBuilder
+	IncludeTrashed() TodoQueryBuilder
+	IncludeTemplates() TodoQueryBuilder
 
 	InArea(uuid string) TodoQueryBuilder
 	HasArea(has bool) TodoQueryBuilder
@@ -128,6 +130,8 @@ type ProjectQueryBuilder interface {
 	Status() StatusFilter[ProjectQueryBuilder]
 	Start() StartFilter[ProjectQueryBuilder]
 	Trashed(trashed bool) ProjectQueryBuilder
+	IncludeTrashed() ProjectQueryBuilder
+	IncludeTemplates() ProjectQueryBuilder
 
 	InArea(uuid string) ProjectQueryBuilder
 	HasArea(has bool) ProjectQueryBuilder

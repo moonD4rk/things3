@@ -21,7 +21,7 @@ func newScheduleCmd() *cobra.Command {
 }
 
 func runSchedule(cmd *cobra.Command, args []string, client *things3.Client) error {
-	match, err := resolve.ResolveOne(cmd.Context(), client, args[0])
+	match, err := resolve.ResolveTarget(cmd.Context(), client, args[0], resolve.PreferOpen)
 	if err != nil {
 		return fromResolveError(err)
 	}

@@ -11,6 +11,14 @@ import (
 // Shared Internal Query
 // =============================================================================
 
+// trashScope maps the Trashed(bool) argument to its scope.
+func trashScope(trashed bool) database.TrashScope {
+	if trashed {
+		return database.TrashOnly
+	}
+	return database.TrashExcluded
+}
+
 // taskQuery holds the shared query state for todo, project, and heading builders.
 //
 // Builders are copy-on-write: every chainable method shallow-copies the state
@@ -85,27 +93,44 @@ func (q *todoQuery) Start() StartFilter[TodoQueryBuilder] {
 	return &startFilter[TodoQueryBuilder]{with: q.withFilter}
 }
 
-// Trashed filters todos by trash status.
+// Trashed selects trashed todos only (true) or live todos only (false, the
+// default).
 func (q *todoQuery) Trashed(trashed bool) TodoQueryBuilder {
-	return q.withFilter(func(f *database.TaskFilter) { f.Trashed = &trashed })
+	return q.withFilter(func(f *database.TaskFilter) { f.Trash = trashScope(trashed) })
 }
 
-// InArea filters todos by a specific area UUID.
+// IncludeTrashed lifts the default exclusion of the Trash, returning trashed
+// todos and todos inside trashed projects alongside live ones.
+func (q *todoQuery) IncludeTrashed() TodoQueryBuilder {
+	return q.withFilter(func(f *database.TaskFilter) { f.Trash = database.TrashAny })
+}
+
+// IncludeTemplates lifts the default exclusion of repeating templates, the
+// hidden todos that schedule a repeating series. See [Todo.Template].
+func (q *todoQuery) IncludeTemplates() TodoQueryBuilder {
+	return q.withFilter(func(f *database.TaskFilter) { f.Templates = database.TemplatesAny })
+}
+
+// InArea filters todos by area UUID: todos directly in the area and todos in
+// any of the area's projects.
 func (q *todoQuery) InArea(uuid string) TodoQueryBuilder {
 	return q.withFilter(func(f *database.TaskFilter) { f.AreaUUID = &uuid })
 }
 
-// HasArea filters todos by whether they have an area.
+// HasArea filters todos by whether they belong to an area, directly or through
+// their project.
 func (q *todoQuery) HasArea(has bool) TodoQueryBuilder {
 	return q.withFilter(func(f *database.TaskFilter) { f.HasArea = &has })
 }
 
-// InProject filters todos by a specific project UUID.
+// InProject filters todos by project UUID, including todos under the project's
+// headings.
 func (q *todoQuery) InProject(uuid string) TodoQueryBuilder {
 	return q.withFilter(func(f *database.TaskFilter) { f.ProjectUUID = &uuid })
 }
 
-// HasProject filters todos by whether they have a project.
+// HasProject filters todos by whether they belong to a project, directly or
+// under one of its headings.
 func (q *todoQuery) HasProject(has bool) TodoQueryBuilder {
 	return q.withFilter(func(f *database.TaskFilter) { f.HasProject = &has })
 }
@@ -152,12 +177,10 @@ func (q *todoQuery) deadlineSuppressed(suppressed bool) TodoQueryBuilder {
 	return q.withFilter(func(f *database.TaskFilter) { f.DeadlineSuppressed = &suppressed })
 }
 
-// repeatingTemplates restricts the query to repeating templates (rows carrying a
-// recurrence rule), whose start-date filter targets the next occurrence. It is
-// unexported: repeating templates are a database internal, and Upcoming is its
-// only consumer.
-func (q *todoQuery) repeatingTemplates() TodoQueryBuilder {
-	return q.withFilter(func(f *database.TaskFilter) { f.RepeatingTemplates = new(true) })
+// onlyTemplates restricts the query to repeating templates. It is unexported:
+// the views that place templates on a date are its only consumers.
+func (q *todoQuery) onlyTemplates() TodoQueryBuilder {
+	return q.withFilter(func(f *database.TaskFilter) { f.Templates = database.TemplatesOnly })
 }
 
 // CreatedAfter filters todos created after the specified time.
@@ -309,9 +332,22 @@ func (q *projectQuery) Start() StartFilter[ProjectQueryBuilder] {
 	return &startFilter[ProjectQueryBuilder]{with: q.withFilter}
 }
 
-// Trashed filters projects by trash status.
+// Trashed selects trashed projects only (true) or live projects only (false,
+// the default).
 func (q *projectQuery) Trashed(trashed bool) ProjectQueryBuilder {
-	return q.withFilter(func(f *database.TaskFilter) { f.Trashed = &trashed })
+	return q.withFilter(func(f *database.TaskFilter) { f.Trash = trashScope(trashed) })
+}
+
+// IncludeTrashed lifts the default exclusion of the Trash, returning trashed
+// projects alongside live ones.
+func (q *projectQuery) IncludeTrashed() ProjectQueryBuilder {
+	return q.withFilter(func(f *database.TaskFilter) { f.Trash = database.TrashAny })
+}
+
+// IncludeTemplates lifts the default exclusion of repeating templates, the
+// hidden projects that schedule a repeating series. See [Project.Template].
+func (q *projectQuery) IncludeTemplates() ProjectQueryBuilder {
+	return q.withFilter(func(f *database.TaskFilter) { f.Templates = database.TemplatesAny })
 }
 
 // InArea filters projects by a specific area UUID.

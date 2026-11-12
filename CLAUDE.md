@@ -30,14 +30,18 @@ Core principles, in order of importance:
 - **Single entry point**: `NewClient()` is the only public constructor (functional options via `ClientOption`). Everything hangs off `Client`.
 - **Typed, copy-on-write query builders**: one builder per domain type (`Todos()`, `Projects()`, `Headings()`, `Areas()`, `Tags()`), no union Task type. Chainable filters clone the builder and return interfaces; terminals are `All`/`First`/`Count`. Generic sub-builders (`StatusFilter[T]`, `StartFilter[T]`, `DateFilter[T]`) keep filter chains type-safe.
 - **Flat data model**: no nested items. Upward relationships come inline for free from SQL JOINs (`todo.ProjectTitle`, `todo.AreaTitle`); downward relationships are separate builder queries (`Todos().InProject(uuid)`).
+- **Effective containers**: a todo reports where it lives, not what its row stores. The database leaves `project` and `area` NULL on a todo under a heading, and `area` NULL on anything inside a project; the read model resolves both (`internal/database/sql.go`), and `InProject`/`InArea` filter on the same expressions.
+- **Scopes are opt-out**: queries return live items only. `IncludeTrashed()` lifts the trash exclusion (which also hides todos inside a trashed project), `IncludeTemplates()` the repeating-template exclusion; a lookup by UUID wants both.
 - **View composition lives on Client**: anything beyond a single query is a Client method, not a builder trick - `Today()` (three-part composition with Evening ordering), `Upcoming()` (scheduled todos merged with repeating templates).
 - **Naming**: `With*` identity, `In*` relationship, `Has*` existence; enums type-prefixed (`StatusCompleted`, `StartInbox`).
 
 Domain facts that are easy to get wrong:
 
 - Enums map database integers: Status 0/2/3 = incomplete/canceled/completed; StartBucket 0/1/2 = inbox/anytime/someday.
-- Things stores dates in custom binary formats (27-bit date, packed time); all conversion is centralized in `internal/database/date.go` - never hand-roll it.
-- Repeating tasks: future occurrences are never materialized as rows. Only the template row (`rt1_recurrenceRule` set) exists, carrying the single next occurrence in `rt1_nextInstanceStartDate`. Normal queries exclude templates; `Upcoming()` opts them back in and maps the next occurrence to `StartDate`.
+- Things stores dates in custom binary formats (`year<<16 | month<<12 | day<<7`, packed time); all conversion is centralized in `internal/database/date.go` - never hand-roll it. The year field is open-ended, not 11 bits: 0001-01-01 means "unset" and 4001-01-01 means "decided per occurrence" (a repeating template's deadline). Neither sentinel is a date.
+- Timestamps are fractional Unix seconds and decode at microsecond precision; write verification depends on it to tell two writes within the same second apart.
+- "Today" comes from the client's clock (`WithClock`, `Client.Now`), never from SQLite's `now` or a bare `time.Now()`, so a pinned clock governs every relative filter and view.
+- Repeating tasks: future occurrences are never materialized as rows. Only the template row (`rt1_recurrenceRule` set) exists, carrying the single next occurrence in `rt1_nextInstanceStartDate`. Normal queries exclude templates; `Upcoming()` opts them back in. A template's `StartDate` is always its next occurrence, and `Template` flags it.
 
 ## CLI Architecture (cmd/things3)
 
@@ -57,7 +61,7 @@ List pipeline is always fetch -> tag-filter -> sort -> paginate, default page si
 
 Every action follows `runWrite` (`write.go`): resolve the target, execute the URL scheme, poll the database to confirm. Two cobra-free internal packages carry the logic and are candidates for promotion into the library:
 
-- `internal/resolve`: tiered matching - exact UUID -> UUID prefix (>= 4 chars) -> exact title -> title substring - open-before-closed; every 8-char UUID the CLI prints is a valid query, for targets and `--to` destinations alike.
+- `internal/resolve`: tiered matching - exact UUID -> UUID prefix (>= 4 chars) -> exact title -> title substring. Several matches narrow to the live ones, then to the single open one (`PreferOpen`; reopening uses `PreferClosed`), because a repeating task leaves same-titled completed copies behind. The UUID tiers reach trashed items and repeating templates so every 8-char UUID the CLI prints is a valid query; `ResolveTarget` then refuses those two for writes (`ReadOnlyError`), since the URL scheme cannot modify them.
 - `internal/verify`: polls the DB (2s budget, injectable clock) to confirm a fire-and-forget write landed.
 
 ### Exit-code contract
@@ -74,7 +78,7 @@ Commands only return errors; `main.go` owns rendering (`RenderError`, format-awa
 
 ## Development Workflow
 
-1. **Design first**: significant changes start as an RFC in `rfcs/NNN_snake_case_title.md` (header: Status/Author/Date; sections: Summary, Design, Implementation Notes). Current specs: RFC 009 (library query/model), RFC 012 (CLI) as amended by RFC 013 (list pagination, output envelope), RFC 014 (MCP server, implemented).
+1. **Design first**: significant changes start as an RFC in `rfcs/NNN_snake_case_title.md` (header: Status/Author/Date; sections: Summary, Design, Implementation Notes). Current specs: RFC 009 (library query/model), RFC 012 (CLI) as amended by RFC 013 (list pagination, output envelope), RFC 014 (MCP server, implemented), RFC 015 (read model and target resolution corrections, implemented).
 2. **Implement library before CLI** when a change spans both; keep the CLI a thin consumer.
 3. **Verify in both modules**: `go build`, `go test`, `golangci-lint run`, `gofumpt` before finishing.
 4. **Sync docs**: `README.md` and `cmd/things3/README.md` must match implemented behavior. Release notes use Library and CLI bullet sections with PR references.
@@ -84,6 +88,7 @@ House rules for every artifact: English only, no emoji, no local machine paths. 
 ## Testing
 
 - Table-driven throughout; integration tests run against the fixture in `testdata/` via `thingstest.DatabasePath(t)` with `t.Setenv("THINGSDB", ...)` or `--db`.
+- **Every fixture client is pinned to `thingstest.Now`** (`WithClock`; the CLI tests set the package-level `clock` in `TestMain`). The fixture holds absolute dates, so a test on the system clock breaks the day one of them passes. Never compare fixture data against `time.Now()`.
 - **Action-command tests never execute osascript**: they assert `--dry-run` URLs and error paths only. No test requires Things to be installed; resolve/verify are covered directly against the fixture. MCP write-tool tests do the same through an injected `Execute` recorder; protocol concerns (schema/enum enforcement, structured content, read-only tool listing) and the verified-write path run over an in-memory MCP transport, the latter by bumping fixture timestamps.
 - Every exported identifier gets a doc comment starting with its name. Real end-to-end write verification is manual, against a live Things app.
 

@@ -114,7 +114,7 @@ things3 anytime --sort title          # anytime todos, sorted by title
 | Command | Args | Description | Example |
 | --- | --- | --- | --- |
 | `show` | `<query>` | Quick Find across todos and projects. One match prints a detail view; several print a mixed list; none is an error | `things3 show "Write report"` |
-| `search` | `<query>` | Full-text search across todos and projects (title, notes, area). Empty results are fine | `things3 search meeting` |
+| `search` | `<query>` | Full-text search across the titles and notes of todos and projects. Empty results are fine | `things3 search meeting` |
 
 ### Actions
 
@@ -129,14 +129,14 @@ Every action resolves the target, executes the write, and verifies it. All accep
 | `schedule` | `<query> <when>` | - | Set When (the app's Cmd+S) | `things3 schedule "Write report" 2026-08-01` |
 | `move` | `<query>` | `--to <dest>` (required) | Move to a project or area (the app's Move) | `things3 move "Buy milk" --to Groceries` |
 | `edit` | `<query>` | `--title`, `--notes`, `--append-notes`, `--deadline`, `--clear-deadline`, `--tags`, `--add-tags` | Edit attributes (at least one flag) | `things3 edit "Report" --add-tags urgent` |
-| `open` | `[<query>\|<view>]` | `--dry-run` | Reveal an item or built-in list in Things.app; no args opens Today | `things3 open today` |
+| `open` | `[<query>\|<view>]` | `--search <text>`, `--dry-run` | Reveal an item or built-in list in Things.app, or run the app's search; no args opens Today | `things3 open today` |
 
 Notes:
 
 - `--when` and `schedule`'s `<when>` accept `today`, `tomorrow`, `evening`, `anytime`, `someday`, or `YYYY-MM-DD`.
 - `--deadline` takes `YYYY-MM-DD`; `--reminder` takes `HH:MM`.
 - `add`: `--project`, `--area`, and `--heading` are placement targets; `--heading` requires `--project`, and `--project`/`--area` are mutually exclusive.
-- `open` view names: `inbox`, `today`, `upcoming`, `anytime`, `someday`, `logbook`, `deadlines`.
+- `open` view names: `inbox`, `today`, `upcoming`, `anytime`, `someday`, `logbook`, `deadlines`. `--search <text>` opens the app's full-text search instead and cannot be combined with a query or view.
 - `version` and `completion` (shell completion) are also available.
 
 ## How queries resolve
@@ -148,11 +148,15 @@ Notes:
 3. **Exact title** - case-insensitive full-title match.
 4. **Title substring** - case-insensitive containment.
 
-Matches are ranked **open items before closed** (completed/canceled), with todos before projects on ties. Trashed items never match.
+Matches are ranked **live items first** (not trashed, not a repeating series), then **open before closed** (completed/canceled), with todos before projects on ties.
+
+The two UUID tiers reach everything that exists, including trashed items and repeating series, because `trash` and `upcoming` print their UUIDs. The two title tiers match live items only.
 
 **Every 8-character UUID the CLI prints is a valid query.** List rows show the first 8 characters of each UUID; because that satisfies the four-character prefix rule and is effectively unique, you can copy any printed short UUID straight back into `show`, `done`, `schedule`, and the rest.
 
-**The write rule:** write commands demand exactly one match.
+**Picking one:** `show` lists every match, while a write and `open` need exactly one. When several items match, the pick narrows to the live ones and then to the **single open one**: a repeating task leaves a trail of completed copies under the same title, and `done "Water plants"` means the one still open. If that still leaves several, the command reports the remaining candidates and exits `2`.
+
+**The write rule:** write commands demand exactly one match, and one Things lets them change. A trashed item or a repeating series resolves, but the write is refused with exit `1` and an explanation, because the URL scheme cannot modify either.
 
 - Zero matches -> "no item matches ..." error (exit 1).
 - One match -> the write proceeds.
@@ -226,19 +230,20 @@ Paginated lists end with a text-only footer (see [List flags](#list-flags)):
 | `status` | string | `incomplete`, `completed`, or `canceled` |
 | `notes` | string | optional |
 | `start` | string | `inbox`, `anytime`, or `someday` |
-| `area_uuid`, `area_title` | string | parent area, optional |
-| `project_uuid`, `project_title` | string | parent project, optional |
+| `area_uuid`, `area_title` | string | area the todo belongs to, directly or through its project; optional |
+| `project_uuid`, `project_title` | string | project the todo belongs to, directly or through its heading; optional |
 | `heading_uuid`, `heading_title` | string | parent heading, optional |
 | `tags` | array of string | optional |
 | `checklist` | array of item | populated on single-item `show` and verified `add`; optional |
 | `start_date` | string (date) | scheduled date, optional |
 | `deadline` | string (date) | optional |
 | `reminder` | string (time) | optional |
-| `created_at`, `modified_at` | string (RFC 3339) |  |
+| `created_at`, `modified_at` | string (RFC 3339) | microsecond precision |
 | `completed_at`, `canceled_at` | string (RFC 3339) | optional |
 | `trashed` | bool | optional (omitted when false) |
 | `evening` | bool | true for This Evening items; optional |
-| `repeating` | bool | instance of a repeating template; optional |
+| `repeating` | bool | belongs to a repeating series; optional |
+| `template` | bool | the repeating series itself rather than one of its copies: read-only, with `start_date` holding the next occurrence; optional |
 
 **Project** - identical to Todo minus `project_*`, `heading_*`, `checklist`, and `evening`.
 
@@ -295,7 +300,7 @@ Note: an **unverified send still exits 0**. The URL scheme is fire-and-forget, s
 
 Every action runs three phases:
 
-1. **Resolve** - the query is matched against the database (see "How queries resolve"). Exactly one match is required, or the command stops before touching Things.
+1. **Resolve** - the query is matched against the database (see "How queries resolve"). Exactly one writable match is required, or the command stops before touching Things.
 2. **Execute** - the change is sent to Things through the URL scheme (`osascript` in the background). The auth token required for updates is read automatically from the database; you never pass it.
 3. **Verify** - the CLI polls the database for a short budget to confirm the change (a new UUID for `add`, a status flip for `done`/`cancel`, an advanced modification time for `schedule`/`move`/`edit`).
 
@@ -309,7 +314,8 @@ Limits inherited from the Things URL scheme (the CLI absorbs these; it never pre
 - **No delete.** There is no delete or move-to-Trash command.
 - **No move to Inbox.** `move --to inbox` is rejected; use the Things app.
 - **Checklists are replace-only** when set on an existing item.
-- **Repeating rules are read-only.** Repeating items are flagged (`repeats`) but their schedules cannot be edited.
+- **Repeating series are read-only.** Repeating items are flagged (`repeats`). The copies Things creates are ordinary todos, but a write aimed at the series itself is refused.
+- **The Trash is read-only.** A trashed item can be shown and opened; restore it in the app before changing it.
 
 ## Environment
 
@@ -371,9 +377,9 @@ Thirteen verb-shaped tools mirror the CLI:
 | `add_todo`, `add_project` | write | create, with when / deadline / reminder / tags / checklist |
 | `complete` | write | done, cancel, or reopen via a status enum |
 | `schedule`, `move`, `edit` | write | reschedule, refile, or change attributes |
-| `open` | nav | reveal an item or list in the app |
+| `open` | nav | reveal an item or list in the app, or run its full-text search |
 
-Every id, target, and destination resolves by UUID, 4+ char prefix, exact title, then title substring; an ambiguous match returns candidate UUIDs to retry with. Lists paginate with `limit` and 1-based `page` in the `{items, total, page, pages}` envelope; `limit` carries machine-readable schema bounds (default 20, maximum 100), so an omitted `limit` is stamped to 20 and an over-cap value is rejected rather than silently clamped, while a non-positive `limit` or `page` falls back to the default page. List and search items shorten notes to 200 characters and set `notes_truncated`; `get` returns the full note. Writes are verified against the database and report `verified: true|false`; an accepted-but-unconfirmed send is still a success. Domain failures ride the envelope as a structured error (`invalid_input`, `not_found`, `ambiguous`, `execution_failed`) so a model can self-correct.
+Every id, target, and destination resolves by UUID, 4+ char prefix, exact title, then title substring. When a title names several items the single open one wins (the single closed one when `complete` reopens); an ambiguous match returns candidate UUIDs to retry with. Trashed items and repeating series resolve by UUID for `get` and `open`, flagged `trashed` or `template`, and a write to one returns `invalid_input`. Lists paginate with `limit` and 1-based `page` in the `{items, total, page, pages}` envelope; `limit` carries machine-readable schema bounds (default 20, maximum 100), so an omitted `limit` is stamped to 20 and an over-cap value is rejected rather than silently clamped, while a non-positive `limit` or `page` falls back to the default page. List and search items shorten notes to 200 characters and set `notes_truncated`; `get` returns the full note. Writes are verified against the database and report `verified: true|false`; an accepted-but-unconfirmed send is still a success. Domain failures ride the envelope as a structured error (`invalid_input`, `not_found`, `ambiguous`, `execution_failed`) so a model can self-correct.
 
 ### Flags
 
@@ -425,6 +431,6 @@ golangci-lint run
 gofumpt -l .
 ```
 
-Tests never execute the URL scheme; write commands are exercised in `--dry-run` mode, and reads run against the fixture supplied through `THINGSDB`. The resolver and verifier live in `cmd/things3/internal/resolve` and `cmd/things3/internal/verify` as cobra-free packages so they can be unit-tested directly.
+Tests never execute the URL scheme; write commands are exercised in `--dry-run` mode, and reads run against the fixture supplied through `THINGSDB`, with every client pinned to the fixture clock (`thingstest.Now`) so the fixture's dates keep their meaning as real time passes. The resolver and verifier live in `cmd/things3/internal/resolve` and `cmd/things3/internal/verify` as cobra-free packages so they can be unit-tested directly.
 
 Design docs: the accepted design decisions are captured in [RFC 012](../../rfcs/012_rfc_cli_ground_up_rebuild.md) and [RFC 013](../../rfcs/013_rfc_cli_list_pagination_and_context.md).

@@ -14,7 +14,7 @@ import (
 // query it and mutate the same file with execFixture.
 func serverOnPath(t *testing.T, path string) *Server {
 	t.Helper()
-	client, err := things3.NewClient(things3.WithDatabasePath(path))
+	client, err := things3.NewClient(things3.WithDatabasePath(path), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}
@@ -363,7 +363,7 @@ func TestUpcomingWindow(t *testing.T) {
 // test stays clock-independent.
 func furthestUpcoming(t *testing.T, items []Item) (uuid string, daysOut int) {
 	t.Helper()
-	today := time.Now()
+	today := thingstest.Now()
 	best := -1
 	for i := range items {
 		if items[i].When == "" {
@@ -399,7 +399,7 @@ func TestLogbookDefaultWindow(t *testing.T) {
 
 	// stopDate is a float Unix epoch; bump one row to now so the default window sees it.
 	target := full.Items[0].UUID
-	execFixture(t, path, "UPDATE TMTask SET stopDate = ? WHERE uuid = ?", time.Now().Unix(), target)
+	execFixture(t, path, "UPDATE TMTask SET stopDate = ? WHERE uuid = ?", thingstest.Now().Unix(), target)
 
 	windowed := listTodos(t, srv, ListTodosInput{View: "logbook"})
 	if windowed.Total != 1 || windowed.Items[0].UUID != target {
@@ -425,7 +425,7 @@ func TestLogbookDefaultWindowIsThirtyDays(t *testing.T) {
 	}
 	inside, outside := full.Items[0].UUID, full.Items[1].UUID
 	stoppedDaysAgo := func(n int, uuid string) {
-		execFixture(t, path, "UPDATE TMTask SET stopDate = ? WHERE uuid = ?", time.Now().AddDate(0, 0, -n).Unix(), uuid)
+		execFixture(t, path, "UPDATE TMTask SET stopDate = ? WHERE uuid = ?", thingstest.Now().AddDate(0, 0, -n).Unix(), uuid)
 	}
 	stoppedDaysAgo(29, inside)
 	stoppedDaysAgo(31, outside)

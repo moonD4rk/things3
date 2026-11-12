@@ -17,7 +17,7 @@ import (
 // testClient opens a client against a writable copy of the shared fixture.
 func testClient(t *testing.T) *things3.Client {
 	t.Helper()
-	client, err := things3.NewClient(things3.WithDatabasePath(thingstest.DatabasePath(t)))
+	client, err := things3.NewClient(things3.WithDatabasePath(thingstest.DatabasePath(t)), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}

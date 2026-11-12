@@ -14,7 +14,7 @@ import (
 func newTestClient(t *testing.T) *Client {
 	t.Helper()
 	initTestPaths()
-	client, err := NewClient(WithDatabasePath(testDatabasePath))
+	client, err := NewClient(WithDatabasePath(testDatabasePath), WithClock(thingstest.Now))
 	require.NoError(t, err)
 	t.Cleanup(func() { client.Close() })
 	return client
@@ -24,14 +24,14 @@ func TestNewClient(t *testing.T) {
 	initTestPaths()
 
 	t.Run("success", func(t *testing.T) {
-		client, err := NewClient(WithDatabasePath(testDatabasePath))
+		client, err := NewClient(WithDatabasePath(testDatabasePath), WithClock(thingstest.Now))
 		require.NoError(t, err)
 		require.NotNil(t, client)
 		assert.NoError(t, client.Close())
 	})
 
 	t.Run("nonexistent database", func(t *testing.T) {
-		_, err := NewClient(WithDatabasePath("/nonexistent/path/main.sqlite"))
+		_, err := NewClient(WithDatabasePath("/nonexistent/path/main.sqlite"), WithClock(thingstest.Now))
 		assert.Error(t, err)
 	})
 
@@ -106,7 +106,7 @@ func TestClientTokenEmptyInDatabase(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, raw.Close())
 
-	client, err := NewClient(WithDatabasePath(dbPath))
+	client, err := NewClient(WithDatabasePath(dbPath), WithClock(thingstest.Now))
 	require.NoError(t, err)
 	t.Cleanup(func() { client.Close() })
 

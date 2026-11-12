@@ -57,7 +57,7 @@ Actions:
   done        Complete a todo or project
   edit        Edit a todo or project's attributes
   move        Move a todo or project to a project or area (the app's Move)
-  open        Reveal an item or built-in list in Things.app
+  open        Reveal an item, built-in list, or search in Things.app
   schedule    Schedule a todo or project (the app's When)
 
 Flags:
@@ -84,7 +84,7 @@ things3 upcoming                     # scheduled todos grouped by date, repeatin
 things3 logbook --days 7 -n 5        # five most recent completions this week
 things3 anytime --tag work --sort title
 things3 search meeting --page 2      # paginated full-text search
-things3 show Stzhb3Sc                # any printed 8-char UUID is a valid query
+things3 show Stzhb3Sc                # any printed 8-char UUID is a valid query, trashed items included
 ```
 
 Text lists print rows like
@@ -114,7 +114,7 @@ things3 move "Ship v1" --to Launch
 things3 edit "Ship v1" --title "Ship v1.0" --clear-deadline
 ```
 
-Targets resolve by exact UUID, UUID prefix (4+ chars), exact title, then title substring. An ambiguous target prints a candidate table with a UUID hint, executes nothing, and exits `2`; success (including a sent-but-unconfirmed write) exits `0`; every other error exits `1`. Under `--json`, errors arrive on stderr as `{"error", "candidates"}`.
+Targets resolve by exact UUID, UUID prefix (4+ chars), exact title, then title substring. When a title names several items, the single open one wins, so `done "Water plants"` reaches today's todo however many completed copies the Logbook holds. A target that is still ambiguous prints a candidate table with a UUID hint, executes nothing, and exits `2`; success (including a sent-but-unconfirmed write) exits `0`; every other error exits `1`. Trashed items and repeating series resolve by UUID and can be shown, but a write to one is refused with an explanation. Under `--json`, errors arrive on stderr as `{"error", "candidates"}`.
 
 Inherited URL-scheme limits (not worked around): no delete or trash, no move to Inbox, checklist is replace-only, repeating rules are read-only, and unknown tags are silently ignored by Things.
 
@@ -196,13 +196,17 @@ client.Todos().Status().Incomplete().All(ctx)          // []Todo
 client.Todos().InProject(uuid).Count(ctx)              // int
 client.Todos().WithUUID(uuid).First(ctx)               // *Todo, checklist loaded
 client.Todos().Deadline().Before(t).All(ctx)           // date filters: Exists, Future, Past, On, Before, After, ...
+client.Todos().InArea(uuid).All(ctx)                   // loose todos and todos in the area's projects
+client.Todos().WithUUID(uuid).IncludeTrashed().IncludeTemplates().First(ctx) // any todo that exists
 client.Projects().InArea(uuid).All(ctx)
 client.Headings().InProject(uuid).All(ctx)
 client.Areas().All(ctx)
 client.Tags().All(ctx)
 ```
 
-Relationships are flat: parent references come inline for free (`todo.ProjectTitle`, `todo.AreaTitle` from SQL JOINs); children are separate queries (`Todos().InProject(uuid)`).
+Relationships are flat: parent references come inline for free (`todo.ProjectTitle`, `todo.AreaTitle` from SQL JOINs); children are separate queries (`Todos().InProject(uuid)`). A todo reports its effective containers: under a heading it carries the heading's project, and inside a project it carries that project's area, although the database stores neither on the todo itself.
+
+Queries return live items by default. `IncludeTrashed()` adds the Trash, and `IncludeTemplates()` adds repeating templates: the hidden items that schedule a repeating series, flagged `Template` and carrying their next occurrence as `StartDate`.
 
 ### Writes
 
@@ -236,6 +240,7 @@ client, _ := things3.NewClient(
     things3.WithForegroundExecution(),                // writes bring Things to the foreground
     things3.WithBackgroundNavigation(),               // show/navigation without stealing focus
     things3.WithPreloadToken(),                       // read the auth token at construction
+    things3.WithClock(clock),                         // pin "today" for reproducible reports and tests
 )
 ```
 

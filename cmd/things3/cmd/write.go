@@ -57,7 +57,7 @@ func wrapExecError(err error) error {
 // executes and, unless --no-verify, runs verifyFn and reports the result. An
 // unverified send is still success (exit 0).
 func runWrite(cmd *cobra.Command, action string, builder urlBuilder, verifyFn func(ctx context.Context) writeResult) error {
-	_, format := getOutput(cmd)
+	format := resolveFormat(cmd)
 
 	if dryRun, _ := cmd.Flags().GetBool(flagDryRun); dryRun {
 		url, err := builder.Build()
@@ -84,7 +84,7 @@ func runWrite(cmd *cobra.Command, action string, builder urlBuilder, verifyFn fu
 // emitResult writes the result to stdout and, in text mode, the unverified
 // caveat to stderr.
 func emitResult(cmd *cobra.Command, r *writeResult) error {
-	_, format := getOutput(cmd)
+	format := resolveFormat(cmd)
 	// Surface a stderr caveat only when it adds detail beyond the stdout line
 	// (ambiguity or an underlying error), not for the plain not-confirmed case.
 	if format == formatText && !r.Verified && r.Message != "" && r.Message != genericUnverified {

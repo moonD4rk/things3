@@ -31,15 +31,11 @@ func runShow(cmd *cobra.Command, args []string, client *things3.Client) error {
 	case 1:
 		return showOne(cmd, client, matches[0])
 	default:
-		items := make([]mixedItem, len(matches))
+		items := make([]things3.Item, len(matches))
 		for i, m := range matches {
-			if m.Kind == resolve.KindProject {
-				items[i] = projectMixed(m.Project)
-			} else {
-				items[i] = todoMixed(m.Todo)
-			}
+			items[i] = things3.Item{Todo: m.Todo, Project: m.Project}
 		}
-		return outputMixed(cmd, items)
+		return outputItems(cmd, items, nil, defaultRow)
 	}
 }
 

@@ -84,19 +84,21 @@ The `next:` hint disappears on the last page (`-- 10-10 of 10 (page 4/4) | all: 
 
 | Command | Flags | Description | Example |
 | --- | --- | --- | --- |
-| `today` | - | Today's todos, with a This Evening section when present | `things3 today` |
+| `today` | - | The Today list: todos and projects scheduled into Today, those whose day has come, and unscheduled ones with a due deadline; a This Evening section when present | `things3 today` |
 | `inbox` | - | Incomplete todos in the Inbox | `things3 inbox` |
-| `upcoming` | `--days N` (0 = all) | Scheduled future todos plus repeating tasks at their next occurrence, grouped by date | `things3 upcoming --days 7` |
-| `anytime` | - | Anytime todos, grouped by project or area | `things3 anytime` |
-| `someday` | - | Someday todos with no scheduled date | `things3 someday` |
-| `logbook` | `--days N` (default 30, 0 = all) | Completed and canceled todos, most recent first | `things3 logbook --days 7` |
-| `deadlines` | `--days N` (0 = all, keeps overdue) | Incomplete todos with deadlines, soonest first | `things3 deadlines --days 7` |
-| `trash` | - | Trashed todos and projects (mixed list) | `things3 trash` |
+| `upcoming` | `--days N` (0 = all) | Grouped by date: todos and projects scheduled for a future day, each repeating series at its next occurrence, and unscheduled items at their future deadline; series with no next occurrence trail under `No date` | `things3 upcoming --days 7` |
+| `anytime` | - | The todos you can act on now, grouped by project or area. Todos of a project that sits in Someday are not listed | `things3 anytime` |
+| `someday` | - | Someday projects and the unscheduled Someday todos that stand on their own (one inside a project stays in its project) | `things3 someday` |
+| `logbook` | `--days N` (default 30, 0 = all) | Completed and canceled projects and todos, most recent first. The todos of a closed project are part of its row | `things3 logbook --days 7` |
+| `deadlines` | `--days N` (0 = all, keeps overdue) | Open todos and projects with deadlines, soonest first | `things3 deadlines --days 7` |
+| `trash` | - | Trashed todos and projects, most recently trashed first. The trashed todos of a trashed project are part of its row | `things3 trash` |
+
+Each view lists what the Things app lists there, in the app's order: the views were checked item for item against the app. That is why most of them hold projects as well as todos.
 
 The **Flags** column lists view-specific flags only; every view also accepts the shared [List flags](#list-flags) (`--page`, `--all`, `--sort`, `--desc`, `--tag`). For example:
 
 ```bash
-things3 upcoming --tag work           # only repeating/scheduled todos tagged work
+things3 upcoming --tag work           # only upcoming items tagged work
 things3 logbook -n 5 --page 2         # the second page of five completed items
 things3 anytime --sort title          # anytime todos, sorted by title
 ```
@@ -174,24 +176,17 @@ List rows are compact and columnar:
 STATUS   UUID      TITLE
 [ ]      5pUx6PES  Review pull requests | 2026-07-02 | @Work / Backend | #urgent
 [ ]      A1b2C3d4  Call the dentist | due:2026-07-05 | @Errands | #errands
+( )      3x1QqJqf  Website redesign | due:2026-08-01 | @Work
 [x]      7F4vqUNi  Draft release notes | 2026-06-30
 ```
 
-- **STATUS** - `[ ]` incomplete, `[x]` completed, `[-]` canceled.
+- **STATUS** - the mark's shape is the item's type, as in the app: square for a todo, round for a project. `[ ]` / `( )` incomplete, `[x]` / `(x)` completed, `[-]` / `(-)` canceled.
 - **UUID** - first 8 characters (a valid query).
-- **TITLE** - followed by optional `|` suffixes, in order: a date (`YYYY-MM-DD` for a scheduled/closed date, `due:YYYY-MM-DD` for a deadline), a container (`@Project` with `/ Heading` when set, else `@Area`), `#tags`, and `repeats` for repeating items.
+- **TITLE** - followed by optional `|` suffixes, in order: a date (`YYYY-MM-DD` for a scheduled/closed date, `due:YYYY-MM-DD` for a deadline), a container (`@Project` with `/ Heading` when set, else `@Area`; a project's container is its `@Area`), `#tags`, and `repeats` for repeating items.
 
 The container segment makes each row legible on its own. Views that already group by container (`anytime`) omit it to avoid repeating the group header on every row.
 
-Mixed lists (`trash`, `search`, and multi-match `show`) insert a **TYPE** column:
-
-```
-STATUS   UUID      TYPE     TITLE
-[ ]      A1b2C3d4  todo     Call the dentist | due:2026-07-05
-[x]      3x1QqJqf  project  Website redesign | 2026-06-30
-```
-
-Grouped views add headers in **text mode only**: `today` splits into `Today` / `This Evening`, `upcoming` groups by date (each repeating task appears under its next occurrence with a `repeats` marker), `anytime` groups by project or area. `areas` and `tags` print as simple `- Title` lists. A single-match `show` prints a vertical detail view (Title, UUID, Status, Start, Project/Area/Heading, Tags, When, Deadline, Reminder, Done/Canceled, Notes, Checklist; a project detail is followed by its incomplete todos).
+Grouped views add headers in **text mode only**: `today` splits into `Today` / `This Evening`, `upcoming` groups by date (each repeating series appears under its next occurrence with a `repeats` marker, an unscheduled item under its deadline), `anytime` groups by project or area. `areas` and `tags` print as simple `- Title` lists. A single-match `show` prints a vertical detail view (Title, UUID, Status, Start, Project/Area/Heading, Tags, When, Deadline, Reminder, Done/Canceled, Notes, Checklist; a project detail is followed by its incomplete todos).
 
 Paginated lists end with a text-only footer (see [List flags](#list-flags)):
 
@@ -247,7 +242,7 @@ Paginated lists end with a text-only footer (see [List flags](#list-flags)):
 
 **Project** - identical to Todo minus `project_*`, `heading_*`, `checklist`, and `evening`.
 
-**Mixed items** (`trash`, `search`, multi-match `show`) - the full todo or project object with an added `type` discriminator:
+**List items** (every View, `projects`, `search`, multi-match `show`) - the full todo or project object, led by a `type` discriminator (`todo` or `project`):
 
 ```json
 {
@@ -370,7 +365,7 @@ Thirteen verb-shaped tools mirror the CLI:
 
 | Tool | Kind | Purpose |
 | --- | --- | --- |
-| `list_todos` | read | a sidebar view (`view`: inbox, today, upcoming, anytime, someday, logbook, deadlines, trash), optionally narrowed by project, area, or tag, or a `days` window on upcoming/logbook/deadlines (logbook defaults to the last 30 days, 0 = all) |
+| `list_todos` | read | a sidebar view exactly as the app lists it (`view`: inbox, today, upcoming, anytime, someday, logbook, deadlines, trash): todos and, where the app shows them, projects, told apart by `type`. Optionally narrowed by project, area, or tag, or a `days` window on upcoming/logbook/deadlines (logbook defaults to the last 30 days, 0 = all) |
 | `list_projects`, `list_areas`, `list_tags` | read | the collections, paginated |
 | `search` | read | quick find across todos and projects |
 | `get` | read | resolve one item; a project answer nests its incomplete todos and headings |

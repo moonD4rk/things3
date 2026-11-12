@@ -28,12 +28,5 @@ func runSearch(cmd *cobra.Command, args []string, client *things3.Client) error 
 	if err != nil {
 		return err
 	}
-	items := make([]mixedItem, 0, len(todos)+len(projects))
-	for i := range todos {
-		items = append(items, todoMixed(&todos[i]))
-	}
-	for i := range projects {
-		items = append(items, projectMixed(&projects[i]))
-	}
-	return outputMixedList(cmd, items)
+	return outputItems(cmd, append(todoItems(todos), projectItems(projects)...), nil, defaultRow)
 }

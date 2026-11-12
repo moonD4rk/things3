@@ -40,7 +40,7 @@ func runProjects(cmd *cobra.Command, _ []string, client *things3.Client) error {
 	if err != nil {
 		return err
 	}
-	return outputProjectList(cmd, projects)
+	return outputItems(cmd, projectItems(projects), nil, defaultRow)
 }
 
 func newAreasCmd() *cobra.Command {

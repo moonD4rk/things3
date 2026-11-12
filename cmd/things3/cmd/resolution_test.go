@@ -72,8 +72,8 @@ func TestTemplateSentinelDeadlineIsNotPrinted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("upcoming: %v", err)
 	}
-	if strings.Contains(out, "due:") {
-		t.Errorf("the repeating series must not show a deadline:\n%s", out)
+	if row := lineContaining(t, out, uuidTemplate[:8]); strings.Contains(row, "due:") {
+		t.Errorf("the repeating series must not show a deadline: %q", row)
 	}
 }
 

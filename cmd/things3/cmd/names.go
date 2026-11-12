@@ -1,5 +1,7 @@
 package cmd
 
+import "github.com/moond4rk/things3"
+
 // Built-in view and when-keyword names shared across commands.
 const (
 	nameInbox     = "inbox"
@@ -9,6 +11,7 @@ const (
 	nameSomeday   = "someday"
 	nameLogbook   = "logbook"
 	nameDeadlines = "deadlines"
+	nameTrash     = "trash"
 	nameTomorrow  = "tomorrow"
 	nameEvening   = "evening"
 )
@@ -18,6 +21,6 @@ const (
 	actionAdd  = "add"
 	actionOpen = "open"
 
-	typeTodo    = "todo"
-	typeProject = "project"
+	typeTodo    = things3.ItemTypeTodo
+	typeProject = things3.ItemTypeProject
 )

@@ -94,6 +94,14 @@ func projectItem(p *things3.Project) Item {
 	return it
 }
 
+// convertItem converts a library view item into the unified Item shape.
+func convertItem(it *things3.Item) Item {
+	if it.Project != nil {
+		return projectItem(it.Project)
+	}
+	return todoItem(it.Todo)
+}
+
 // todoItems converts a slice of Todos into Items.
 func todoItems(todos []things3.Todo) []Item {
 	items := make([]Item, len(todos))

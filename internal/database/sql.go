@@ -1,6 +1,9 @@
 package database
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // sqlTrue is the default WHERE predicate.
 const sqlTrue = "TRUE"
@@ -24,8 +27,41 @@ var (
 		filterIsNotRecurring, colStartDate, colNextInstanceStartDate, minThingsDate, colNextInstanceStartDate,
 	)
 
+	// A task outside any project counts as sitting in an active, open, live one.
+	sqlProjectStart   = "COALESCE(PROJECT.start, PROJECT_OF_HEADING.start, 1)"
+	sqlProjectStatus  = "COALESCE(PROJECT.status, PROJECT_OF_HEADING.status, 0)"
+	sqlProjectTrashed = "COALESCE(PROJECT.trashed, PROJECT_OF_HEADING.trashed, 0)"
+
+	// The day Upcoming files a task under: its start date, else its deadline.
+	sqlUpcomingDate = fmt.Sprintf("COALESCE((%s), TASK.%s)", sqlStartDate, colDeadline)
+
 	sqlHasChecklist = fmt.Sprintf("EXISTS (SELECT 1 FROM %s ITEM WHERE ITEM.task = TASK.uuid)", tableChecklistItem)
 )
+
+// inTodaySQL is the Today list's membership rule: scheduled into Today, or
+// scheduled for a day that has arrived (the app moves those into Today the next
+// time it runs), or unscheduled with a deadline that is due and has not been
+// dismissed from Today.
+func inTodaySQL(today time.Time) string {
+	day := timeToThingsDate(today.In(time.Local))
+	return fmt.Sprintf(
+		"((TASK.start = 1 AND TASK.%[1]s IS NOT NULL)"+
+			" OR (TASK.start = 2 AND TASK.%[1]s <= %[3]d)"+
+			" OR (TASK.%[1]s IS NULL AND TASK.%[2]s <= %[3]d AND TASK.deadlineSuppressionDate IS NULL))",
+		colStartDate, colDeadline, day,
+	)
+}
+
+// inUpcomingSQL is the Upcoming list's membership rule for dated entries: a
+// start date in the future (for a repeating template, its next occurrence), or
+// no start date at all and a deadline in the future.
+func inUpcomingSQL(today time.Time) string {
+	day := timeToThingsDate(today.In(time.Local))
+	return fmt.Sprintf(
+		"((%[1]s) > %[4]d OR ((%[1]s) IS NULL AND TASK.%[2]s AND TASK.%[3]s > %[4]d))",
+		sqlStartDate, filterIsNotRecurring, colDeadline, day,
+	)
+}
 
 // taskTagsSQL is an EXISTS predicate over a task's tags, narrowed by cond (a
 // predicate on TAG) when non-empty. A dangling tag reference never satisfies it.
@@ -53,9 +89,6 @@ func tagLinkSQL(linkTable, ownerColumn, owner, cond string) string {
 func buildTasksSQL(wherePredicate, orderPredicate string, limit *int) string {
 	if wherePredicate == "" {
 		wherePredicate = sqlTrue
-	}
-	if orderPredicate == "" {
-		orderPredicate = fmt.Sprintf("TASK.%q", IndexDefault)
 	}
 
 	sql := fmt.Sprintf(`

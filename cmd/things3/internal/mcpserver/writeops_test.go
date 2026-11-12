@@ -228,6 +228,22 @@ func TestMoveConfirmed(t *testing.T) {
 	assertConfirmed(t, res, thingstest.UUIDTodoInToday)
 }
 
+// Things leaves a todo's modification date alone when only its checklist
+// changes; the write is still confirmed, and the result carries the checklist.
+func TestEditChecklistConfirmed(t *testing.T) {
+	const addItem = `INSERT INTO TMChecklistItem (uuid, title, status, "index", task, creationDate, userModificationDate)
+		VALUES ('AddedChecklistItem0001', 'Passport', 0, 0, ?, 1, 1)`
+	path := thingstest.DatabasePath(t)
+	srv := confirmingServer(t, path, func() {
+		execFixture(t, path, addItem, thingstest.UUIDTodoInToday)
+	})
+	res := edit(t, srv, EditInput{Target: thingstest.UUIDTodoInToday, AppendChecklist: []string{"Passport"}})
+	assertConfirmed(t, res, thingstest.UUIDTodoInToday)
+	if len(res.Item.Checklist) != 1 || res.Item.Checklist[0].Title != "Passport" {
+		t.Errorf("the result should carry the new checklist, got %+v", res.Item.Checklist)
+	}
+}
+
 func TestEditConfirmed(t *testing.T) {
 	path := thingstest.DatabasePath(t)
 	srv := confirmingServer(t, path, func() {

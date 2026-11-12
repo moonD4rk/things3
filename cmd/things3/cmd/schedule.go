@@ -41,5 +41,5 @@ func runSchedule(cmd *cobra.Command, args []string, client *things3.Client) erro
 	if err != nil {
 		return err
 	}
-	return runWrite(cmd, "schedule", builder, modifiedVerifier("schedule", match, matchModifiedAt(match), client))
+	return runWrite(cmd, "schedule", builder, modifiedVerifier("schedule", match, client))
 }

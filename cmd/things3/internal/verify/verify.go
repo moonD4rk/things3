@@ -5,6 +5,7 @@ package verify
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -164,7 +165,7 @@ func AddedProject(ctx context.Context, c *things3.Client, title string, t0 time.
 func TodoStatus(ctx context.Context, c *things3.Client, uuid string, want things3.Status, opts Options) (*things3.Todo, Outcome, error) {
 	var found *things3.Todo
 	confirmed, lastErr := Poll(ctx, opts, func(ctx context.Context) (bool, error) {
-		todo, err := c.Todos().WithUUID(uuid).Status().Any().First(ctx)
+		todo, err := c.Todos().WithUUID(uuid).Status().Any().IncludeChecklist().First(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -199,16 +200,19 @@ func ProjectStatus(
 	return nil, Unverified, lastErr
 }
 
-// TodoModified confirms a todo's ModifiedAt advanced past baseline
-// (schedule/move/edit). baseline is the resolved item's own ModifiedAt.
-func TodoModified(ctx context.Context, c *things3.Client, uuid string, baseline time.Time, opts Options) (*things3.Todo, Outcome, error) {
+// TodoModified confirms a write changed a todo (schedule/move/edit): its
+// ModifiedAt advanced past before's, or its checklist no longer holds the items
+// before had. Things leaves a todo's own modification date alone when only the
+// checklist changes, so before must carry its checklist, as a target from
+// resolve.ResolveTarget does.
+func TodoModified(ctx context.Context, c *things3.Client, before *things3.Todo, opts Options) (*things3.Todo, Outcome, error) {
 	var found *things3.Todo
 	confirmed, lastErr := Poll(ctx, opts, func(ctx context.Context) (bool, error) {
-		todo, err := c.Todos().WithUUID(uuid).Status().Any().First(ctx)
+		todo, err := c.Todos().WithUUID(before.UUID).Status().Any().IncludeChecklist().First(ctx)
 		if err != nil {
 			return false, err
 		}
-		if todo.ModifiedAt.After(baseline) {
+		if todo.ModifiedAt.After(before.ModifiedAt) || !sameChecklist(todo.Checklist, before.Checklist) {
 			found = todo
 			return true, nil
 		}
@@ -217,17 +221,18 @@ func TodoModified(ctx context.Context, c *things3.Client, uuid string, baseline 
 	return resolveOutcome(found, confirmed, lastErr)
 }
 
-// ProjectModified confirms a project's ModifiedAt advanced past baseline.
+// ProjectModified confirms a write changed a project: its ModifiedAt advanced
+// past before's.
 func ProjectModified(
-	ctx context.Context, c *things3.Client, uuid string, baseline time.Time, opts Options,
+	ctx context.Context, c *things3.Client, before *things3.Project, opts Options,
 ) (*things3.Project, Outcome, error) {
 	var found *things3.Project
 	confirmed, lastErr := Poll(ctx, opts, func(ctx context.Context) (bool, error) {
-		project, err := c.Projects().WithUUID(uuid).Status().Any().First(ctx)
+		project, err := c.Projects().WithUUID(before.UUID).Status().Any().First(ctx)
 		if err != nil {
 			return false, err
 		}
-		if project.ModifiedAt.After(baseline) {
+		if project.ModifiedAt.After(before.ModifiedAt) {
 			found = project
 			return true, nil
 		}
@@ -237,6 +242,12 @@ func ProjectModified(
 		return found, Confirmed, nil
 	}
 	return nil, Unverified, lastErr
+}
+
+// sameChecklist reports whether two checklists hold the same items in the same
+// order. Every checklist write adds or removes rows, so the UUIDs settle it.
+func sameChecklist(a, b []things3.ChecklistItem) bool {
+	return slices.EqualFunc(a, b, func(x, y things3.ChecklistItem) bool { return x.UUID == y.UUID })
 }
 
 func resolveOutcome(found *things3.Todo, confirmed bool, lastErr error) (*things3.Todo, Outcome, error) {

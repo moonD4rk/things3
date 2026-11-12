@@ -203,7 +203,7 @@ Paginated lists end with a text-only footer (see [List flags](#list-flags)):
 
 ### JSON and YAML
 
-`--json` and `--yaml` carry the full model objects and **ignore all text-only grouping**. YAML mirrors JSON field-for-field. Timestamps are RFC 3339; date-only and time-only fields are formatted accordingly. Fields marked optional below are omitted when empty or zero.
+`--json` and `--yaml` carry the full model objects and **ignore all text-only grouping**. YAML mirrors JSON field-for-field. Every date and time is an RFC 3339 string: a date-only field (`start_date`, `deadline`) is local midnight of that day, and `reminder` is a time of day carried on the zero date (`0000-01-01T09:30:00Z`). Fields marked optional below are omitted when empty or zero.
 
 **List envelope.** Every list command (all Views, `projects`, `search`, multi-match `show`, `areas`, `tags`) wraps its page in a self-describing envelope:
 
@@ -231,10 +231,10 @@ Paginated lists end with a text-only footer (see [List flags](#list-flags)):
 | `project_uuid`, `project_title` | string | project the todo belongs to, directly or through its heading; optional |
 | `heading_uuid`, `heading_title` | string | parent heading, optional |
 | `tags` | array of string | optional |
-| `checklist` | array of item | populated on single-item `show` and verified `add`; optional |
-| `start_date` | string (date) | scheduled date, optional |
-| `deadline` | string (date) | optional |
-| `reminder` | string (time) | optional |
+| `checklist` | array of item | populated on single-item `show` and on the todo a verified write returns; optional |
+| `start_date` | string (RFC 3339) | scheduled date, at local midnight; optional |
+| `deadline` | string (RFC 3339) | at local midnight; optional |
+| `reminder` | string (RFC 3339) | time of day on the zero date; optional |
 | `created_at`, `modified_at` | string (RFC 3339) | microsecond precision |
 | `completed_at`, `canceled_at` | string (RFC 3339) | optional |
 | `trashed` | bool | optional (omitted when false) |
@@ -300,9 +300,9 @@ Every action runs three phases:
 
 1. **Resolve** - the query is matched against the database (see "How queries resolve"). Exactly one writable match is required, or the command stops before touching Things.
 2. **Execute** - the change is sent to Things through the URL scheme (`osascript` in the background). The auth token required for updates is read automatically from the database; you never pass it.
-3. **Verify** - the CLI polls the database for a short budget to confirm the change (a new UUID for `add`, a status flip for `done`/`cancel`, an advanced modification time for `schedule`/`move`/`edit`).
+3. **Verify** - the CLI polls the database for a short budget to confirm the change (a new UUID for `add`, a status flip for `done`/`cancel`, an advanced modification time or a changed checklist for `schedule`/`move`/`edit`).
 
-A **verified** write prints the resulting item line (`done: [x] 5pUx6PES Review pull requests`). An **unverified** send - the write was accepted but not confirmed within the poll window - prints `sent to Things (not yet confirmed)` and still exits 0.
+A **verified** write prints the resulting item line (`done: [x] 5pUx6PES Review pull requests`). An **unverified** send - the write was accepted but not confirmed within the poll window - prints `sent to Things (not yet confirmed)` and still exits 0. A `schedule`, `move`, or `edit` that changes nothing, such as scheduling an item for the day it already has, is reported the same way: Things leaves the item untouched, so there is nothing to observe. `done` and `cancel` are confirmed by the status itself, so repeating one is still verified.
 
 - `--dry-run` prints the exact `things:///` URL and executes nothing, e.g. `things:///add?tags=work&title=Draft%20release%20notes&when=2026-07-02`. Ideal for inspecting or piping a command.
 - `--no-verify` executes but skips the confirmation poll, reporting the send as unverified.

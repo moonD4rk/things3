@@ -34,8 +34,9 @@ const instructions = `things3 exposes the Things 3 task manager as verb-shaped t
 
 Reads (list_todos, list_projects, list_areas, list_tags, search, get) query the local database.
 Writes (add_todo, add_project, complete, schedule, move, edit) go through the Things URL scheme and are
-confirmed against the database; each result reports verified true or false. open reveals an item or list
-in the Things app.
+confirmed against the database; each result reports verified true or false. A schedule, move, or edit that
+changes nothing reports false, because Things leaves an item that is already in the requested state
+untouched; complete is confirmed by the status itself. open reveals an item or list in the Things app.
 
 Wherever a tool accepts an id, target, or destination it resolves a full UUID, a UUID prefix of four or
 more characters, an exact title, or a title substring. When a title names several items the single open one

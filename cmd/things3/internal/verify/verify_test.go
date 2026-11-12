@@ -25,6 +25,37 @@ func newClient(t *testing.T, dbPath string) *things3.Client {
 
 func instantSleep(context.Context, time.Duration) error { return nil }
 
+func execFixture(t *testing.T, dbPath, query string, args ...any) {
+	t.Helper()
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("open fixture: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if _, err := db.ExecContext(context.Background(), query, args...); err != nil {
+		t.Fatalf("exec fixture: %v", err)
+	}
+}
+
+// loadTodo reads a todo the way a write target is resolved: checklist included.
+func loadTodo(t *testing.T, c *things3.Client, uuid string) *things3.Todo {
+	t.Helper()
+	todo, err := c.Todos().WithUUID(uuid).Status().Any().IncludeChecklist().First(context.Background())
+	if err != nil {
+		t.Fatalf("todo %s: %v", uuid, err)
+	}
+	return todo
+}
+
+func loadProject(t *testing.T, c *things3.Client, uuid string) *things3.Project {
+	t.Helper()
+	project, err := c.Projects().WithUUID(uuid).Status().Any().First(context.Background())
+	if err != nil {
+		t.Fatalf("project %s: %v", uuid, err)
+	}
+	return project
+}
+
 func countingSleep(maxCalls int, count *int) func(context.Context, time.Duration) error {
 	return func(context.Context, time.Duration) error {
 		*count++
@@ -118,15 +149,7 @@ func TestAddedTodoUnverified(t *testing.T) {
 
 func TestAddedTodoAmbiguous(t *testing.T) {
 	dbPath := thingstest.DatabasePath(t)
-	db, err := sql.Open("sqlite3", dbPath)
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	if _, err := db.ExecContext(context.Background(),
-		"UPDATE TMTask SET title = 'To-Do in Today' WHERE uuid = ?", thingstest.UUIDTodoChecklist); err != nil {
-		t.Fatalf("inject duplicate title: %v", err)
-	}
-	_ = db.Close()
+	execFixture(t, dbPath, "UPDATE TMTask SET title = 'To-Do in Today' WHERE uuid = ?", thingstest.UUIDTodoChecklist)
 
 	c := newClient(t, dbPath)
 	_, outcome, _ := AddedTodo(context.Background(), c, "To-Do in Today", pastT0, Options{Sleep: instantSleep})
@@ -134,10 +157,6 @@ func TestAddedTodoAmbiguous(t *testing.T) {
 		t.Errorf("two same-title rows should be AmbiguousMatch, got %v", outcome)
 	}
 }
-
-// futureBaseline is later than any fixture ModifiedAt, so a modification poll
-// never confirms against it.
-var futureBaseline = time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC)
 
 func TestTodoStatusUnverified(t *testing.T) {
 	c := newClient(t, thingstest.DatabasePath(t))
@@ -160,7 +179,9 @@ func TestProjectStatusConfirmed(t *testing.T) {
 
 func TestTodoModifiedConfirmed(t *testing.T) {
 	c := newClient(t, thingstest.DatabasePath(t))
-	todo, outcome, err := TodoModified(context.Background(), c, thingstest.UUIDTodoInToday, pastT0, Options{Sleep: instantSleep})
+	before := loadTodo(t, c, thingstest.UUIDTodoInToday)
+	before.ModifiedAt = pastT0
+	todo, outcome, err := TodoModified(context.Background(), c, before, Options{Sleep: instantSleep})
 	if err != nil || outcome != Confirmed || todo == nil {
 		t.Fatalf("want Confirmed, got outcome=%v err=%v", outcome, err)
 	}
@@ -169,16 +190,47 @@ func TestTodoModifiedConfirmed(t *testing.T) {
 func TestTodoModifiedUnverified(t *testing.T) {
 	c := newClient(t, thingstest.DatabasePath(t))
 	count := 0
-	_, outcome, _ := TodoModified(context.Background(), c, thingstest.UUIDTodoInToday, futureBaseline,
+	_, outcome, _ := TodoModified(context.Background(), c, loadTodo(t, c, thingstest.UUIDTodoChecklist),
 		Options{Sleep: countingSleep(3, &count)})
 	if outcome != Unverified {
-		t.Errorf("modifiedAt before a future baseline -> Unverified, got %v", outcome)
+		t.Errorf("a todo that did not change -> Unverified, got %v", outcome)
+	}
+}
+
+// Things leaves a todo's modification date alone when only its checklist
+// changes, so the checklist itself has to confirm the write.
+func TestTodoModifiedConfirmsAChecklistOnlyChange(t *testing.T) {
+	for name, mutation := range map[string]string{
+		"item added": `INSERT INTO TMChecklistItem (uuid, title, status, "index", task, creationDate, userModificationDate)
+			VALUES ('AddedChecklistItem0001', 'Added', 0, 1, ?, 1, 1)`,
+		"item removed": `DELETE FROM TMChecklistItem WHERE uuid = (SELECT uuid FROM TMChecklistItem WHERE task = ? LIMIT 1)`,
+		"list cleared": `DELETE FROM TMChecklistItem WHERE task = ?`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			dbPath := thingstest.DatabasePath(t)
+			c := newClient(t, dbPath)
+			before := loadTodo(t, c, thingstest.UUIDTodoChecklist)
+			execFixture(t, dbPath, mutation, thingstest.UUIDTodoChecklist)
+
+			todo, outcome, err := TodoModified(context.Background(), c, before, Options{Sleep: instantSleep})
+			if err != nil || outcome != Confirmed || todo == nil {
+				t.Fatalf("want Confirmed, got outcome=%v err=%v", outcome, err)
+			}
+			if !todo.ModifiedAt.Equal(before.ModifiedAt) {
+				t.Fatalf("the fixture mutation must leave the modification date alone")
+			}
+			if len(todo.Checklist) == len(before.Checklist) {
+				t.Errorf("the confirmed todo should carry the new checklist, got %d items", len(todo.Checklist))
+			}
+		})
 	}
 }
 
 func TestProjectModifiedConfirmed(t *testing.T) {
 	c := newClient(t, thingstest.DatabasePath(t))
-	project, outcome, err := ProjectModified(context.Background(), c, thingstest.UUIDProject, pastT0, Options{Sleep: instantSleep})
+	before := loadProject(t, c, thingstest.UUIDProject)
+	before.ModifiedAt = pastT0
+	project, outcome, err := ProjectModified(context.Background(), c, before, Options{Sleep: instantSleep})
 	if err != nil || outcome != Confirmed || project == nil {
 		t.Fatalf("want Confirmed, got outcome=%v err=%v", outcome, err)
 	}
@@ -187,10 +239,10 @@ func TestProjectModifiedConfirmed(t *testing.T) {
 func TestProjectModifiedUnverified(t *testing.T) {
 	c := newClient(t, thingstest.DatabasePath(t))
 	count := 0
-	_, outcome, _ := ProjectModified(context.Background(), c, thingstest.UUIDProject, futureBaseline,
+	_, outcome, _ := ProjectModified(context.Background(), c, loadProject(t, c, thingstest.UUIDProject),
 		Options{Sleep: countingSleep(3, &count)})
 	if outcome != Unverified {
-		t.Errorf("want Unverified, got %v", outcome)
+		t.Errorf("a project that did not change -> Unverified, got %v", outcome)
 	}
 }
 

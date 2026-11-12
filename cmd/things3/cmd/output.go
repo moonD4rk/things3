@@ -381,6 +381,9 @@ func writeProjectDetail(w io.Writer, p *things3.Project) error {
 	if p.Deadline != nil {
 		fmt.Fprintf(w, "Deadline: %s\n", p.Deadline.Format(dateFormat))
 	}
+	if p.Reminder != nil {
+		fmt.Fprintf(w, "Reminder: %s\n", p.Reminder.Format("15:04"))
+	}
 	if p.CompletedAt != nil {
 		fmt.Fprintf(w, "Done:     %s\n", p.CompletedAt.Format(dateFormat))
 	}

@@ -302,7 +302,7 @@ Every action runs three phases:
 2. **Execute** - the change is sent to Things through the URL scheme (`osascript` in the background). The auth token required for updates is read automatically from the database; you never pass it.
 3. **Verify** - the CLI polls the database for a short budget to confirm the change (a new UUID for `add`, a status flip for `done`/`cancel`, an advanced modification time or a changed checklist for `schedule`/`move`/`edit`).
 
-A **verified** write prints the resulting item line (`done: [x] 5pUx6PES Review pull requests`). An **unverified** send - the write was accepted but not confirmed within the poll window - prints `sent to Things (not yet confirmed)` and still exits 0. A write that changes nothing, such as scheduling an item for the day it already has, is reported the same way: Things leaves the item untouched, so there is nothing to observe.
+A **verified** write prints the resulting item line (`done: [x] 5pUx6PES Review pull requests`). An **unverified** send - the write was accepted but not confirmed within the poll window - prints `sent to Things (not yet confirmed)` and still exits 0. A `schedule`, `move`, or `edit` that changes nothing, such as scheduling an item for the day it already has, is reported the same way: Things leaves the item untouched, so there is nothing to observe. `done` and `cancel` are confirmed by the status itself, so repeating one is still verified.
 
 - `--dry-run` prints the exact `things:///` URL and executes nothing, e.g. `things:///add?tags=work&title=Draft%20release%20notes&when=2026-07-02`. Ideal for inspecting or piping a command.
 - `--no-verify` executes but skips the confirmation poll, reporting the send as unverified.

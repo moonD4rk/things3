@@ -44,7 +44,7 @@ func (s *Server) handleEdit(ctx context.Context, _ *mcp.CallToolRequest, in Edit
 		return nil, writeError(invalidInput("deadline and clear_deadline are mutually exclusive")), nil
 	}
 
-	m, te, err := s.resolveTarget(ctx, in.Target)
+	m, te, err := s.resolveTarget(ctx, in.Target, resolve.PreferOpen)
 	if err != nil {
 		return nil, WriteResult{}, err
 	}

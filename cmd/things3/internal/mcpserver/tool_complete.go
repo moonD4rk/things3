@@ -20,7 +20,12 @@ type CompleteInput struct {
 }
 
 func (s *Server) handleComplete(ctx context.Context, _ *mcp.CallToolRequest, in CompleteInput) (*mcp.CallToolResult, WriteResult, error) {
-	m, te, err := s.resolveTarget(ctx, in.Target)
+	// Reopening names a closed item; every other status change names an open one.
+	prefer := resolve.PreferOpen
+	if in.Status == statusIncomplete {
+		prefer = resolve.PreferClosed
+	}
+	m, te, err := s.resolveTarget(ctx, in.Target, prefer)
 	if err != nil {
 		return nil, WriteResult{}, err
 	}

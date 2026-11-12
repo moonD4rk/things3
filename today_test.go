@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/moond4rk/things3/thingstest"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -47,7 +49,7 @@ func TestClientTodayEmptyIsNonNil(t *testing.T) {
 	dbPath := copyWritableFixture(t)
 	execFixtureSQL(t, dbPath, "UPDATE TMTask SET status = 3 WHERE status = 0")
 
-	client, err := NewClient(WithDatabasePath(dbPath))
+	client, err := NewClient(WithDatabasePath(dbPath), WithClock(thingstest.Now))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
 
@@ -63,7 +65,7 @@ func TestClientTodayEveningSortsAfterRegular(t *testing.T) {
 	require.Equal(t, int64(1),
 		execFixtureSQL(t, dbPath, "UPDATE TMTask SET startBucket = 1 WHERE uuid = ?", testUUIDTodoInToday))
 
-	client, err := NewClient(WithDatabasePath(dbPath))
+	client, err := NewClient(WithDatabasePath(dbPath), WithClock(thingstest.Now))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
 	ctx := t.Context()
@@ -119,7 +121,7 @@ func TestProjectRepeatingField(t *testing.T) {
 		execFixtureSQL(t, dbPath, "UPDATE TMTask SET rt1_repeatingTemplate = ? WHERE uuid = ? AND type = 1",
 			repeatTemplateUUID, testUUIDProjectInArea1))
 
-	client, err := NewClient(WithDatabasePath(dbPath))
+	client, err := NewClient(WithDatabasePath(dbPath), WithClock(thingstest.Now))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
 	ctx := t.Context()

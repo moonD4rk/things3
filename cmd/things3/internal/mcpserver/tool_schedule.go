@@ -20,7 +20,7 @@ type ScheduleInput struct {
 }
 
 func (s *Server) handleSchedule(ctx context.Context, _ *mcp.CallToolRequest, in ScheduleInput) (*mcp.CallToolResult, WriteResult, error) {
-	m, te, err := s.resolveTarget(ctx, in.Target)
+	m, te, err := s.resolveTarget(ctx, in.Target, resolve.PreferOpen)
 	if err != nil {
 		return nil, WriteResult{}, err
 	}

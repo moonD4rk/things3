@@ -181,8 +181,8 @@ func matchModifiedAt(m resolve.Match) time.Time {
 }
 
 func isNotFound(err error) bool {
-	var notFound *resolve.NotFoundError
-	return errors.As(err, &notFound)
+	_, ok := errors.AsType[*resolve.NotFoundError](err)
+	return ok
 }
 
 func isWhenKeyword(s string) bool {

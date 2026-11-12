@@ -29,7 +29,7 @@ func (c *Client) Upcoming(ctx context.Context) ([]Todo, error) {
 	}
 
 	repeating, err := base.
-		repeatingTemplates().
+		onlyTemplates().
 		StartDate().Future().
 		Status().Incomplete().
 		All(ctx)

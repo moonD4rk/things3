@@ -36,7 +36,7 @@ func newCancelCmd() *cobra.Command {
 // runComplete builds the shared body for done and cancel.
 func runComplete(action string, complete bool, want things3.Status) func(*cobra.Command, []string, *things3.Client) error {
 	return func(cmd *cobra.Command, args []string, client *things3.Client) error {
-		match, err := resolve.ResolveOne(cmd.Context(), client, args[0])
+		match, err := resolve.ResolveTarget(cmd.Context(), client, args[0], resolve.PreferOpen)
 		if err != nil {
 			return fromResolveError(err)
 		}

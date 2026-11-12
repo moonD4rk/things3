@@ -112,7 +112,7 @@ func hasHeaderLine(text string) bool {
 
 func fetchTitle(t *testing.T, dbPath, uuid string) string {
 	t.Helper()
-	client, err := things3.NewClient(things3.WithDatabasePath(dbPath))
+	client, err := things3.NewClient(things3.WithDatabasePath(dbPath), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}
@@ -238,7 +238,7 @@ func TestAnytimeGrouped(t *testing.T) {
 func TestTrashMixed(t *testing.T) {
 	dbPath := setupFixtureDB(t)
 	ctx := context.Background()
-	client, err := things3.NewClient(things3.WithDatabasePath(dbPath))
+	client, err := things3.NewClient(things3.WithDatabasePath(dbPath), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}
@@ -561,7 +561,7 @@ func startsUpper(s string) bool {
 func TestProjects(t *testing.T) {
 	dbPath := setupFixtureDB(t)
 	ctx := context.Background()
-	client, err := things3.NewClient(things3.WithDatabasePath(dbPath))
+	client, err := things3.NewClient(things3.WithDatabasePath(dbPath), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}
@@ -696,7 +696,7 @@ func TestOutputYAML(t *testing.T) {
 func TestCollectionsAndSomeday(t *testing.T) {
 	dbPath := setupFixtureDB(t)
 	ctx := context.Background()
-	client, err := things3.NewClient(things3.WithDatabasePath(dbPath))
+	client, err := things3.NewClient(things3.WithDatabasePath(dbPath), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}
@@ -810,7 +810,7 @@ func TestDaysRejectsNegative(t *testing.T) {
 func TestGroupedViewsJSONFlat(t *testing.T) {
 	dbPath := setupFixtureDB(t)
 	ctx := context.Background()
-	client, err := things3.NewClient(things3.WithDatabasePath(dbPath))
+	client, err := things3.NewClient(things3.WithDatabasePath(dbPath), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}

@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/moond4rk/things3/thingstest"
+
 	"github.com/moond4rk/things3/internal/database"
 )
 
@@ -132,7 +134,7 @@ func extractTagUUIDs(tags []Tag) []string {
 func newTestDB(t *testing.T) *db {
 	t.Helper()
 	initTestPaths()
-	d, err := newDB(database.WithPath(testDatabasePath))
+	d, err := newDB(database.WithPath(testDatabasePath), database.WithNow(thingstest.Now))
 	if err != nil {
 		t.Fatalf("failed to create test db: %v", err)
 	}

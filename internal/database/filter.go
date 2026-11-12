@@ -97,23 +97,17 @@ func (w *whereBuilder) addFilter(column string, value *string, exists *bool) {
 	}
 }
 
-// addOrFilter adds a filter across two columns with value-or-existence fallback.
-// A value or exists=true matches if either column matches (OR). For
-// exists=false, De Morgan requires both columns to be NULL (AND), otherwise
-// "has neither" would wrongly match rows where only one column is set.
-func (w *whereBuilder) addOrFilter(col1, col2 string, value *string, exists *bool) {
-	if value != nil {
-		escaped := escapeString(*value)
-		w.addOr(
-			fmt.Sprintf("%s = '%s'", col1, escaped),
-			fmt.Sprintf("%s = '%s'", col2, escaped),
-		)
-	} else if exists != nil {
-		if *exists {
-			w.addOr(existsSQL(col1, true), existsSQL(col2, true))
-		} else {
-			w.addRawf("(%s AND %s)", existsSQL(col1, false), existsSQL(col2, false))
-		}
+// addTagFilter adds a tag condition built from exists, an EXISTS predicate over
+// the owner's tags: a specific title takes precedence over has/has-not.
+func (w *whereBuilder) addTagFilter(exists func(cond string) string, title *string, has *bool) {
+	switch {
+	case title != nil:
+		w.add(exists(fmt.Sprintf("TAG.title = '%s'", escapeString(*title))))
+	case has == nil:
+	case *has:
+		w.add(exists(""))
+	default:
+		w.add("NOT " + exists(""))
 	}
 }
 
@@ -156,26 +150,13 @@ func (w *whereBuilder) addTruthy(column string, value *bool, nullDefault int) {
 	}
 }
 
-// addOr adds an OR combination of conditions (skips empty parts).
-func (w *whereBuilder) addOr(parts ...string) {
-	var nonEmpty []string
-	for _, p := range parts {
-		if p != "" {
-			nonEmpty = append(nonEmpty, p)
-		}
-	}
-	if len(nonEmpty) > 0 {
-		*w = append(*w, "("+strings.Join(nonEmpty, " OR ")+")")
-	}
-}
-
-// addSearch adds a full-text search condition across multiple columns.
-// LIKE metacharacters in the query match literally.
+// addSearch matches the query against an item's own title and notes. LIKE
+// metacharacters in the query match literally.
 func (w *whereBuilder) addSearch(query string) {
 	if query == "" {
 		return
 	}
-	columns := []string{"TASK.title", "TASK.notes", "AREA.title"}
+	columns := []string{"TASK.title", "TASK.notes"}
 	var searches []string
 	for _, col := range columns {
 		searches = append(searches, likeSQL(col, "%", query, "%"))
@@ -183,77 +164,57 @@ func (w *whereBuilder) addSearch(query string) {
 	*w = append(*w, "("+strings.Join(searches, " OR ")+")")
 }
 
-// addCreatedAfter adds a time-based filter for creation date.
-// The instant is normalized to local time so the same instant yields
-// identical SQL regardless of the Location carried by t.
+// addCreatedAfter keeps rows created strictly after t. Creation dates are Unix
+// seconds, so the comparison is an instant comparison with no time zone in it.
 func (w *whereBuilder) addCreatedAfter(column string, t time.Time) {
 	if t.IsZero() {
 		return
 	}
-	local := t.In(time.Local).Format("2006-01-02 15:04:05")
-	w.addRawf("datetime(%s, 'unixepoch', 'localtime') > '%s'", column, local)
+	w.addRawf("%s > %s", column, strconv.FormatFloat(float64(t.UnixMicro())/1e6, 'f', 6, 64))
 }
 
-// addDateFilter adds a date filter condition.
-// isThingsDate indicates whether the column uses Things binary date format (true)
-// or Unix timestamp format (false).
-func (w *whereBuilder) addDateFilter(column string, v *DateFilterValue, isThingsDate bool) {
-	if v == nil {
-		return
-	}
-
-	// Existence check (format-independent)
-	if v.HasDate != nil {
-		w.addExists(column, *v.HasDate)
-		return
-	}
-
-	// Resolve format-specific expressions upfront
-	var colExpr, nowExpr string
-	if isThingsDate {
-		colExpr = column
-		nowExpr = todayThingsDateSQL()
-	} else {
-		colExpr = fmt.Sprintf("date(%s, 'unixepoch', 'localtime')", column)
-		nowExpr = "date('now', 'localtime')"
-	}
-
-	// Relative date (future/past)
-	if v.Relative != "" {
-		if v.Relative == DateFuture {
-			w.addRawf("%s > %s", colExpr, nowExpr)
-		} else {
-			w.addRawf("%s <= %s", colExpr, nowExpr)
-		}
-		return
-	}
-
-	// Specific date comparison. Normalize the instant to local time so the
-	// same instant yields the same calendar date regardless of its Location.
-	if v.Date == nil {
-		return
-	}
-	dateVal, ok := formatDateValue(clampDate(v.Date.In(time.Local)).Format(time.DateOnly), isThingsDate)
-	if !ok {
-		return
-	}
-	w.addRawf("%s %s %s", colExpr, v.Operator, dateVal)
+// addThingsDateFilter adds a filter on a packed Things date expression.
+func (w *whereBuilder) addThingsDateFilter(expr string, v *DateFilterValue, today time.Time) {
+	w.addDateFilter(expr, v,
+		strconv.FormatInt(timeToThingsDate(today.In(time.Local)), 10),
+		func(day time.Time) string { return strconv.FormatInt(timeToThingsDate(day), 10) },
+	)
 }
 
-// Year bounds both date encodings can express: the Things encoder parses a
-// four-digit year, and SQLite's date() yields NULL outside the same range.
+// addUnixDateFilter adds a filter on the local calendar day of a Unix-seconds
+// column.
+func (w *whereBuilder) addUnixDateFilter(column string, v *DateFilterValue, today time.Time) {
+	quoted := func(day time.Time) string { return "'" + day.Format(time.DateOnly) + "'" }
+	w.addDateFilter(fmt.Sprintf("date(%s, 'unixepoch', 'localtime')", column), v, quoted(today.In(time.Local)), quoted)
+}
+
+// addDateFilter adds a date condition on expr. todaySQL is today's value and
+// literal renders any other day, both in expr's own encoding.
+func (w *whereBuilder) addDateFilter(expr string, v *DateFilterValue, todaySQL string, literal func(time.Time) string) {
+	switch {
+	case v == nil:
+	case v.HasDate != nil:
+		w.addExists(expr, *v.HasDate)
+	case v.Relative == DateFuture:
+		w.addRawf("%s > %s", expr, todaySQL)
+	case v.Relative == DatePast:
+		w.addRawf("%s <= %s", expr, todaySQL)
+	case v.Date != nil:
+		w.addRawf("%s %s %s", expr, v.Operator, literal(clampDate(v.Date.In(time.Local))))
+	}
+}
+
+// Year bounds a comparison date can take: both date encodings are only
+// meaningful for four-digit years.
 const (
 	minDateYear = 1
 	maxDateYear = 9999
 )
 
-// clampDate bounds a comparison date to the representable year range. An
-// out-of-range date would otherwise encode to nothing (dropping the condition,
-// which widens the query instead of narrowing it) or to a literal SQLite reads
-// as NULL (matching no row at all). Clamping keeps the comparison meaningful:
-// a bound past either end of the range simply admits every dated row. The floor
-// is the second of January because the first is Go's zero time, which the Things
-// encoder reads as "no date".
+// clampDate bounds a comparison date to the representable year range, so a
+// bound past either end still compares (admitting every dated row) instead of
+// producing a literal SQLite reads as NULL. The floor is the second of January
+// because the first is Go's zero time, which packs to "no date".
 func clampDate(t time.Time) time.Time {
 	switch {
 	case t.Year() < minDateYear:
@@ -263,27 +224,6 @@ func clampDate(t time.Time) time.Time {
 	default:
 		return t
 	}
-}
-
-// formatDateValue converts a date string to the appropriate SQL value.
-// Returns the formatted value and true on success.
-func formatDateValue(dateStr string, isThingsDate bool) (string, bool) {
-	if isThingsDate {
-		td, err := stringToThingsDate(dateStr)
-		if err != nil || td == 0 {
-			return "", false
-		}
-		return strconv.FormatInt(td, 10), true
-	}
-	return fmt.Sprintf("date('%s')", dateStr), true
-}
-
-// existsSQL returns "column IS [NOT] NULL" as a SQL fragment.
-func existsSQL(column string, exists bool) string {
-	if exists {
-		return column + " IS NOT NULL"
-	}
-	return column + " IS NULL"
 }
 
 // sql returns the combined SQL for all conditions.

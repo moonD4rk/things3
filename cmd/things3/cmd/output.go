@@ -434,9 +434,7 @@ func writeTodoDetail(w io.Writer, t *things3.Todo) error {
 	fmt.Fprintf(w, "UUID:     %s\n", t.UUID)
 	fmt.Fprintf(w, "Status:   %s\n", t.Status)
 	fmt.Fprintf(w, "Start:    %s\n", t.Start)
-	if t.Repeating {
-		fmt.Fprintf(w, "Repeats:  yes\n")
-	}
+	writeStateLines(w, t.Trashed, t.Repeating, t.Template)
 	if t.ProjectTitle != "" {
 		fmt.Fprintf(w, "Project:  %s\n", t.ProjectTitle)
 	}
@@ -476,6 +474,20 @@ func writeTodoDetail(w io.Writer, t *things3.Todo) error {
 	return nil
 }
 
+// writeStateLines writes the detail lines for the states that set an item apart
+// from an ordinary live one. For a template, When shows its next occurrence.
+func writeStateLines(w io.Writer, trashed, repeating, template bool) {
+	if trashed {
+		fmt.Fprintf(w, "Trashed:  yes\n")
+	}
+	switch {
+	case template:
+		fmt.Fprintf(w, "Repeats:  yes (the repeating series itself, read-only)\n")
+	case repeating:
+		fmt.Fprintf(w, "Repeats:  yes\n")
+	}
+}
+
 // writeProjectDetail writes a single project with full details in text format.
 func writeProjectDetail(w io.Writer, p *things3.Project) error {
 	const dateFormat = "2006-01-02"
@@ -483,9 +495,7 @@ func writeProjectDetail(w io.Writer, p *things3.Project) error {
 	fmt.Fprintf(w, "UUID:     %s\n", p.UUID)
 	fmt.Fprintf(w, "Status:   %s\n", p.Status)
 	fmt.Fprintf(w, "Start:    %s\n", p.Start)
-	if p.Repeating {
-		fmt.Fprintf(w, "Repeats:  yes\n")
-	}
+	writeStateLines(w, p.Trashed, p.Repeating, p.Template)
 	if p.AreaTitle != "" {
 		fmt.Fprintf(w, "Area:     %s\n", p.AreaTitle)
 	}

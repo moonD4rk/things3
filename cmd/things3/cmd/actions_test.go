@@ -13,7 +13,7 @@ import (
 
 func fixtureProjectUUID(t *testing.T, dbPath, title string) string {
 	t.Helper()
-	client, err := things3.NewClient(things3.WithDatabasePath(dbPath))
+	client, err := things3.NewClient(things3.WithDatabasePath(dbPath), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}
@@ -27,7 +27,7 @@ func fixtureProjectUUID(t *testing.T, dbPath, title string) string {
 
 func fixtureAreaUUID(t *testing.T, dbPath, title string) string {
 	t.Helper()
-	client, err := things3.NewClient(things3.WithDatabasePath(dbPath))
+	client, err := things3.NewClient(things3.WithDatabasePath(dbPath), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}

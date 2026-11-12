@@ -78,3 +78,34 @@ func (b *showBuilder) Execute(ctx context.Context) error {
 	}
 	return b.scheme.ExecuteNavigation(ctx, uri)
 }
+
+// searchBuilder builds the URL that opens the app's search screen.
+type searchBuilder struct {
+	scheme *Scheme
+	query  string
+}
+
+// NewSearchNavigator creates a URLBuilder that opens the Things search screen,
+// searching for query when it is non-empty.
+func NewSearchNavigator(s *Scheme, query string) URLBuilder {
+	return &searchBuilder{scheme: s, query: query}
+}
+
+// Build returns the Things URL for the search command.
+func (b *searchBuilder) Build() (string, error) {
+	if b.query == "" {
+		return fmt.Sprintf("things:///%s", CommandSearch), nil
+	}
+	query := url.Values{}
+	query.Set(KeyQuery, b.query)
+	return fmt.Sprintf("things:///%s?%s", CommandSearch, EncodeQuery(query)), nil
+}
+
+// Execute builds and executes the search URL as a navigation.
+func (b *searchBuilder) Execute(ctx context.Context) error {
+	uri, err := b.Build()
+	if err != nil {
+		return err
+	}
+	return b.scheme.ExecuteNavigation(ctx, uri)
+}

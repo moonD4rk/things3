@@ -3,8 +3,8 @@ package things3
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"sync"
+	"time"
 
 	"github.com/moond4rk/things3/internal/database"
 	"github.com/moond4rk/things3/internal/scheme"
@@ -87,6 +87,9 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 	if options.printSQL {
 		dbOpts = append(dbOpts, database.WithPrintSQL(options.printSQL))
 	}
+	if options.clock != nil {
+		dbOpts = append(dbOpts, database.WithNow(options.clock))
+	}
 
 	// Create DB connection
 	d, err := newDB(dbOpts...)
@@ -119,6 +122,13 @@ func (c *Client) Close() error {
 		return c.database.Close()
 	}
 	return nil
+}
+
+// Now returns the current time on the client's clock: the system clock unless
+// [WithClock] replaced it. Callers computing a window relative to "now" should
+// use it so they agree with the client's own date filters.
+func (c *Client) Now() time.Time {
+	return c.database.Now()
 }
 
 // ============================================================================
@@ -315,10 +325,14 @@ func (c *Client) ShowList(ctx context.Context, list ListID) error {
 // ShowSearch opens Things and performs a search for the given query.
 // By default, brings Things to foreground since the user wants to view results.
 func (c *Client) ShowSearch(ctx context.Context, query string) error {
-	q := url.Values{}
-	q.Set("query", query)
-	uri := fmt.Sprintf("things:///%s?%s", CommandSearch, scheme.EncodeQuery(q))
-	return c.scheme.ExecuteNavigation(ctx, uri)
+	return c.SearchBuilder(query).Execute(ctx)
+}
+
+// SearchBuilder returns a URLBuilder that opens the Things search screen for
+// query. Unlike [ShowNavigator].Query, which jumps to the area, project, or tag
+// with that name, this runs a full-text search.
+func (c *Client) SearchBuilder(query string) URLBuilder {
+	return scheme.NewSearchNavigator(c.scheme, query)
 }
 
 // ShowBuilder returns a ShowNavigator for complex navigation operations.

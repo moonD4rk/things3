@@ -8,6 +8,31 @@ import (
 	"time"
 )
 
+// TrashScope selects how a task query treats the Trash.
+type TrashScope int
+
+const (
+	// TrashExcluded keeps live items only: neither trashed nor inside a trashed project.
+	TrashExcluded TrashScope = iota
+	// TrashOnly keeps items that are themselves trashed.
+	TrashOnly
+	// TrashAny ignores the Trash entirely.
+	TrashAny
+)
+
+// TemplateScope selects how a task query treats repeating templates, the hidden
+// rows that schedule a repeating series.
+type TemplateScope int
+
+const (
+	// TemplatesExcluded keeps ordinary items only.
+	TemplatesExcluded TemplateScope = iota
+	// TemplatesOnly keeps repeating templates only.
+	TemplatesOnly
+	// TemplatesAny keeps both.
+	TemplatesAny
+)
+
 // TaskFilter captures all parameters for a task query.
 type TaskFilter struct {
 	UUID               *string
@@ -25,8 +50,8 @@ type TaskFilter struct {
 	TagTitle           *string
 	HasTags            *bool
 	DeadlineSuppressed *bool
-	Trashed            *bool
-	RepeatingTemplates *bool
+	Trash              TrashScope
+	Templates          TemplateScope
 	CreatedAfter       *time.Time
 	SearchQuery        *string
 	Index              string
@@ -36,42 +61,34 @@ type TaskFilter struct {
 	Limit              *int
 }
 
-// wantsTemplates reports whether the query targets repeating templates rather
-// than the default set that excludes them.
-func (f *TaskFilter) wantsTemplates() bool {
-	return f.RepeatingTemplates != nil && *f.RepeatingTemplates
-}
-
-// buildWhere builds the WHERE clause for a task query.
-func (f *TaskFilter) buildWhere() string {
+// buildWhere builds the WHERE clause for a task query. today anchors the
+// relative date filters.
+func (f *TaskFilter) buildWhere(today time.Time) string {
 	var w whereBuilder
 
-	// Recurring templates are excluded by default; a template query inverts the
-	// filter to select only them.
-	if f.wantsTemplates() {
-		w.add("TASK." + filterIsRecurring)
-	} else {
+	switch f.Templates {
+	case TemplatesExcluded:
 		w.add("TASK." + filterIsNotRecurring)
+	case TemplatesOnly:
+		w.add("TASK." + filterIsRecurring)
+	case TemplatesAny:
 	}
 
-	// Trashed filter (default: not trashed)
-	// When viewing trash, only check the task's own trashed flag.
-	// Otherwise, also exclude tasks whose parent project is trashed.
-	if f.Trashed != nil && *f.Trashed {
-		w.add("TASK." + filterIsTrashed)
-	} else {
-		w.add("TASK." + filterIsNotTrashed)
+	switch f.Trash {
+	case TrashExcluded:
 		notTrashed := false
+		w.add("TASK." + filterIsNotTrashed)
 		w.addTruthy("PROJECT.trashed", &notTrashed, 0)
 		w.addTruthy("PROJECT_OF_HEADING.trashed", &notTrashed, 0)
+	case TrashOnly:
+		w.add("TASK." + filterIsTrashed)
+	case TrashAny:
 	}
 
-	// Integer field filters
 	w.addIntEqual("TASK.type", f.TaskType)
 	w.addIntEqual("TASK.status", f.Status)
 	w.addIntEqual("TASK.start", f.Start)
 
-	// Identity filters
 	w.addStringEqual("TASK.uuid", f.UUID)
 	if f.UUIDPrefix != nil {
 		w.addLikePrefix("TASK.uuid", *f.UUIDPrefix)
@@ -80,28 +97,19 @@ func (f *TaskFilter) buildWhere() string {
 		w.addLikeContains("TASK.title", *f.Title)
 	}
 
-	// Relation filters
-	w.addFilter("TASK.area", f.AreaUUID, f.HasArea)
-	w.addOrFilter("TASK.project", "PROJECT_OF_HEADING.uuid", f.ProjectUUID, f.HasProject)
+	w.addFilter(sqlAreaUUID, f.AreaUUID, f.HasArea)
+	w.addFilter(sqlProjectUUID, f.ProjectUUID, f.HasProject)
 	w.addFilter("TASK.heading", f.HeadingUUID, f.HasHeading)
-	w.addFilter("TAG.title", f.TagTitle, f.HasTags)
+	w.addTagFilter(taskTagsSQL, f.TagTitle, f.HasTags)
 
-	// Deadline suppressed
 	if f.DeadlineSuppressed != nil {
 		w.addExists("TASK.deadlineSuppressionDate", *f.DeadlineSuppressed)
 	}
 
-	// Date filters. For a template, its next occurrence is its effective start
-	// date, so the start-date filter targets rt1_nextInstanceStartDate.
-	startDateColumn := colStartDate
-	if f.wantsTemplates() {
-		startDateColumn = colNextInstanceStartDate
-	}
-	w.addDateFilter("TASK."+startDateColumn, f.StartDateFilter, true)
-	w.addDateFilter("TASK."+colStopDate, f.StopDateFilter, false)
-	w.addDateFilter("TASK."+colDeadline, f.DeadlineFilter, true)
+	w.addThingsDateFilter("("+sqlStartDate+")", f.StartDateFilter, today)
+	w.addUnixDateFilter("TASK."+colStopDate, f.StopDateFilter, today)
+	w.addThingsDateFilter("TASK."+colDeadline, f.DeadlineFilter, today)
 
-	// Time-based filters
 	if f.CreatedAfter != nil {
 		w.addCreatedAfter("TASK."+colCreationDate, *f.CreatedAfter)
 	}
@@ -138,7 +146,7 @@ func (f *AreaFilter) buildWhere() string {
 	w.addStringEqual("AREA.title", f.Title)
 	// NULL visible means the user never hid the area, so NULL defaults to 1.
 	w.addTruthy("AREA.visible", f.Visible, 1)
-	w.addFilter("TAG.title", f.TagTitle, f.HasTag)
+	w.addTagFilter(areaTagsSQL, f.TagTitle, f.HasTag)
 
 	return w.sql()
 }
@@ -163,9 +171,7 @@ func (f *TagFilter) buildWhere() string {
 
 // QueryTasks executes a task query and returns matching rows.
 func (d *DB) QueryTasks(ctx context.Context, f *TaskFilter) ([]TaskRow, error) {
-	where := f.buildWhere()
-	order := f.buildOrder()
-	query := buildTasksSQL(where, order, f.Limit, f.wantsTemplates())
+	query := buildTasksSQL(f.buildWhere(d.Now()), f.buildOrder(), f.Limit)
 
 	rows, err := d.ExecuteQuery(ctx, query)
 	if err != nil {
@@ -187,10 +193,7 @@ func (d *DB) QueryTasks(ctx context.Context, f *TaskFilter) ([]TaskRow, error) {
 
 // CountTasks returns the count of tasks matching the filter.
 func (d *DB) CountTasks(ctx context.Context, f *TaskFilter) (int, error) {
-	where := f.buildWhere()
-	order := f.buildOrder()
-	taskSQL := buildTasksSQL(where, order, nil, f.wantsTemplates())
-	countSQL := buildCountSQL(taskSQL)
+	countSQL := buildCountSQL(buildTasksSQL(f.buildWhere(d.Now()), f.buildOrder(), nil))
 
 	var count int
 	if err := d.ExecuteQueryRow(ctx, countSQL).Scan(&count); err != nil {

@@ -10,7 +10,9 @@ type Todo struct {
 	Notes  string      `json:"notes,omitempty"`
 	Start  StartBucket `json:"start"`
 
-	// Relationships (empty string = no relationship)
+	// Relationships (empty string = no relationship). Project and area are the
+	// effective containers: a todo under a heading reports the heading's project,
+	// and a todo inside a project reports that project's area.
 	AreaUUID     string `json:"area_uuid,omitempty"`
 	AreaTitle    string `json:"area_title,omitempty"`
 	ProjectUUID  string `json:"project_uuid,omitempty"`
@@ -42,6 +44,13 @@ type Todo struct {
 	// Repeating reports whether the todo belongs to a repeating series, either a
 	// generated instance or the template that schedules its next occurrence.
 	Repeating bool `json:"repeating,omitempty"`
+	// Template reports whether the todo is a repeating template: the hidden item
+	// that schedules a series and carries its next occurrence as StartDate. A
+	// template is never actionable and the URL scheme cannot modify it.
+	Template bool `json:"template,omitempty"`
+	// Repeat is the rule of the series the todo belongs to, nil when it does
+	// not repeat.
+	Repeat *Repeat `json:"repeat,omitempty"`
 }
 
 // Project represents a container for organizing todos in Things 3.
@@ -77,6 +86,13 @@ type Project struct {
 	// Repeating reports whether the project belongs to a repeating series, either
 	// a generated instance or the template that schedules its next occurrence.
 	Repeating bool `json:"repeating,omitempty"`
+	// Template reports whether the project is a repeating template: the hidden
+	// item that schedules a series and carries its next occurrence as StartDate.
+	// A template is never actionable and the URL scheme cannot modify it.
+	Template bool `json:"template,omitempty"`
+	// Repeat is the rule of the series the project belongs to, nil when it does
+	// not repeat.
+	Repeat *Repeat `json:"repeat,omitempty"`
 }
 
 // Heading represents a grouping label within a project.

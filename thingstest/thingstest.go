@@ -9,7 +9,10 @@
 // Example:
 //
 //	func TestMyServer(t *testing.T) {
-//	    client, err := things3.NewClient(things3.WithDatabasePath(thingstest.DatabasePath(t)))
+//	    client, err := things3.NewClient(
+//	        things3.WithDatabasePath(thingstest.DatabasePath(t)),
+//	        things3.WithClock(thingstest.Now),
+//	    )
 //	    require.NoError(t, err)
 //	    defer client.Close()
 //
@@ -25,6 +28,7 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+	"time"
 )
 
 // SQLite WAL-mode sidecar file suffixes.
@@ -104,6 +108,15 @@ func copyFixtureFile(t *testing.T, src, dst string) {
 func SourceDatabasePath() string {
 	initSourcePath()
 	return sourcePath
+}
+
+// Now is the fixture's clock: a fixed instant shortly after the last change
+// recorded in the fixture database. Every date-relative expectation in this
+// package (what is overdue, what is upcoming) holds at this instant, so pin
+// clients to it with things3.WithClock(thingstest.Now); a client left on the
+// system clock drifts as the fixture's future dates become the past.
+func Now() time.Time {
+	return time.Date(2025, time.April, 1, 12, 0, 0, 0, time.Local)
 }
 
 // Expected item counts from the test fixture database.

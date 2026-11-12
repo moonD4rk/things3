@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
 	"time"
+	"unicode/utf8"
 )
 
 // batchTodoBuilder builds a todo entry for batch operations.
@@ -90,21 +92,59 @@ func (t *batchTodoBuilder) Tags(tags ...string) BatchTodoConfigurator {
 	return SetStrs(t, TagsParam, tags)
 }
 
-// ChecklistItems sets the checklist items.
+// ChecklistItems sets the checklist items, all open.
 func (t *batchTodoBuilder) ChecklistItems(items ...string) BatchTodoConfigurator {
+	return t.Checklist(checklistEntries(items)...)
+}
+
+// Checklist sets the checklist items, each with its own state.
+func (t *batchTodoBuilder) Checklist(items ...ChecklistEntry) BatchTodoConfigurator {
+	return t.setChecklist(KeyChecklistItems, items)
+}
+
+// PrependChecklistItems adds checklist items at the top (update only).
+func (t *batchTodoBuilder) PrependChecklistItems(items ...string) BatchTodoConfigurator {
+	return t.setChecklist(KeyPrependChecklistItems, checklistEntries(items))
+}
+
+// AppendChecklistItems adds checklist items at the bottom (update only).
+func (t *batchTodoBuilder) AppendChecklistItems(items ...string) BatchTodoConfigurator {
+	return t.setChecklist(KeyAppendChecklistItems, checklistEntries(items))
+}
+
+func (t *batchTodoBuilder) setChecklist(key string, items []ChecklistEntry) BatchTodoConfigurator {
 	if len(items) > MaxChecklistItems {
 		t.err = ErrTooManyChecklistItems
 		return t
 	}
-	checklistItems := make([]map[string]any, len(items))
+	objects := make([]map[string]any, len(items))
 	for i, item := range items {
-		checklistItems[i] = map[string]any{
-			KeyType:       "checklist-item",
-			KeyAttributes: map[string]any{KeyTitle: item},
+		attrs := map[string]any{KeyTitle: item.Title}
+		if item.Completed {
+			attrs[KeyCompleted] = true
 		}
+		if item.Canceled {
+			attrs[KeyCanceled] = true
+		}
+		objects[i] = map[string]any{KeyType: "checklist-item", KeyAttributes: attrs}
 	}
-	t.item.Attributes[KeyChecklistItems] = checklistItems
+	t.item.Attributes[key] = objects
 	return t
+}
+
+func checklistEntries(titles []string) []ChecklistEntry {
+	entries := make([]ChecklistEntry, len(titles))
+	for i, title := range titles {
+		entries[i] = ChecklistEntry{Title: title}
+	}
+	return entries
+}
+
+// Reminder sets a reminder time; it is combined with the scheduling date and
+// defaults that date to today. Combining it with WhenSomeday or WhenAnytime is
+// a build error.
+func (t *batchTodoBuilder) Reminder(hour, minute int) BatchTodoConfigurator {
+	return SetReminder(t, hour, minute)
 }
 
 // List sets the target project or area by name.
@@ -120,6 +160,11 @@ func (t *batchTodoBuilder) ListID(id string) BatchTodoConfigurator {
 // Heading sets the target heading within a project by name.
 func (t *batchTodoBuilder) Heading(name string) BatchTodoConfigurator {
 	return SetStr(t, HeadingParam, name)
+}
+
+// HeadingID sets the target heading within a project by UUID.
+func (t *batchTodoBuilder) HeadingID(id string) BatchTodoConfigurator {
+	return SetStr(t, HeadingIDParam, id)
 }
 
 // Completed sets the completion status.
@@ -159,14 +204,26 @@ func (t *batchTodoBuilder) AddTags(tags ...string) BatchTodoConfigurator {
 
 // build returns the JSON item and any error.
 func (t *batchTodoBuilder) build() (JSONItem, error) {
-	return t.item, t.err
+	if t.err != nil {
+		return t.item, t.err
+	}
+	attrs, err := t.jsonAttrs.attributes()
+	if err != nil {
+		return t.item, err
+	}
+	item := t.item
+	item.Attributes = attrs
+	return item, nil
 }
 
 // batchProjectBuilder builds a project entry for batch operations.
 type batchProjectBuilder struct {
 	item      JSONItem
 	jsonAttrs JSONAttrs
-	err       error
+	// children are the project's todos and headings, in the order Things files
+	// them.
+	children []map[string]any
+	err      error
 }
 
 // GetStore returns the attribute store for the builder.
@@ -289,28 +346,63 @@ func (p *batchProjectBuilder) AddTags(tags ...string) BatchProjectConfigurator {
 	return SetStrs(p, AddTagsParam, tags)
 }
 
-// Todos sets the child todo items using configuration functions.
+// Reminder sets a reminder time; it is combined with the scheduling date and
+// defaults that date to today. Combining it with WhenSomeday or WhenAnytime is
+// a build error.
+func (p *batchProjectBuilder) Reminder(hour, minute int) BatchProjectConfigurator {
+	return SetReminder(p, hour, minute)
+}
+
+// Todos appends child todos to the project (create only). Things files a todo
+// under the heading that precedes it, so call Todos before any Heading for
+// todos that belong to no heading.
 func (p *batchProjectBuilder) Todos(configs ...func(BatchTodoConfigurator)) BatchProjectConfigurator {
-	todos := make([]map[string]any, 0, len(configs))
 	for _, configure := range configs {
-		item := newBatchTodoBuilder()
-		configure(item)
-		if item.err != nil {
-			p.err = item.err
+		todo := newBatchTodoBuilder()
+		configure(todo)
+		built, err := todo.build()
+		if err != nil {
+			p.err = err
 			return p
 		}
-		todos = append(todos, map[string]any{
-			KeyType:       "to-do",
-			KeyAttributes: item.item.Attributes,
+		p.children = append(p.children, map[string]any{
+			KeyType:       string(JSONItemTypeTodo),
+			KeyAttributes: built.Attributes,
 		})
 	}
-	p.item.Attributes["items"] = todos
 	return p
+}
+
+// Heading appends a heading followed by the todos filed under it (create
+// only). It is the only way the URL scheme can create a heading.
+func (p *batchProjectBuilder) Heading(title string, todos ...func(BatchTodoConfigurator)) BatchProjectConfigurator {
+	if utf8.RuneCountInString(title) > MaxTitleLength {
+		p.err = ErrTitleTooLong
+		return p
+	}
+	p.children = append(p.children, map[string]any{
+		KeyType:       "heading",
+		KeyAttributes: map[string]any{KeyTitle: title},
+	})
+	return p.Todos(todos...)
 }
 
 // build returns the JSON item and any error.
 func (p *batchProjectBuilder) build() (JSONItem, error) {
-	return p.item, p.err
+	if p.err != nil {
+		return p.item, p.err
+	}
+	attrs, err := p.jsonAttrs.attributes()
+	if err != nil {
+		return p.item, err
+	}
+	item := p.item
+	if len(p.children) > 0 {
+		attrs = maps.Clone(attrs)
+		attrs[KeyItems] = p.children
+	}
+	item.Attributes = attrs
+	return item, nil
 }
 
 // batchBuilder builds URLs for batch create operations via the json command.

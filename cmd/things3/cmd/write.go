@@ -4,12 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	"github.com/moond4rk/things3"
 	"github.com/moond4rk/things3/cmd/things3/internal/resolve"
@@ -18,22 +16,29 @@ import (
 
 // Write-command flag names.
 const (
-	flagDryRun        = "dry-run"
-	flagNoVerify      = "no-verify"
-	flagTo            = "to"
-	flagTitle         = "title"
-	flagNotes         = "notes"
-	flagAppendNotes   = "append-notes"
-	flagDeadline      = "deadline"
-	flagClearDeadline = "clear-deadline"
-	flagTags          = "tags"
-	flagAddTags       = "add-tags"
-	flagWhen          = "when"
-	flagReminder      = "reminder"
-	flagProject       = "project"
-	flagHeading       = "heading"
-	flagChecklist     = "checklist"
-	flagTodos         = "todos"
+	flagDryRun           = "dry-run"
+	flagNoVerify         = "no-verify"
+	flagTo               = "to"
+	flagTitle            = "title"
+	flagNotes            = "notes"
+	flagClearNotes       = "clear-notes"
+	flagPrependNotes     = "prepend-notes"
+	flagAppendNotes      = "append-notes"
+	flagDeadline         = "deadline"
+	flagClearDeadline    = "clear-deadline"
+	flagTags             = "tags"
+	flagClearTags        = "clear-tags"
+	flagAddTags          = "add-tags"
+	flagWhen             = "when"
+	flagReminder         = "reminder"
+	flagProject          = "project"
+	flagHeading          = "heading"
+	flagChecklist        = "checklist"
+	flagClearChecklist   = "clear-checklist"
+	flagPrependChecklist = "prepend-checklist"
+	flagAppendChecklist  = "append-checklist"
+	flagTodos            = "todos"
+	flagStatus           = "status"
 )
 
 // addWriteFlags adds the flags shared by every action command.
@@ -57,7 +62,7 @@ func wrapExecError(err error) error {
 // executes and, unless --no-verify, runs verifyFn and reports the result. An
 // unverified send is still success (exit 0).
 func runWrite(cmd *cobra.Command, action string, builder urlBuilder, verifyFn func(ctx context.Context) writeResult) error {
-	_, format := getOutput(cmd)
+	format := resolveFormat(cmd)
 
 	if dryRun, _ := cmd.Flags().GetBool(flagDryRun); dryRun {
 		url, err := builder.Build()
@@ -84,7 +89,7 @@ func runWrite(cmd *cobra.Command, action string, builder urlBuilder, verifyFn fu
 // emitResult writes the result to stdout and, in text mode, the unverified
 // caveat to stderr.
 func emitResult(cmd *cobra.Command, r *writeResult) error {
-	_, format := getOutput(cmd)
+	format := resolveFormat(cmd)
 	// Surface a stderr caveat only when it adds detail beyond the stdout line
 	// (ambiguity or an underlying error), not for the plain not-confirmed case.
 	if format == formatText && !r.Verified && r.Message != "" && r.Message != genericUnverified {
@@ -181,8 +186,8 @@ func matchModifiedAt(m resolve.Match) time.Time {
 }
 
 func isNotFound(err error) bool {
-	var notFound *resolve.NotFoundError
-	return errors.As(err, &notFound)
+	_, ok := errors.AsType[*resolve.NotFoundError](err)
+	return ok
 }
 
 func isWhenKeyword(s string) bool {
@@ -204,65 +209,4 @@ func splitTags(s string) []string {
 		}
 	}
 	return tags
-}
-
-func parseHHMM(s string) (hour, minute int, err error) {
-	t, err := time.Parse("15:04", s)
-	if err != nil {
-		return 0, 0, fmt.Errorf("invalid reminder %q: use HH:MM", s)
-	}
-	return t.Hour(), t.Minute(), nil
-}
-
-// editUpdater is the shared attribute surface of TodoUpdater and ProjectUpdater
-// used by edit, letting one generic apply both.
-type editUpdater[T any] interface {
-	Title(string) T
-	Notes(string) T
-	AppendNotes(string) T
-	Deadline(time.Time) T
-	ClearDeadline() T
-	Tags(...string) T
-	AddTags(...string) T
-}
-
-// anyChanged reports whether any of the named flags was set.
-func anyChanged(f *pflag.FlagSet, names ...string) bool {
-	return slices.ContainsFunc(names, f.Changed)
-}
-
-// applyEditFlags applies the set edit flags to an updater.
-func applyEditFlags[T editUpdater[T]](u T, f *pflag.FlagSet) (T, error) {
-	if f.Changed(flagTitle) {
-		v, _ := f.GetString(flagTitle)
-		u = u.Title(v)
-	}
-	if f.Changed(flagNotes) {
-		v, _ := f.GetString(flagNotes)
-		u = u.Notes(v)
-	}
-	if f.Changed(flagAppendNotes) {
-		v, _ := f.GetString(flagAppendNotes)
-		u = u.AppendNotes(v)
-	}
-	if f.Changed(flagDeadline) {
-		v, _ := f.GetString(flagDeadline)
-		d, err := time.Parse(time.DateOnly, v)
-		if err != nil {
-			return u, fmt.Errorf("invalid deadline %q: use YYYY-MM-DD", v)
-		}
-		u = u.Deadline(d)
-	}
-	if f.Changed(flagClearDeadline) {
-		u = u.ClearDeadline()
-	}
-	if f.Changed(flagTags) {
-		v, _ := f.GetString(flagTags)
-		u = u.Tags(splitTags(v)...)
-	}
-	if f.Changed(flagAddTags) {
-		v, _ := f.GetString(flagAddTags)
-		u = u.AddTags(splitTags(v)...)
-	}
-	return u, nil
 }

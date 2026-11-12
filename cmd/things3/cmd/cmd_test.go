@@ -112,7 +112,7 @@ func hasHeaderLine(text string) bool {
 
 func fetchTitle(t *testing.T, dbPath, uuid string) string {
 	t.Helper()
-	client, err := things3.NewClient(things3.WithDatabasePath(dbPath))
+	client, err := things3.NewClient(things3.WithDatabasePath(dbPath), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}
@@ -235,37 +235,95 @@ func TestAnytimeGrouped(t *testing.T) {
 	decodeList(t, j)
 }
 
-func TestTrashMixed(t *testing.T) {
+// TestViewsRenderTheLibraryViews pins the CLI to the library: a view command
+// prints exactly the items its Client view returns, in the same order. What each
+// view contains is the library's contract and is tested there.
+func TestViewsRenderTheLibraryViews(t *testing.T) {
 	dbPath := setupFixtureDB(t)
 	ctx := context.Background()
-	client, err := things3.NewClient(things3.WithDatabasePath(dbPath))
+	client, err := things3.NewClient(things3.WithDatabasePath(dbPath), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}
-	trashedTodos, err := client.Todos().Trashed(true).Status().Any().All(ctx)
-	if err != nil {
-		t.Fatalf("trashed todos: %v", err)
-	}
-	trashedProjects, err := client.Projects().Trashed(true).Status().Any().All(ctx)
-	if err != nil {
-		t.Fatalf("trashed projects: %v", err)
-	}
-	want := len(trashedTodos) + len(trashedProjects)
-	_ = client.Close()
+	defer func() { _ = client.Close() }()
 
-	text, _, err := executeCommand(t, "trash")
+	views := map[string]struct {
+		args  []string
+		fetch func() ([]things3.Item, error)
+	}{
+		"inbox":     {[]string{"inbox"}, func() ([]things3.Item, error) { return client.Inbox(ctx) }},
+		"today":     {[]string{"today"}, func() ([]things3.Item, error) { return client.Today(ctx) }},
+		"upcoming":  {[]string{"upcoming"}, func() ([]things3.Item, error) { return client.Upcoming(ctx) }},
+		"anytime":   {[]string{"anytime"}, func() ([]things3.Item, error) { return client.Anytime(ctx) }},
+		"someday":   {[]string{"someday"}, func() ([]things3.Item, error) { return client.Someday(ctx) }},
+		"deadlines": {[]string{"deadlines"}, func() ([]things3.Item, error) { return client.Deadlines(ctx) }},
+		"trash":     {[]string{"trash"}, func() ([]things3.Item, error) { return client.Trash(ctx) }},
+		"logbook": {[]string{"logbook", "--days", "0"}, func() ([]things3.Item, error) {
+			return client.Logbook(ctx, time.Time{})
+		}},
+	}
+	for name, v := range views {
+		t.Run(name, func(t *testing.T) {
+			want, err := v.fetch()
+			if err != nil {
+				t.Fatalf("library view: %v", err)
+			}
+			if len(want) == 0 {
+				t.Fatalf("fixture drift: the %s view is empty", name)
+			}
+			out, stderr, err := executeCommand(t, append(v.args, "--all", "--json")...)
+			if err != nil {
+				t.Fatalf("%v: %v (%s)", v.args, err, stderr)
+			}
+			env := decodeList(t, out)
+			if len(env.Items) != len(want) {
+				t.Fatalf("%s lists %d items, the library view has %d", name, len(env.Items), len(want))
+			}
+			for i, it := range want {
+				if env.Items[i]["uuid"] != it.UUID() || env.Items[i]["type"] != it.Type() {
+					t.Errorf("%s item %d = %v %v, want %s %s", name, i, env.Items[i]["type"], env.Items[i]["uuid"], it.Type(), it.UUID())
+				}
+			}
+		})
+	}
+}
+
+// A list mixes todos and projects without a type column: the status mark is
+// square for a todo and round for a project, the way the app draws them.
+func TestProjectRowsUseARoundMark(t *testing.T) {
+	setupFixtureDB(t)
+
+	today, _, err := executeCommand(t, "today")
 	if err != nil {
-		t.Fatalf("trash: %v", err)
+		t.Fatalf("today: %v", err)
 	}
-	if !strings.Contains(text, "TYPE") {
-		t.Errorf("trash text should have a TYPE column:\n%s", text)
+	if row := lineContaining(t, today, "PgsWnDkz"); !strings.HasPrefix(row, "( )") {
+		t.Errorf("a project row should start with a round mark: %q", row)
 	}
-	j, _, err := executeCommand(t, "trash", "--json")
+	if row := lineContaining(t, today, thingstest.UUIDTodoInToday[:8]); !strings.HasPrefix(row, "[ ]") {
+		t.Errorf("a todo row should start with a square mark: %q", row)
+	}
+	if strings.Contains(today, "TYPE") {
+		t.Errorf("no list carries a TYPE column any more:\n%s", today)
+	}
+
+	logbook, _, err := executeCommand(t, "logbook", "--days", "0", "--all")
 	if err != nil {
-		t.Fatalf("trash json: %v", err)
+		t.Fatalf("logbook: %v", err)
 	}
-	if got := jsonTotal(t, j); got != want {
-		t.Errorf("trash count = %d, want %d", got, want)
+	if row := lineContaining(t, logbook, "CmpltdPr"); !strings.HasPrefix(row, "(x)") {
+		t.Errorf("a completed project row should start with (x): %q", row)
+	}
+	if row := lineContaining(t, logbook, "SkLdfSe1"); !strings.HasPrefix(row, "(-)") {
+		t.Errorf("a canceled project row should start with (-): %q", row)
+	}
+
+	projects, _, err := executeCommand(t, "projects")
+	if err != nil {
+		t.Fatalf("projects: %v", err)
+	}
+	if row := lineContaining(t, projects, "3x1QqJqf"); !strings.HasPrefix(row, "( )") || !strings.Contains(row, "@Area 1") {
+		t.Errorf("a project row should carry its mark and its area: %q", row)
 	}
 }
 
@@ -330,11 +388,11 @@ func TestShowRoundTrips(t *testing.T) {
 		}
 	}
 
-	// substring matching several -> mixed list, exit 0
+	// substring matching several -> a list of todos and projects, exit 0
 	out, _, err := executeCommand(t, "show", "in Today")
 	assertExitCode(t, err, 0)
-	if !strings.Contains(out, "TYPE") {
-		t.Errorf("multi-match show should render a mixed list:\n%s", out)
+	if !strings.Contains(out, "STATUS") || !strings.Contains(out, "\n[ ]") || !strings.Contains(out, "\n( )") {
+		t.Errorf("multi-match show should list the matching todos and projects:\n%s", out)
 	}
 
 	// gibberish -> exit 1, Error: on stderr
@@ -561,7 +619,7 @@ func startsUpper(s string) bool {
 func TestProjects(t *testing.T) {
 	dbPath := setupFixtureDB(t)
 	ctx := context.Background()
-	client, err := things3.NewClient(things3.WithDatabasePath(dbPath))
+	client, err := things3.NewClient(things3.WithDatabasePath(dbPath), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}
@@ -593,13 +651,13 @@ func TestProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("all includes closed", func(t *testing.T) {
-		out, _, err := executeCommand(t, "projects", "--all", "--json")
+	t.Run("status any includes closed", func(t *testing.T) {
+		out, _, err := executeCommand(t, "projects", "--status", "any", "--json")
 		if err != nil {
-			t.Fatalf("projects --all: %v", err)
+			t.Fatalf("projects --status any: %v", err)
 		}
 		if got := jsonTotal(t, out); got != len(anyStatus) {
-			t.Errorf("projects --all count = %d, want %d", got, len(anyStatus))
+			t.Errorf("projects --status any count = %d, want %d", got, len(anyStatus))
 		}
 		if len(anyStatus) <= len(incomplete) {
 			t.Errorf("fixture should have closed projects (any=%d, incomplete=%d)", len(anyStatus), len(incomplete))
@@ -635,6 +693,56 @@ func TestProjects(t *testing.T) {
 		assertExitCode(t, err, 2)
 		if !strings.Contains(stderrJSON, "candidates") || !strings.Contains(stderrJSON, "area") {
 			t.Errorf("json ambiguity should carry a candidates array:\n%s", stderrJSON)
+		}
+	})
+}
+
+// --all only lifts pagination; which projects are listed is --status's job.
+func TestProjectsStatus(t *testing.T) {
+	dbPath := setupFixtureDB(t)
+	client, err := things3.NewClient(things3.WithDatabasePath(dbPath), things3.WithClock(thingstest.Now))
+	if err != nil {
+		t.Fatalf("client: %v", err)
+	}
+	incomplete, err := client.Projects().Status().Incomplete().Count(context.Background())
+	_ = client.Close()
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+
+	t.Run("all does not change the status filter", func(t *testing.T) {
+		out, _, err := executeCommand(t, "projects", "--all", "--json")
+		if err != nil {
+			t.Fatalf("projects --all: %v", err)
+		}
+		if got := jsonTotal(t, out); got != incomplete {
+			t.Errorf("projects --all count = %d, want the %d incomplete projects", got, incomplete)
+		}
+	})
+
+	t.Run("status selects closed projects", func(t *testing.T) {
+		for status, mark := range map[string]string{"completed": "(x)", "canceled": "(-)"} {
+			out, _, err := executeCommand(t, "projects", "--status", status)
+			if err != nil {
+				t.Fatalf("projects --status %s: %v", status, err)
+			}
+			rows := 0
+			for line := range strings.SplitSeq(strings.TrimSpace(out), "\n") {
+				if strings.HasPrefix(line, "(") {
+					rows++
+					if !strings.HasPrefix(line, mark) {
+						t.Errorf("--status %s listed %q", status, line)
+					}
+				}
+			}
+			if rows == 0 {
+				t.Errorf("fixture drift: no %s project", status)
+			}
+		}
+		_, stderr, err := executeCommand(t, "projects", "--status", "done")
+		assertExitCode(t, err, 1)
+		if !strings.Contains(stderr, "--status") {
+			t.Errorf("an unknown status should be rejected: %s", stderr)
 		}
 	})
 }
@@ -696,11 +804,11 @@ func TestOutputYAML(t *testing.T) {
 func TestCollectionsAndSomeday(t *testing.T) {
 	dbPath := setupFixtureDB(t)
 	ctx := context.Background()
-	client, err := things3.NewClient(things3.WithDatabasePath(dbPath))
+	client, err := things3.NewClient(things3.WithDatabasePath(dbPath), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}
-	someday, err := client.Todos().StartDate().Exists(false).Start().Someday().Status().Incomplete().All(ctx)
+	someday, err := client.Someday(ctx)
 	if err != nil {
 		t.Fatalf("someday: %v", err)
 	}
@@ -810,11 +918,11 @@ func TestDaysRejectsNegative(t *testing.T) {
 func TestGroupedViewsJSONFlat(t *testing.T) {
 	dbPath := setupFixtureDB(t)
 	ctx := context.Background()
-	client, err := things3.NewClient(things3.WithDatabasePath(dbPath))
+	client, err := things3.NewClient(things3.WithDatabasePath(dbPath), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}
-	anytime, err := client.Todos().Start().Anytime().Status().Incomplete().All(ctx)
+	anytime, err := client.Anytime(ctx)
 	if err != nil {
 		t.Fatalf("anytime: %v", err)
 	}

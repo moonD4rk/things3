@@ -1,137 +1,76 @@
 package database
 
 import (
-	"fmt"
+	"math"
 	"time"
 )
 
-// Things date format bit masks.
-// Date format: YYYYYYYYYYYMMMMDDDDD0000000 (27-bit)
+// A Things date packs a calendar day as year<<16 | month<<12 | day<<7. The year
+// is open-ended rather than 11 bits wide: Things stores year 4001 as a sentinel.
 const (
-	yearMask  = 0b111111111110000000000000000 // bits 16-26 for year
-	monthMask = 0b000000000001111000000000000 // bits 12-15 for month
-	dayMask   = 0b000000000000000111110000000 // bits 7-11 for day
+	yearShift  = 16
+	monthShift = 12
+	dayShift   = 7
+	monthMask  = 0xF
+	dayMask    = 0x1F
 )
 
-// Things time format bit masks.
-// Time format: hhhhhmmmmmm00000000000000000000 (31-bit)
+// A Things time packs a wall-clock time as hour<<26 | minute<<20.
 const (
-	hourMask   = 0b1111100000000000000000000000000 // bits 26-30 for hour
-	minuteMask = 0b0000011111100000000000000000000 // bits 20-25 for minute
+	hourShift   = 26
+	minuteShift = 20
+	hourMask    = 0x1F
+	minuteMask  = 0x3F
 )
 
-// thingsDateToTime converts a Things date integer to time.Time.
-// Things date format: YYYYYYYYYYYMMMMDDDDD0000000 (27-bit binary)
-// Returns zero time if thingsDate is 0 or negative.
-func thingsDateToTime(thingsDate int64) time.Time {
-	if thingsDate <= 0 {
-		return time.Time{}
-	}
+// Real dates lie in [minThingsDate, maxThingsDate). Things writes 0001-01-01 for
+// "unset" and 4001-01-01 for "decided per occurrence" on repeating templates.
+const (
+	minThingsDate int64 = 2<<yearShift | 1<<monthShift | 1<<dayShift
+	maxThingsDate int64 = 4001<<yearShift | 1<<monthShift | 1<<dayShift
+)
 
-	year := int((thingsDate & yearMask) >> 16)
-	month := time.Month((thingsDate & monthMask) >> 12)
-	day := int((thingsDate & dayMask) >> 7)
-
-	return time.Date(year, month, day, 0, 0, 0, 0, time.Local)
+func packThingsDate(year int, month time.Month, day int) int64 {
+	return int64(year)<<yearShift | int64(month)<<monthShift | int64(day)<<dayShift
 }
 
-// timeToThingsDate converts a time.Time to Things date integer.
-// Things date format: YYYYYYYYYYYMMMMDDDDD0000000 (27-bit binary)
-// Returns 0 if t is zero.
+// timeToThingsDate packs the calendar day of t, or 0 for the zero time.
 func timeToThingsDate(t time.Time) int64 {
 	if t.IsZero() {
 		return 0
 	}
-
-	year := int64(t.Year())
-	month := int64(t.Month())
-	day := int64(t.Day())
-
-	return (year << 16) | (month << 12) | (day << 7)
+	return packThingsDate(t.Year(), t.Month(), t.Day())
 }
 
-// thingsDateToString converts a Things date integer to ISO 8601 date string (YYYY-MM-DD).
-// Returns empty string if thingsDate is 0 or negative.
-func thingsDateToString(thingsDate int64) string {
-	if thingsDate <= 0 {
-		return ""
-	}
-
-	year := (thingsDate & yearMask) >> 16
-	month := (thingsDate & monthMask) >> 12
-	day := (thingsDate & dayMask) >> 7
-
-	return fmt.Sprintf("%d-%02d-%02d", year, month, day)
+// isRealThingsDate reports whether d is an actual calendar day, not a sentinel.
+func isRealThingsDate(d int64) bool {
+	return d >= minThingsDate && d < maxThingsDate
 }
 
-// stringToThingsDate converts an ISO 8601 date string (YYYY-MM-DD) to Things date integer.
-// Returns 0 and error if the string is invalid.
-func stringToThingsDate(isoDate string) (int64, error) {
-	if isoDate == "" {
-		return 0, nil
-	}
-
-	t, err := time.Parse("2006-01-02", isoDate)
-	if err != nil {
-		return 0, fmt.Errorf("invalid date format %q: %w", isoDate, err)
-	}
-
-	return timeToThingsDate(t), nil
-}
-
-// thingsTimeToString converts a Things time integer to time string (HH:MM).
-// Things time format: hhhhhmmmmmm00000000000000000000 (31-bit binary)
-// Zero encodes a valid 00:00 reminder ("no reminder" is NULL in the
-// database, never 0). Returns empty string only for negative values.
-func thingsTimeToString(thingsTime int64) string {
-	if thingsTime < 0 {
-		return ""
-	}
-
-	hours := (thingsTime & hourMask) >> 26
-	minutes := (thingsTime & minuteMask) >> 20
-
-	return fmt.Sprintf("%02d:%02d", hours, minutes)
-}
-
-// unixToTime converts Unix timestamp (seconds since epoch) to time.Time in local timezone.
-// Returns zero time if unixTime is 0.
-func unixToTime(unixTime float64) time.Time {
-	if unixTime == 0 {
+// thingsDateToTime unpacks d as local midnight; a sentinel yields the zero time.
+func thingsDateToTime(d int64) time.Time {
+	if !isRealThingsDate(d) {
 		return time.Time{}
 	}
-	return time.Unix(int64(unixTime), 0).Local()
+	year := int(d >> yearShift)
+	month := time.Month((d >> monthShift) & monthMask)
+	day := int((d >> dayShift) & dayMask)
+	return time.Date(year, month, day, 0, 0, 0, 0, time.Local)
 }
 
-// nowThingsDate returns the current date as a Things date integer.
-func nowThingsDate() int64 {
-	return timeToThingsDate(time.Now())
+// thingsTimeToClock unpacks a reminder as a wall clock on the zero date: it
+// names a time of day, not an instant.
+func thingsTimeToClock(v int64) time.Time {
+	hour := int((v >> hourShift) & hourMask)
+	minute := int((v >> minuteShift) & minuteMask)
+	return time.Date(0, time.January, 1, hour, minute, 0, 0, time.UTC)
 }
 
-// todayThingsDateSQL returns a SQL expression that evaluates to today's Things date.
-func todayThingsDateSQL() string {
-	return "((strftime('%Y', date('now', 'localtime')) << 16) | " +
-		"(strftime('%m', date('now', 'localtime')) << 12) | " +
-		"(strftime('%d', date('now', 'localtime')) << 7))"
-}
-
-// thingsDateExpressionToISODate creates a SQL expression to convert Things date to ISO format.
-func thingsDateExpressionToISODate(expr string) string {
-	year := fmt.Sprintf("(%s & %d) >> 16", expr, yearMask)
-	month := fmt.Sprintf("(%s & %d) >> 12", expr, monthMask)
-	day := fmt.Sprintf("(%s & %d) >> 7", expr, dayMask)
-
-	isoDate := fmt.Sprintf("printf('%%d-%%02d-%%02d', %s, %s, %s)", year, month, day)
-	return fmt.Sprintf("CASE WHEN %s THEN %s ELSE %s END", expr, isoDate, expr)
-}
-
-// thingsTimeExpressionToISOTime creates a SQL expression to convert Things time to HH:MM format.
-// The NULL check must be explicit: a packed value of 0 is a valid 00:00
-// reminder, so truthiness (CASE WHEN expr) would wrongly drop midnight.
-func thingsTimeExpressionToISOTime(expr string) string {
-	hours := fmt.Sprintf("(%s & %d) >> 26", expr, hourMask)
-	minutes := fmt.Sprintf("(%s & %d) >> 20", expr, minuteMask)
-
-	isoTime := fmt.Sprintf("printf('%%02d:%%02d', %s, %s)", hours, minutes)
-	return fmt.Sprintf("CASE WHEN %s IS NOT NULL THEN %s ELSE NULL END", expr, isoTime)
+// unixToTime converts fractional Unix seconds to a local instant, keeping the
+// microsecond precision Things records. Zero yields the zero time.
+func unixToTime(seconds float64) time.Time {
+	if seconds == 0 {
+		return time.Time{}
+	}
+	return time.UnixMicro(int64(math.Round(seconds * 1e6))).Local()
 }

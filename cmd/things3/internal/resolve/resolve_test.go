@@ -2,6 +2,7 @@ package resolve
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 	"testing"
@@ -10,14 +11,44 @@ import (
 	"github.com/moond4rk/things3/thingstest"
 )
 
+// Fixture rows the resolver tests lean on.
+const (
+	uuidTrashedTodo      = "Tmt3omxtu61wAoTaSLweQy"
+	uuidTemplate         = "N1PJHsbjct4mb1bhcs7aHa" // "Repeating To-Do", the series
+	uuidTemplateInstance = "K9bx7h1xCJdevvyWardZDq" // "Repeating To-Do", today's copy
+	uuidCompletedInToday = "56dtXSk3A373M6n4eqGyr3"
+)
+
 func newFixtureClient(t *testing.T) *things3.Client {
 	t.Helper()
-	client, err := things3.NewClient(things3.WithDatabasePath(thingstest.DatabasePath(t)))
+	return newClientAt(t, thingstest.DatabasePath(t))
+}
+
+func newClientAt(t *testing.T, path string) *things3.Client {
+	t.Helper()
+	client, err := things3.NewClient(things3.WithDatabasePath(path), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
 	t.Cleanup(func() { _ = client.Close() })
 	return client
+}
+
+// mutateFixture returns a fixture copy with the statements applied.
+func mutateFixture(t *testing.T, statements ...string) string {
+	t.Helper()
+	path := thingstest.DatabasePath(t)
+	raw, err := sql.Open("sqlite3", path)
+	if err != nil {
+		t.Fatalf("open fixture: %v", err)
+	}
+	defer raw.Close()
+	for _, stmt := range statements {
+		if _, err := raw.ExecContext(t.Context(), stmt); err != nil {
+			t.Fatalf("mutate fixture: %v", err)
+		}
+	}
+	return path
 }
 
 func containsUUID(matches []Match, uuid string) bool {
@@ -141,14 +172,120 @@ func TestResolveAmbiguousAndRanking(t *testing.T) {
 		t.Errorf("an open project ranked before an open todo (want todos first)")
 	}
 
-	_, err = ResolveOne(ctx, c, "in Today")
-	var ambiguous *AmbiguousError
-	if !errors.As(err, &ambiguous) {
+	// Several open items share the substring, so it stays ambiguous, but the
+	// closed ones are no longer candidates for the caller to wade through.
+	_, err = ResolveOne(ctx, c, "in Today", PreferOpen)
+	ambiguous, ok := errors.AsType[*AmbiguousError](err)
+	if !ok {
 		t.Fatalf("want *AmbiguousError, got %v", err)
 	}
-	if len(ambiguous.Matches) != len(matches) {
-		t.Errorf("AmbiguousError should carry all %d candidates, got %d", len(matches), len(ambiguous.Matches))
+	open := keep(matches, Match.Open)
+	if len(open) < 2 || len(open) == len(matches) {
+		t.Fatalf("fixture drift: want several open and some closed matches, got %d open of %d", len(open), len(matches))
 	}
+	if len(ambiguous.Matches) != len(open) {
+		t.Errorf("AmbiguousError should carry the %d open candidates, got %d", len(open), len(ambiguous.Matches))
+	}
+}
+
+// One open item among same-titled closed ones is what a repeating task looks
+// like after a few completions; naming it must not be ambiguous.
+func TestResolveOnePrefersTheSingleOpenMatch(t *testing.T) {
+	path := mutateFixture(t,
+		"UPDATE TMTask SET title = 'To-Do in Today' WHERE uuid = '"+uuidCompletedInToday+"'")
+	c := newClientAt(t, path)
+	ctx := context.Background()
+
+	matches, err := Resolve(ctx, c, "To-Do in Today")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if len(matches) != 2 {
+		t.Fatalf("want the open and the completed todo, got %d", len(matches))
+	}
+
+	open, err := ResolveOne(ctx, c, "To-Do in Today", PreferOpen)
+	if err != nil {
+		t.Fatalf("PreferOpen: %v", err)
+	}
+	if open.UUID() != thingstest.UUIDTodoInToday {
+		t.Errorf("PreferOpen picked %s, want the open todo", open.UUID())
+	}
+
+	closed, err := ResolveOne(ctx, c, "To-Do in Today", PreferClosed)
+	if err != nil {
+		t.Fatalf("PreferClosed: %v", err)
+	}
+	if closed.UUID() != uuidCompletedInToday {
+		t.Errorf("PreferClosed picked %s, want the completed todo", closed.UUID())
+	}
+}
+
+// A lone match is returned whatever its status: completing a completed item is
+// the caller's business, not an ambiguity.
+func TestResolveOneKeepsALoneNonPreferredMatch(t *testing.T) {
+	c := newFixtureClient(t)
+	m, err := ResolveOne(context.Background(), c, "Completed To-Do in Today", PreferOpen)
+	if err != nil {
+		t.Fatalf("ResolveOne: %v", err)
+	}
+	if m.UUID() != uuidCompletedInToday {
+		t.Errorf("got %s, want the completed todo", m.UUID())
+	}
+}
+
+// Views print the UUIDs of trashed items and repeating templates, so those
+// UUIDs must resolve; the URL scheme cannot change either, so writes refuse.
+func TestResolveReachesTrashedAndTemplatesByUUIDOnly(t *testing.T) {
+	c := newFixtureClient(t)
+	ctx := context.Background()
+
+	for name, tc := range map[string]struct {
+		uuid     string
+		trashed  bool
+		template bool
+	}{
+		"trashed todo":       {uuid: uuidTrashedTodo, trashed: true},
+		"repeating template": {uuid: uuidTemplate, template: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			for _, query := range []string{tc.uuid, tc.uuid[:8]} {
+				m, err := ResolveOne(ctx, c, query, PreferOpen)
+				if err != nil {
+					t.Fatalf("ResolveOne(%q): %v", query, err)
+				}
+				if m.UUID() != tc.uuid || m.Trashed() != tc.trashed || m.Template() != tc.template || m.Live() {
+					t.Errorf("ResolveOne(%q) = %s trashed=%v template=%v", query, m.UUID(), m.Trashed(), m.Template())
+				}
+
+				_, err = ResolveTarget(ctx, c, query, PreferOpen)
+				readOnly, ok := errors.AsType[*ReadOnlyError](err)
+				if !ok {
+					t.Fatalf("ResolveTarget(%q): want *ReadOnlyError, got %v", query, err)
+				}
+				if readOnly.Match.UUID() != tc.uuid {
+					t.Errorf("ReadOnlyError names %s, want %s", readOnly.Match.UUID(), tc.uuid)
+				}
+			}
+		})
+	}
+
+	// By title the template stays hidden: the title names today's copy.
+	m, err := ResolveTarget(ctx, c, "Repeating To-Do", PreferOpen)
+	if err != nil {
+		t.Fatalf("ResolveTarget by title: %v", err)
+	}
+	if m.UUID() != uuidTemplateInstance {
+		t.Errorf("title resolved to %s, want the live instance %s", m.UUID(), uuidTemplateInstance)
+	}
+	if _, err := ResolveOne(ctx, c, "Another Deleted Todo", PreferOpen); !isNotFound(err) {
+		t.Errorf("a trashed item must not match by title, got %v", err)
+	}
+}
+
+func isNotFound(err error) bool {
+	_, ok := errors.AsType[*NotFoundError](err)
+	return ok
 }
 
 func TestResolveWildcardsAreLiteral(t *testing.T) {
@@ -168,9 +305,8 @@ func TestResolveWildcardsAreLiteral(t *testing.T) {
 
 func TestResolveOneNotFound(t *testing.T) {
 	c := newFixtureClient(t)
-	_, err := ResolveOne(context.Background(), c, "zzz-no-such-item-zzz")
-	var notFound *NotFoundError
-	if !errors.As(err, &notFound) {
+	_, err := ResolveOne(context.Background(), c, "zzz-no-such-item-zzz", PreferOpen)
+	if !isNotFound(err) {
 		t.Fatalf("want *NotFoundError, got %v", err)
 	}
 }
@@ -187,11 +323,14 @@ func TestProjectResolve(t *testing.T) {
 		t.Errorf("want %q, got %q", "Project in Today", p.Title)
 	}
 
-	_, err = Project(ctx, c, "Project in")
-	var ambiguous *AmbiguousError
-	if !errors.As(err, &ambiguous) {
+	if _, err = Project(ctx, c, "Project in"); !isAmbiguous(err) {
 		t.Fatalf("want *AmbiguousError for %q, got %v", "Project in", err)
 	}
+}
+
+func isAmbiguous(err error) bool {
+	_, ok := errors.AsType[*AmbiguousError](err)
+	return ok
 }
 
 func TestAreaResolve(t *testing.T) {
@@ -214,9 +353,7 @@ func TestAreaResolve(t *testing.T) {
 		t.Errorf("want Area 1, got %q", byTitle.Title)
 	}
 
-	_, err = Area(ctx, c, "Area")
-	var ambiguous *AmbiguousError
-	if !errors.As(err, &ambiguous) {
+	if _, err = Area(ctx, c, "Area"); !isAmbiguous(err) {
 		t.Fatalf("want *AmbiguousError for %q, got %v", "Area", err)
 	}
 }
@@ -236,9 +373,7 @@ func TestHeadingResolve(t *testing.T) {
 
 	// A project with two headings, matched by a shared substring -> ambiguous.
 	const twoHeadingProject = "TCozQqXVbB2TJkXXXQj2H9"
-	_, err = Heading(ctx, c, twoHeadingProject, "Heading")
-	var ambiguous *AmbiguousError
-	if !errors.As(err, &ambiguous) {
+	if _, err = Heading(ctx, c, twoHeadingProject, "Heading"); !isAmbiguous(err) {
 		t.Fatalf("want *AmbiguousError for two-heading project, got %v", err)
 	}
 }
@@ -257,14 +392,13 @@ func TestResolveExactTitleCaseInsensitive(t *testing.T) {
 func TestNarrowResolveNotFound(t *testing.T) {
 	c := newFixtureClient(t)
 	ctx := context.Background()
-	var notFound *NotFoundError
-	if _, err := Project(ctx, c, "zzznope"); !errors.As(err, &notFound) {
+	if _, err := Project(ctx, c, "zzznope"); !isNotFound(err) {
 		t.Errorf("Project not-found should be *NotFoundError, got %v", err)
 	}
-	if _, err := Area(ctx, c, "zzznope"); !errors.As(err, &notFound) {
+	if _, err := Area(ctx, c, "zzznope"); !isNotFound(err) {
 		t.Errorf("Area not-found should be *NotFoundError, got %v", err)
 	}
-	if _, err := Heading(ctx, c, thingstest.UUIDProject, "zzznope"); !errors.As(err, &notFound) {
+	if _, err := Heading(ctx, c, thingstest.UUIDProject, "zzznope"); !isNotFound(err) {
 		t.Errorf("Heading not-found should be *NotFoundError, got %v", err)
 	}
 }

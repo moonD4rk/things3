@@ -38,24 +38,25 @@ func TestUpcomingIncludesRepeatingTemplate(t *testing.T) {
 	}
 }
 
-func TestTodoContainerSegment(t *testing.T) {
+func TestItemContainerSegment(t *testing.T) {
 	cases := []struct {
 		name string
-		todo things3.Todo
+		item things3.Item
 		want string
 	}{
-		{"project with heading", things3.Todo{ProjectTitle: "Launch", HeadingTitle: "Docs"}, "@Launch / Docs"},
-		{"project only", things3.Todo{ProjectTitle: "Launch"}, "@Launch"},
-		{"area only", things3.Todo{AreaTitle: "Work"}, "@Work"},
-		{"project wins over area", things3.Todo{ProjectTitle: "Launch", AreaTitle: "Work"}, "@Launch"},
-		{"heading without project omitted", things3.Todo{HeadingTitle: "Docs"}, ""},
-		{"no container", things3.Todo{}, ""},
+		{"project with heading", things3.Item{Todo: &things3.Todo{ProjectTitle: "Launch", HeadingTitle: "Docs"}}, "@Launch / Docs"},
+		{"project only", things3.Item{Todo: &things3.Todo{ProjectTitle: "Launch"}}, "@Launch"},
+		{"area only", things3.Item{Todo: &things3.Todo{AreaTitle: "Work"}}, "@Work"},
+		{"project wins over area", things3.Item{Todo: &things3.Todo{ProjectTitle: "Launch", AreaTitle: "Work"}}, "@Launch"},
+		{"heading without project omitted", things3.Item{Todo: &things3.Todo{HeadingTitle: "Docs"}}, ""},
+		{"no container", things3.Item{Todo: &things3.Todo{}}, ""},
+		{"a project sits in its area", things3.Item{Project: &things3.Project{AreaTitle: "Work"}}, "@Work"},
+		{"a project on its own", things3.Item{Project: &things3.Project{}}, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			todo := tc.todo
-			if got := todoContainer(&todo); got != tc.want {
-				t.Errorf("todoContainer = %q, want %q", got, tc.want)
+			if got := itemContainer(tc.item); got != tc.want {
+				t.Errorf("itemContainer = %q, want %q", got, tc.want)
 			}
 		})
 	}

@@ -13,7 +13,7 @@ import (
 
 func fixtureProjectUUID(t *testing.T, dbPath, title string) string {
 	t.Helper()
-	client, err := things3.NewClient(things3.WithDatabasePath(dbPath))
+	client, err := things3.NewClient(things3.WithDatabasePath(dbPath), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}
@@ -27,7 +27,7 @@ func fixtureProjectUUID(t *testing.T, dbPath, title string) string {
 
 func fixtureAreaUUID(t *testing.T, dbPath, title string) string {
 	t.Helper()
-	client, err := things3.NewClient(things3.WithDatabasePath(dbPath))
+	client, err := things3.NewClient(things3.WithDatabasePath(dbPath), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}
@@ -438,5 +438,80 @@ func TestDoneProjectTarget(t *testing.T) {
 	}
 	if u.Query().Get("completed") != "true" {
 		t.Errorf("completed = %q", u.Query().Get("completed"))
+	}
+}
+
+// The edit flags map one to one onto the URL scheme's update parameters; the
+// rules they share with the MCP tool are tested in internal/change.
+func TestEditFlagSurface(t *testing.T) {
+	setupFixtureDB(t)
+
+	cases := []struct {
+		name  string
+		args  []string
+		param string
+		want  string
+	}{
+		{"prepend notes", []string{"--prepend-notes", "first"}, "prepend-notes", "first"},
+		{"clear notes", []string{"--clear-notes"}, "notes", ""},
+		{"empty notes also clears", []string{"--notes", ""}, "notes", ""},
+		{"clear tags", []string{"--clear-tags"}, "tags", ""},
+		{"replace checklist", []string{"--checklist", "one", "--checklist", "two"}, "checklist-items", "one\ntwo"},
+		{"append checklist", []string{"--append-checklist", "Passport"}, "append-checklist-items", "Passport"},
+		{"prepend checklist", []string{"--prepend-checklist", "Keys"}, "prepend-checklist-items", "Keys"},
+		{"clear checklist", []string{"--clear-checklist"}, "checklist-items", ""},
+		{"reminder keeps the scheduled day", []string{"--reminder", "09:30"}, "when", "2021-03-28@09:30"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			q := dryRunURL(t, append([]string{"edit", "To-Do in Today"}, tc.args...)...).Query()
+			got, sent := q[tc.param]
+			if !sent || got[0] != tc.want {
+				t.Errorf("%s = %q (sent %v), want %q", tc.param, got, sent, tc.want)
+			}
+		})
+	}
+
+	for name, args := range map[string][]string{
+		"checklist on a project":       {"edit", "Project in Today", "--append-checklist", "x"},
+		"reminder without a day":       {"edit", "To-Do in Anytime", "--reminder", "09:00"},
+		"notes with clear-notes":       {"edit", "To-Do in Today", "--notes", "x", "--clear-notes"},
+		"deadline with clear-deadline": {"edit", "To-Do in Today", "--deadline", "2026-08-01", "--clear-deadline"},
+		"bad reminder":                 {"edit", "To-Do in Today", "--reminder", "9am"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			stdout, _, err := executeCommand(t, append(args, "--dry-run")...)
+			assertExitCode(t, err, 1)
+			if strings.Contains(stdout, "things://") {
+				t.Errorf("a rejected edit must not build a URL: %s", stdout)
+			}
+		})
+	}
+}
+
+func TestScheduleReminder(t *testing.T) {
+	setupFixtureDB(t)
+
+	u := dryRunURL(t, "schedule", "To-Do in Today", "2026-08-01", "--reminder", "09:00")
+	if got := u.Query().Get("when"); got != "2026-08-01@09:00" {
+		t.Errorf("when = %q, want the day with the reminder", got)
+	}
+
+	_, stderr, err := executeCommand(t, "schedule", "To-Do in Today", "someday", "--reminder", "09:00", "--dry-run")
+	assertExitCode(t, err, 1)
+	if !strings.Contains(stderr, "reminder") {
+		t.Errorf("a reminder without a day should be rejected: %s", stderr)
+	}
+}
+
+func TestAddProjectTagsAndReminder(t *testing.T) {
+	setupFixtureDB(t)
+
+	q := dryRunURL(t, "add", "project", "Website", "--tags", "q3, launch", "--when", "tomorrow", "--reminder", "08:15").Query()
+	if q.Get("tags") != "q3,launch" {
+		t.Errorf("tags = %q", q.Get("tags"))
+	}
+	if !strings.HasSuffix(q.Get("when"), "@08:15") {
+		t.Errorf("when = %q, want the reminder folded in", q.Get("when"))
 	}
 }

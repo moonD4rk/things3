@@ -36,7 +36,7 @@ func runMove(cmd *cobra.Command, args []string, client *things3.Client) error {
 	}
 
 	ctx := cmd.Context()
-	match, err := resolve.ResolveOne(ctx, client, args[0])
+	match, err := resolve.ResolveTarget(ctx, client, args[0], resolve.PreferOpen)
 	if err != nil {
 		return fromResolveError(err)
 	}

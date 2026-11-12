@@ -162,7 +162,7 @@ const (
 // landing the write so the database verifier confirms it on the next poll.
 func confirmingServer(t *testing.T, path string, bump func()) *Server {
 	t.Helper()
-	client, err := things3.NewClient(things3.WithDatabasePath(path))
+	client, err := things3.NewClient(things3.WithDatabasePath(path), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}
@@ -293,7 +293,7 @@ func TestWriteExecErrorClassification(t *testing.T) {
 func TestUpdateMissingTokenIsExecutionFailed(t *testing.T) {
 	path := thingstest.DatabasePath(t)
 	execFixture(t, path, "UPDATE TMSettings SET uriSchemeAuthenticationToken = NULL")
-	client, err := things3.NewClient(things3.WithDatabasePath(path))
+	client, err := things3.NewClient(things3.WithDatabasePath(path), things3.WithClock(thingstest.Now))
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}

@@ -59,3 +59,26 @@ func TestScheduleProjectTarget(t *testing.T) {
 		t.Errorf("path = %q, want /update-project", u.Path)
 	}
 }
+
+func TestScheduleReminder(t *testing.T) {
+	srv, rec := newWriteServer(t)
+
+	_, res, err := srv.handleSchedule(context.Background(), nil,
+		ScheduleInput{Target: "To-Do in Today", When: "2026-08-01", Reminder: "09:00"})
+	if err != nil || !res.Success {
+		t.Fatalf("schedule: %v %+v", err, res.Error)
+	}
+	if got := rec.last(t).Query().Get("when"); got != "2026-08-01@09:00" {
+		t.Errorf("when = %q, want the day with the reminder", got)
+	}
+
+	for name, in := range map[string]ScheduleInput{
+		"a reminder needs a day": {Target: "To-Do in Today", When: "someday", Reminder: "09:00"},
+		"bad reminder":           {Target: "To-Do in Today", When: "today", Reminder: "nine"},
+	} {
+		_, res, err := srv.handleSchedule(context.Background(), nil, in)
+		if err != nil || res.Success || res.Error == nil || res.Error.Code != codeInvalidInput {
+			t.Errorf("%s should be invalid_input, got %+v (%v)", name, res, err)
+		}
+	}
+}

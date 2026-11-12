@@ -84,19 +84,21 @@ The `next:` hint disappears on the last page (`-- 10-10 of 10 (page 4/4) | all: 
 
 | Command | Flags | Description | Example |
 | --- | --- | --- | --- |
-| `today` | - | Today's todos, with a This Evening section when present | `things3 today` |
+| `today` | - | The Today list: todos and projects scheduled into Today, those whose day has come, and unscheduled ones with a due deadline; a This Evening section when present | `things3 today` |
 | `inbox` | - | Incomplete todos in the Inbox | `things3 inbox` |
-| `upcoming` | `--days N` (0 = all) | Scheduled future todos plus repeating tasks at their next occurrence, grouped by date | `things3 upcoming --days 7` |
-| `anytime` | - | Anytime todos, grouped by project or area | `things3 anytime` |
-| `someday` | - | Someday todos with no scheduled date | `things3 someday` |
-| `logbook` | `--days N` (default 30, 0 = all) | Completed and canceled todos, most recent first | `things3 logbook --days 7` |
-| `deadlines` | `--days N` (0 = all, keeps overdue) | Incomplete todos with deadlines, soonest first | `things3 deadlines --days 7` |
-| `trash` | - | Trashed todos and projects (mixed list) | `things3 trash` |
+| `upcoming` | `--days N` (0 = all) | Grouped by date: todos and projects scheduled for a future day, each repeating series at its next occurrence, and unscheduled items at their future deadline; series with no next occurrence trail under `No date` | `things3 upcoming --days 7` |
+| `anytime` | - | The todos you can act on now, grouped by project or area. Todos of a project that sits in Someday are not listed | `things3 anytime` |
+| `someday` | - | Someday projects and the unscheduled Someday todos that stand on their own (one inside a project stays in its project) | `things3 someday` |
+| `logbook` | `--days N` (default 30, 0 = all) | Completed and canceled projects and todos, most recent first. The todos of a closed project are part of its row | `things3 logbook --days 7` |
+| `deadlines` | `--days N` (0 = all, keeps overdue) | Open todos and projects with deadlines, soonest first | `things3 deadlines --days 7` |
+| `trash` | - | Trashed todos and projects, most recently trashed first. The trashed todos of a trashed project are part of its row | `things3 trash` |
+
+Each view lists what the Things app lists there, in the app's order: the views were checked item for item against the app. That is why most of them hold projects as well as todos.
 
 The **Flags** column lists view-specific flags only; every view also accepts the shared [List flags](#list-flags) (`--page`, `--all`, `--sort`, `--desc`, `--tag`). For example:
 
 ```bash
-things3 upcoming --tag work           # only repeating/scheduled todos tagged work
+things3 upcoming --tag work           # only upcoming items tagged work
 things3 logbook -n 5 --page 2         # the second page of five completed items
 things3 anytime --sort title          # anytime todos, sorted by title
 ```
@@ -105,7 +107,7 @@ things3 anytime --sort title          # anytime todos, sorted by title
 
 | Command | Flags | Description | Example |
 | --- | --- | --- | --- |
-| `projects` | `--area <q>`, `--all` | Incomplete projects; `--all` includes done/canceled; `--area` filters by area | `things3 projects --area Work` |
+| `projects` | `--area <q>`, `--status <s>` | Projects in sidebar order; `--status` is `incomplete` (default), `completed`, `canceled`, or `any`; `--area` filters by area | `things3 projects --area Work` |
 | `areas` | - | All areas; honors the shared [List flags](#list-flags) | `things3 areas` |
 | `tags` | - | All tags; honors the shared [List flags](#list-flags) | `things3 tags` |
 
@@ -114,7 +116,7 @@ things3 anytime --sort title          # anytime todos, sorted by title
 | Command | Args | Description | Example |
 | --- | --- | --- | --- |
 | `show` | `<query>` | Quick Find across todos and projects. One match prints a detail view; several print a mixed list; none is an error | `things3 show "Write report"` |
-| `search` | `<query>` | Full-text search across todos and projects (title, notes, area). Empty results are fine | `things3 search meeting` |
+| `search` | `<query>` | Full-text search across the titles and notes of todos and projects. Empty results are fine | `things3 search meeting` |
 
 ### Actions
 
@@ -123,20 +125,22 @@ Every action resolves the target, executes the write, and verifies it. All accep
 | Command | Args | Key flags | Description | Example |
 | --- | --- | --- | --- | --- |
 | `add` | `<title>` | `--notes`, `--when`, `--deadline`, `--reminder`, `--project` / `--area` / `--heading`, `--tags`, `--checklist` (repeatable) | Create a todo | `things3 add "Email Bob" --project Work --tags urgent` |
-| `add project` | `<title>` | `--notes`, `--when`, `--deadline`, `--area`, `--todos` (repeatable) | Create a project | `things3 add project "Website redesign" --area Work` |
+| `add project` | `<title>` | `--notes`, `--when`, `--deadline`, `--reminder`, `--area`, `--tags`, `--todos` (repeatable) | Create a project | `things3 add project "Website redesign" --area Work` |
 | `done` | `<query>` | - | Complete a todo or project | `things3 done "Buy milk"` |
 | `cancel` | `<query>` | - | Cancel a todo or project | `things3 cancel "Old idea"` |
-| `schedule` | `<query> <when>` | - | Set When (the app's Cmd+S) | `things3 schedule "Write report" 2026-08-01` |
+| `schedule` | `<query> <when>` | `--reminder` | Set When (the app's Cmd+S), optionally with a reminder that day | `things3 schedule "Write report" 2026-08-01` |
 | `move` | `<query>` | `--to <dest>` (required) | Move to a project or area (the app's Move) | `things3 move "Buy milk" --to Groceries` |
-| `edit` | `<query>` | `--title`, `--notes`, `--append-notes`, `--deadline`, `--clear-deadline`, `--tags`, `--add-tags` | Edit attributes (at least one flag) | `things3 edit "Report" --add-tags urgent` |
-| `open` | `[<query>\|<view>]` | `--dry-run` | Reveal an item or built-in list in Things.app; no args opens Today | `things3 open today` |
+| `edit` | `<query>` | `--title`; `--notes`, `--prepend-notes`, `--append-notes`, `--clear-notes`; `--deadline`, `--clear-deadline`; `--reminder`; `--tags`, `--add-tags`, `--clear-tags`; `--checklist`, `--prepend-checklist`, `--append-checklist` (each repeatable), `--clear-checklist` | Edit attributes (at least one flag) | `things3 edit "Report" --add-tags urgent` |
+| `open` | `[<query>\|<view>]` | `--search <text>`, `--dry-run` | Reveal an item or built-in list in Things.app, or run the app's search; no args opens Today | `things3 open today` |
 
 Notes:
 
 - `--when` and `schedule`'s `<when>` accept `today`, `tomorrow`, `evening`, `anytime`, `someday`, or `YYYY-MM-DD`.
 - `--deadline` takes `YYYY-MM-DD`; `--reminder` takes `HH:MM`.
+- `edit`: a flag and its `--clear-` counterpart are mutually exclusive. The checklist flags apply to todos only: `--checklist` replaces the whole list, the prepend and append flags add items, and existing items cannot be checked off or changed one by one. `--reminder` keeps the day the item is scheduled for, so it needs an item that has one (use `schedule <query> <when> --reminder` to set both).
+- `schedule --reminder` needs a day: it is rejected with `anytime` or `someday`.
 - `add`: `--project`, `--area`, and `--heading` are placement targets; `--heading` requires `--project`, and `--project`/`--area` are mutually exclusive.
-- `open` view names: `inbox`, `today`, `upcoming`, `anytime`, `someday`, `logbook`, `deadlines`.
+- `open` view names: `inbox`, `today`, `upcoming`, `anytime`, `someday`, `logbook`, `deadlines`. `--search <text>` opens the app's full-text search instead and cannot be combined with a query or view.
 - `version` and `completion` (shell completion) are also available.
 
 ## How queries resolve
@@ -148,11 +152,15 @@ Notes:
 3. **Exact title** - case-insensitive full-title match.
 4. **Title substring** - case-insensitive containment.
 
-Matches are ranked **open items before closed** (completed/canceled), with todos before projects on ties. Trashed items never match.
+Matches are ranked **live items first** (not trashed, not a repeating series), then **open before closed** (completed/canceled), with todos before projects on ties.
+
+The two UUID tiers reach everything that exists, including trashed items and repeating series, because `trash` and `upcoming` print their UUIDs. The two title tiers match live items only.
 
 **Every 8-character UUID the CLI prints is a valid query.** List rows show the first 8 characters of each UUID; because that satisfies the four-character prefix rule and is effectively unique, you can copy any printed short UUID straight back into `show`, `done`, `schedule`, and the rest.
 
-**The write rule:** write commands demand exactly one match.
+**Picking one:** `show` lists every match, while a write and `open` need exactly one. When several items match, the pick narrows to the live ones and then to the **single open one**: a repeating task leaves a trail of completed copies under the same title, and `done "Water plants"` means the one still open. If that still leaves several, the command reports the remaining candidates and exits `2`.
+
+**The write rule:** write commands demand exactly one match, and one Things lets them change. A trashed item or a repeating series resolves, but the write is refused with exit `1` and an explanation, because the URL scheme cannot modify either.
 
 - Zero matches -> "no item matches ..." error (exit 1).
 - One match -> the write proceeds.
@@ -170,24 +178,17 @@ List rows are compact and columnar:
 STATUS   UUID      TITLE
 [ ]      5pUx6PES  Review pull requests | 2026-07-02 | @Work / Backend | #urgent
 [ ]      A1b2C3d4  Call the dentist | due:2026-07-05 | @Errands | #errands
+( )      3x1QqJqf  Website redesign | due:2026-08-01 | @Work
 [x]      7F4vqUNi  Draft release notes | 2026-06-30
 ```
 
-- **STATUS** - `[ ]` incomplete, `[x]` completed, `[-]` canceled.
+- **STATUS** - the mark's shape is the item's type, as in the app: square for a todo, round for a project. `[ ]` / `( )` incomplete, `[x]` / `(x)` completed, `[-]` / `(-)` canceled.
 - **UUID** - first 8 characters (a valid query).
-- **TITLE** - followed by optional `|` suffixes, in order: a date (`YYYY-MM-DD` for a scheduled/closed date, `due:YYYY-MM-DD` for a deadline), a container (`@Project` with `/ Heading` when set, else `@Area`), `#tags`, and `repeats` for repeating items.
+- **TITLE** - followed by optional `|` suffixes, in order: a date (`YYYY-MM-DD` for a scheduled/closed date, `due:YYYY-MM-DD` for a deadline), a container (`@Project` with `/ Heading` when set, else `@Area`; a project's container is its `@Area`), `#tags`, and `repeats` for repeating items.
 
 The container segment makes each row legible on its own. Views that already group by container (`anytime`) omit it to avoid repeating the group header on every row.
 
-Mixed lists (`trash`, `search`, and multi-match `show`) insert a **TYPE** column:
-
-```
-STATUS   UUID      TYPE     TITLE
-[ ]      A1b2C3d4  todo     Call the dentist | due:2026-07-05
-[x]      3x1QqJqf  project  Website redesign | 2026-06-30
-```
-
-Grouped views add headers in **text mode only**: `today` splits into `Today` / `This Evening`, `upcoming` groups by date (each repeating task appears under its next occurrence with a `repeats` marker), `anytime` groups by project or area. `areas` and `tags` print as simple `- Title` lists. A single-match `show` prints a vertical detail view (Title, UUID, Status, Start, Project/Area/Heading, Tags, When, Deadline, Reminder, Done/Canceled, Notes, Checklist; a project detail is followed by its incomplete todos).
+Grouped views add headers in **text mode only**: `today` splits into `Today` / `This Evening`, `upcoming` groups by date (each repeating series appears under its next occurrence with a `repeats` marker, or under `No date` marked `repeats (paused)` or `repeats (ended)` when it has none; an unscheduled item appears under its deadline), `anytime` groups by project or area. `areas` and `tags` print as simple `- Title` lists. A single-match `show` prints a vertical detail view (Title, UUID, Status, Start, Project/Area/Heading, Tags, When, Deadline, Reminder, Done/Canceled, Notes, Checklist; a project detail is followed by its incomplete todos).
 
 Paginated lists end with a text-only footer (see [List flags](#list-flags)):
 
@@ -226,23 +227,25 @@ Paginated lists end with a text-only footer (see [List flags](#list-flags)):
 | `status` | string | `incomplete`, `completed`, or `canceled` |
 | `notes` | string | optional |
 | `start` | string | `inbox`, `anytime`, or `someday` |
-| `area_uuid`, `area_title` | string | parent area, optional |
-| `project_uuid`, `project_title` | string | parent project, optional |
+| `area_uuid`, `area_title` | string | area the todo belongs to, directly or through its project; optional |
+| `project_uuid`, `project_title` | string | project the todo belongs to, directly or through its heading; optional |
 | `heading_uuid`, `heading_title` | string | parent heading, optional |
 | `tags` | array of string | optional |
 | `checklist` | array of item | populated on single-item `show` and verified `add`; optional |
 | `start_date` | string (date) | scheduled date, optional |
 | `deadline` | string (date) | optional |
 | `reminder` | string (time) | optional |
-| `created_at`, `modified_at` | string (RFC 3339) |  |
+| `created_at`, `modified_at` | string (RFC 3339) | microsecond precision |
 | `completed_at`, `canceled_at` | string (RFC 3339) | optional |
 | `trashed` | bool | optional (omitted when false) |
 | `evening` | bool | true for This Evening items; optional |
-| `repeating` | bool | instance of a repeating template; optional |
+| `repeating` | bool | belongs to a repeating series; optional |
+| `template` | bool | the repeating series itself rather than one of its copies: read-only, with `start_date` holding the next occurrence; optional |
+| `repeat` | object | how a repeating item recurs: `unit` (`day`, `week`, `month`, `year`), `every`, `after_completion`, `until`, `paused`, `ended`, and `summary` in words ("every 2 weeks on Mon, Fri"); optional |
 
 **Project** - identical to Todo minus `project_*`, `heading_*`, `checklist`, and `evening`.
 
-**Mixed items** (`trash`, `search`, multi-match `show`) - the full todo or project object with an added `type` discriminator:
+**List items** (every View, `projects`, `search`, multi-match `show`) - the full todo or project object, led by a `type` discriminator (`todo` or `project`):
 
 ```json
 {
@@ -295,7 +298,7 @@ Note: an **unverified send still exits 0**. The URL scheme is fire-and-forget, s
 
 Every action runs three phases:
 
-1. **Resolve** - the query is matched against the database (see "How queries resolve"). Exactly one match is required, or the command stops before touching Things.
+1. **Resolve** - the query is matched against the database (see "How queries resolve"). Exactly one writable match is required, or the command stops before touching Things.
 2. **Execute** - the change is sent to Things through the URL scheme (`osascript` in the background). The auth token required for updates is read automatically from the database; you never pass it.
 3. **Verify** - the CLI polls the database for a short budget to confirm the change (a new UUID for `add`, a status flip for `done`/`cancel`, an advanced modification time for `schedule`/`move`/`edit`).
 
@@ -308,8 +311,9 @@ Limits inherited from the Things URL scheme (the CLI absorbs these; it never pre
 
 - **No delete.** There is no delete or move-to-Trash command.
 - **No move to Inbox.** `move --to inbox` is rejected; use the Things app.
-- **Checklists are replace-only** when set on an existing item.
-- **Repeating rules are read-only.** Repeating items are flagged (`repeats`) but their schedules cannot be edited.
+- **Checklist items are not individually editable.** `edit` can replace a checklist or add items to either end, but cannot check one off or change it.
+- **Repeating series are read-only.** Repeating items are flagged (`repeats`). The copies Things creates are ordinary todos, but a write aimed at the series itself is refused.
+- **The Trash is read-only.** A trashed item can be shown and opened; restore it in the app before changing it.
 
 ## Environment
 
@@ -364,16 +368,16 @@ Thirteen verb-shaped tools mirror the CLI:
 
 | Tool | Kind | Purpose |
 | --- | --- | --- |
-| `list_todos` | read | a sidebar view (`view`: inbox, today, upcoming, anytime, someday, logbook, deadlines, trash), optionally narrowed by project, area, or tag, or a `days` window on upcoming/logbook/deadlines (logbook defaults to the last 30 days, 0 = all) |
+| `list_todos` | read | a sidebar view exactly as the app lists it (`view`: inbox, today, upcoming, anytime, someday, logbook, deadlines, trash): todos and, where the app shows them, projects, told apart by `type`. Optionally narrowed by project, area, or tag, or a `days` window on upcoming/logbook/deadlines (logbook defaults to the last 30 days, 0 = all) |
 | `list_projects`, `list_areas`, `list_tags` | read | the collections, paginated |
 | `search` | read | quick find across todos and projects |
 | `get` | read | resolve one item; a project answer nests its incomplete todos and headings |
-| `add_todo`, `add_project` | write | create, with when / deadline / reminder / tags / checklist |
+| `add_todo`, `add_project` | write | create, with when / deadline / reminder / tags, plus a checklist for a todo and initial todos for a project |
 | `complete` | write | done, cancel, or reopen via a status enum |
-| `schedule`, `move`, `edit` | write | reschedule, refile, or change attributes |
-| `open` | nav | reveal an item or list in the app |
+| `schedule`, `move`, `edit` | write | reschedule (optionally with a reminder), refile, or change attributes: title, notes, deadline, reminder, tags, and a todo's checklist, each settable, addable, or clearable |
+| `open` | nav | reveal an item or list in the app, or run its full-text search |
 
-Every id, target, and destination resolves by UUID, 4+ char prefix, exact title, then title substring; an ambiguous match returns candidate UUIDs to retry with. Lists paginate with `limit` and 1-based `page` in the `{items, total, page, pages}` envelope; `limit` carries machine-readable schema bounds (default 20, maximum 100), so an omitted `limit` is stamped to 20 and an over-cap value is rejected rather than silently clamped, while a non-positive `limit` or `page` falls back to the default page. List and search items shorten notes to 200 characters and set `notes_truncated`; `get` returns the full note. Writes are verified against the database and report `verified: true|false`; an accepted-but-unconfirmed send is still a success. Domain failures ride the envelope as a structured error (`invalid_input`, `not_found`, `ambiguous`, `execution_failed`) so a model can self-correct.
+Every id, target, and destination resolves by UUID, 4+ char prefix, exact title, then title substring. When a title names several items the single open one wins (the single closed one when `complete` reopens); an ambiguous match returns candidate UUIDs to retry with. Trashed items and repeating series resolve by UUID for `get` and `open`, flagged `trashed` or `template`, and a write to one returns `invalid_input`. Lists paginate with `limit` and 1-based `page` in the `{items, total, page, pages}` envelope; `limit` carries machine-readable schema bounds (default 20, maximum 100), so an omitted `limit` is stamped to 20 and an over-cap value is rejected rather than silently clamped, while a non-positive `limit` or `page` falls back to the default page. List and search items shorten notes to 200 characters and set `notes_truncated`; `get` returns the full note. Writes are verified against the database and report `verified: true|false`; an accepted-but-unconfirmed send is still a success. Domain failures ride the envelope as a structured error (`invalid_input`, `not_found`, `ambiguous`, `execution_failed`) so a model can self-correct.
 
 ### Flags
 
@@ -425,6 +429,6 @@ golangci-lint run
 gofumpt -l .
 ```
 
-Tests never execute the URL scheme; write commands are exercised in `--dry-run` mode, and reads run against the fixture supplied through `THINGSDB`. The resolver and verifier live in `cmd/things3/internal/resolve` and `cmd/things3/internal/verify` as cobra-free packages so they can be unit-tested directly.
+Tests never execute the URL scheme; write commands are exercised in `--dry-run` mode, and reads run against the fixture supplied through `THINGSDB`, with every client pinned to the fixture clock (`thingstest.Now`) so the fixture's dates keep their meaning as real time passes. The resolver and verifier live in `cmd/things3/internal/resolve` and `cmd/things3/internal/verify` as cobra-free packages so they can be unit-tested directly.
 
 Design docs: the accepted design decisions are captured in [RFC 012](../../rfcs/012_rfc_cli_ground_up_rebuild.md) and [RFC 013](../../rfcs/013_rfc_cli_list_pagination_and_context.md).

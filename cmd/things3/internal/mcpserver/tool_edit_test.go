@@ -100,3 +100,50 @@ func TestEditValidation(t *testing.T) {
 		}
 	})
 }
+
+// The edit parameters map one to one onto the URL scheme's update parameters;
+// the rules they share with the CLI are tested in internal/change.
+func TestEditParameterSurface(t *testing.T) {
+	srv, rec := newWriteServer(t)
+	cases := []struct {
+		name  string
+		in    EditInput
+		param string
+		want  string
+	}{
+		{"prepend_notes", EditInput{PrependNotes: "first"}, "prepend-notes", "first"},
+		{"clear_notes", EditInput{ClearNotes: true}, "notes", ""},
+		{"clear_tags", EditInput{ClearTags: true}, "tags", ""},
+		{"checklist", EditInput{Checklist: []string{"one", "two"}}, "checklist-items", "one\ntwo"},
+		{"append_checklist", EditInput{AppendChecklist: []string{"Passport"}}, "append-checklist-items", "Passport"},
+		{"prepend_checklist", EditInput{PrependChecklist: []string{"Keys"}}, "prepend-checklist-items", "Keys"},
+		{"clear_checklist", EditInput{ClearChecklist: true}, "checklist-items", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.in.Target = "To-Do in Today"
+			if res := edit(t, srv, tc.in); !res.Success {
+				t.Fatalf("edit failed: %+v", res.Error)
+			}
+			got, sent := rec.last(t).Query()[tc.param]
+			if !sent || got[0] != tc.want {
+				t.Errorf("%s = %q (sent %v), want %q", tc.param, got, sent, tc.want)
+			}
+		})
+	}
+
+	before := rec.count()
+	for name, in := range map[string]EditInput{
+		"checklist on a project": {Target: "Project in Today", AppendChecklist: []string{"x"}},
+		"notes with clear_notes": {Target: "To-Do in Today", Notes: "x", ClearNotes: true},
+		"tags with clear_tags":   {Target: "To-Do in Today", Tags: []string{"a"}, ClearTags: true},
+		"bad reminder":           {Target: "To-Do in Today", Reminder: "9am"},
+	} {
+		if res := edit(t, srv, in); res.Success || res.Error == nil || res.Error.Code != codeInvalidInput {
+			t.Errorf("%s should be invalid_input, got %+v", name, res)
+		}
+	}
+	if rec.count() != before {
+		t.Errorf("a rejected edit must not execute a URL")
+	}
+}

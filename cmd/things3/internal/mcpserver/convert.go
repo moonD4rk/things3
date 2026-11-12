@@ -35,6 +35,14 @@ func stampStr(t *time.Time) string {
 	return t.Format(time.RFC3339)
 }
 
+// repeatStr renders a series rule in words, or "" for an item that does not repeat.
+func repeatStr(r *things3.Repeat) string {
+	if r == nil {
+		return ""
+	}
+	return r.String()
+}
+
 // todoItem converts a library Todo into the unified Item shape.
 func todoItem(t *things3.Todo) Item {
 	it := Item{
@@ -50,6 +58,9 @@ func todoItem(t *things3.Todo) Item {
 		Reminder:    timeStr(t.Reminder),
 		Evening:     t.Evening,
 		Repeating:   t.Repeating,
+		Repeat:      repeatStr(t.Repeat),
+		Template:    t.Template,
+		Trashed:     t.Trashed,
 		CompletedAt: stampStr(closeTime(t)),
 	}
 	if t.ProjectUUID != "" {
@@ -82,12 +93,23 @@ func projectItem(p *things3.Project) Item {
 		Deadline:    dateStr(p.Deadline),
 		Reminder:    timeStr(p.Reminder),
 		Repeating:   p.Repeating,
+		Repeat:      repeatStr(p.Repeat),
+		Template:    p.Template,
+		Trashed:     p.Trashed,
 		CompletedAt: stampStr(closeTimeProject(p)),
 	}
 	if p.AreaUUID != "" {
 		it.Area = &Ref{UUID: p.AreaUUID, Title: p.AreaTitle}
 	}
 	return it
+}
+
+// convertItem converts a library view item into the unified Item shape.
+func convertItem(it *things3.Item) Item {
+	if it.Project != nil {
+		return projectItem(it.Project)
+	}
+	return todoItem(it.Todo)
 }
 
 // todoItems converts a slice of Todos into Items.

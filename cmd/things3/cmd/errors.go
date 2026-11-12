@@ -55,12 +55,10 @@ func ExitCode(err error) int {
 // fromResolveError maps resolve package errors into the CLI's typed errors so
 // exit codes flow through ExitCode. Other errors pass through unchanged.
 func fromResolveError(err error) error {
-	var notFound *resolve.NotFoundError
-	if errors.As(err, &notFound) {
+	if notFound, ok := errors.AsType[*resolve.NotFoundError](err); ok {
 		return &NotFoundError{Query: notFound.Query}
 	}
-	var ambiguous *resolve.AmbiguousError
-	if errors.As(err, &ambiguous) {
+	if ambiguous, ok := errors.AsType[*resolve.AmbiguousError](err); ok {
 		candidates := make([]Candidate, len(ambiguous.Matches))
 		for i, m := range ambiguous.Matches {
 			candidates[i] = Candidate{UUID: shortUUID(m.UUID()), Type: string(m.Kind), Title: m.Title()}
@@ -85,7 +83,7 @@ const maxErrorCandidates = 10
 // parsing itself failed the format falls back to text.
 func RenderError(root *cobra.Command, err error) {
 	w := root.ErrOrStderr()
-	_, format := getOutput(root)
+	format := resolveFormat(root)
 
 	var ambiguous *AmbiguousError
 	isAmbiguous := errors.As(err, &ambiguous)

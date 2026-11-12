@@ -23,12 +23,10 @@ func candidatesOf(matches []resolve.Match) []Candidate {
 // transport failure (database I/O) is not a resolve error and is returned as the
 // second value for the handler to surface as a Go error instead.
 func resolveError(query string, err error) (*ToolError, error) {
-	var nf *resolve.NotFoundError
-	if errors.As(err, &nf) {
+	if _, ok := errors.AsType[*resolve.NotFoundError](err); ok {
 		return notFound(query), nil
 	}
-	var amb *resolve.AmbiguousError
-	if errors.As(err, &amb) {
+	if amb, ok := errors.AsType[*resolve.AmbiguousError](err); ok {
 		return &ToolError{
 			Code:       codeAmbiguous,
 			Message:    fmt.Sprintf("%q matches %d items", query, len(amb.Matches)),
@@ -36,12 +34,27 @@ func resolveError(query string, err error) (*ToolError, error) {
 			Candidates: candidatesOf(amb.Matches),
 		}, nil
 	}
+	if ro, ok := errors.AsType[*resolve.ReadOnlyError](err); ok {
+		return invalidInput(ro.Error()), nil
+	}
 	return nil, err
 }
 
-// resolveTarget resolves a write target to exactly one todo or project.
-func (s *Server) resolveTarget(ctx context.Context, query string) (resolve.Match, *ToolError, error) {
-	m, err := resolve.ResolveOne(ctx, s.client, query)
+// resolveItem resolves a lookup to exactly one todo or project, whatever its
+// state: trashed items and repeating templates can still be read and revealed.
+func (s *Server) resolveItem(ctx context.Context, query string) (resolve.Match, *ToolError, error) {
+	m, err := resolve.ResolveOne(ctx, s.client, query, resolve.PreferOpen)
+	if err != nil {
+		te, rerr := resolveError(query, err)
+		return resolve.Match{}, te, rerr
+	}
+	return m, nil, nil
+}
+
+// resolveTarget resolves a write target to exactly one todo or project that the
+// URL scheme can modify.
+func (s *Server) resolveTarget(ctx context.Context, query string, prefer resolve.Preference) (resolve.Match, *ToolError, error) {
+	m, err := resolve.ResolveTarget(ctx, s.client, query, prefer)
 	if err != nil {
 		te, rerr := resolveError(query, err)
 		return resolve.Match{}, te, rerr
@@ -82,6 +95,6 @@ func (s *Server) resolveHeading(ctx context.Context, projectUUID, query string) 
 // isNotFound reports whether err is a resolve not-found, used to fall back from
 // one destination kind to another (project -> area).
 func isNotFound(err error) bool {
-	var nf *resolve.NotFoundError
-	return errors.As(err, &nf)
+	_, ok := errors.AsType[*resolve.NotFoundError](err)
+	return ok
 }

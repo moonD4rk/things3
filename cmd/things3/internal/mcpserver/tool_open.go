@@ -11,8 +11,8 @@ import (
 
 const descOpen = "Reveal an item or list in the Things app. Provide exactly one of: target (an item to reveal, " +
 	"resolved by UUID, prefix, or title), view (a built-in list: inbox, today, upcoming, anytime, someday, " +
-	"logbook, deadlines, or projects), or query (text to open the app's search). This is the only tool that " +
-	"touches the app UI."
+	"logbook, deadlines, or projects), or query (text to run the app's full-text search for). This is the " +
+	"only tool that touches the app UI."
 
 // openViewLists maps the open.view enum to built-in Things list ids.
 var openViewLists = map[string]things3.ListID{
@@ -44,37 +44,36 @@ func (s *Server) handleOpen(ctx context.Context, _ *mcp.CallToolRequest, in Open
 		return nil, writeError(invalidInput("provide exactly one of target, view, or query")), nil
 	}
 
-	nav := s.client.ShowBuilder()
-	message := ""
+	var (
+		nav     URLBuilder
+		message string
+		item    *Item
+	)
 	switch {
 	case in.View != "":
-		nav = nav.List(openViewLists[string(in.View)])
+		nav = s.client.ShowBuilder().List(openViewLists[string(in.View)])
 		message = string(in.View)
 	case in.Query != "":
-		nav = nav.Query(in.Query)
+		nav = s.client.SearchBuilder(in.Query)
 		message = "search: " + in.Query
 	default:
-		m, te, err := s.resolveTarget(ctx, in.Target)
+		m, te, err := s.resolveItem(ctx, in.Target)
 		if err != nil {
 			return nil, WriteResult{}, err
 		}
 		if te != nil {
 			return nil, writeError(te), nil
 		}
-		nav = nav.ID(m.UUID())
-		item := matchItem(m)
+		nav = s.client.ShowBuilder().ID(m.UUID())
 		message = m.Title()
-		result := s.runWrite(ctx, nav, nil)
-		if result.Success {
-			result.Message = message
-			result.Item = &item
-		}
-		return nil, result, nil
+		revealed := matchItem(m)
+		item = &revealed
 	}
 
 	result := s.runWrite(ctx, nav, nil)
 	if result.Success {
 		result.Message = message
+		result.Item = item
 	}
 	return nil, result, nil
 }

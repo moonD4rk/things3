@@ -748,13 +748,17 @@ func TestProjectsStatus(t *testing.T) {
 }
 
 func TestShowProjectDetail(t *testing.T) {
-	setupFixtureDB(t)
+	dbPath := setupFixtureDB(t)
+	execFixture(t, dbPath, "UPDATE TMTask SET reminderTime = ? WHERE uuid = ?", 6<<26|40<<20, thingstest.UUIDProject)
 	out, _, err := executeCommand(t, "show", thingstest.UUIDProject)
 	if err != nil {
 		t.Fatalf("show project: %v", err)
 	}
 	if !strings.Contains(out, "Title:") {
 		t.Errorf("project show should render a detail view:\n%s", out)
+	}
+	if !strings.Contains(out, "Reminder: 06:40") {
+		t.Errorf("project show should print its reminder:\n%s", out)
 	}
 
 	outJSON, _, err := executeCommand(t, "show", thingstest.UUIDProject, "--json")

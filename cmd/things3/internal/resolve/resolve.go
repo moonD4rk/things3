@@ -194,7 +194,8 @@ func ResolveOne(ctx context.Context, c *things3.Client, query string, prefer Pre
 }
 
 // ResolveTarget resolves the target of a write: exactly one item, and one the
-// URL scheme is able to modify.
+// URL scheme is able to modify. A todo comes back with its checklist, the
+// state a write is later verified against.
 func ResolveTarget(ctx context.Context, c *things3.Client, query string, prefer Preference) (Match, error) {
 	m, err := ResolveOne(ctx, c, query, prefer)
 	if err != nil {
@@ -205,9 +206,13 @@ func ResolveTarget(ctx context.Context, c *things3.Client, query string, prefer 
 		return Match{}, &ReadOnlyError{Match: m, Reason: "is in the Trash; restore it in Things before changing it"}
 	case m.Template():
 		return Match{}, &ReadOnlyError{Match: m, Reason: "is a repeating series, which only the Things app itself can change"}
-	default:
-		return m, nil
+	case m.Kind == KindTodo:
+		m.Todo, err = c.Todos().WithUUID(m.Todo.UUID).Status().Any().IncludeChecklist().First(ctx)
+		if err != nil {
+			return Match{}, err
+		}
 	}
+	return m, nil
 }
 
 // Project resolves a destination query to exactly one live project (UUID,

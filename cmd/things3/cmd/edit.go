@@ -58,7 +58,7 @@ func runEdit(cmd *cobra.Command, args []string, client *things3.Client) error {
 	if err != nil {
 		return err
 	}
-	return runWrite(cmd, "edit", builder, modifiedVerifier("edit", match, matchModifiedAt(match), client))
+	return runWrite(cmd, "edit", builder, modifiedVerifier("edit", match, client))
 }
 
 // editFromFlags reads the edit flags that were set into a change.

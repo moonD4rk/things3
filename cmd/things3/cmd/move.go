@@ -40,13 +40,11 @@ func runMove(cmd *cobra.Command, args []string, client *things3.Client) error {
 	if err != nil {
 		return fromResolveError(err)
 	}
-	baseline := matchModifiedAt(match)
-
 	builder, err := moveBuilder(ctx, client, match, dest)
 	if err != nil {
 		return err
 	}
-	return runWrite(cmd, "move", builder, modifiedVerifier("move", match, baseline, client))
+	return runWrite(cmd, "move", builder, modifiedVerifier("move", match, client))
 }
 
 func moveBuilder(ctx context.Context, client *things3.Client, match resolve.Match, dest string) (urlBuilder, error) {

@@ -98,13 +98,14 @@ func (s *Server) verifyStatus(ctx context.Context, uuid, kind string, want thing
 	return todoOutcome(todo, outcome, err)
 }
 
-// verifyModified confirms a schedule/move/edit landed for the resolved item.
-func (s *Server) verifyModified(ctx context.Context, uuid, kind string, baseline time.Time) WriteResult {
-	if kind == typeProject {
-		project, outcome, err := verify.ProjectModified(ctx, s.client, uuid, baseline, s.cfg.Verify)
+// verifyModified confirms a schedule/move/edit landed, against the resolved
+// item as the state before the write.
+func (s *Server) verifyModified(ctx context.Context, m resolve.Match) WriteResult {
+	if m.Kind == resolve.KindProject {
+		project, outcome, err := verify.ProjectModified(ctx, s.client, m.Project, s.cfg.Verify)
 		return projectOutcome(project, outcome, err)
 	}
-	todo, outcome, err := verify.TodoModified(ctx, s.client, uuid, baseline, s.cfg.Verify)
+	todo, outcome, err := verify.TodoModified(ctx, s.client, m.Todo, s.cfg.Verify)
 	return todoOutcome(todo, outcome, err)
 }
 
@@ -142,15 +143,6 @@ func unverifiedMessage(outcome verify.Outcome, err error) string {
 // writeError wraps a structured error as a failed write envelope.
 func writeError(te *ToolError) WriteResult {
 	return WriteResult{Success: false, Error: te}
-}
-
-// baselineOf returns the resolved item's ModifiedAt, the floor a modification
-// verification must advance past.
-func baselineOf(m resolve.Match) time.Time {
-	if m.Kind == resolve.KindProject {
-		return m.Project.ModifiedAt
-	}
-	return m.Todo.ModifiedAt
 }
 
 // changeError maps an error from the shared change rules into a ToolError. A

@@ -303,6 +303,19 @@ func TestResolveWildcardsAreLiteral(t *testing.T) {
 	}
 }
 
+// A checklist write leaves the todo's modification date alone, so a write
+// target carries the checklist it is later verified against.
+func TestResolveTargetLoadsTheChecklist(t *testing.T) {
+	c := newFixtureClient(t)
+	m, err := ResolveTarget(context.Background(), c, thingstest.UUIDTodoChecklist, PreferOpen)
+	if err != nil {
+		t.Fatalf("ResolveTarget: %v", err)
+	}
+	if len(m.Todo.Checklist) == 0 {
+		t.Errorf("a write target should carry its checklist")
+	}
+}
+
 func TestResolveOneNotFound(t *testing.T) {
 	c := newFixtureClient(t)
 	_, err := ResolveOne(context.Background(), c, "zzz-no-such-item-zzz", PreferOpen)

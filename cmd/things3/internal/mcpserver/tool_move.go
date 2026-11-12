@@ -36,7 +36,6 @@ func (s *Server) handleMove(ctx context.Context, _ *mcp.CallToolRequest, in Move
 		return nil, writeError(te), nil
 	}
 
-	baseline := baselineOf(m)
 	builder, te, err := s.moveBuilder(ctx, m, in.To)
 	if err != nil {
 		return nil, WriteResult{}, err
@@ -45,7 +44,7 @@ func (s *Server) handleMove(ctx context.Context, _ *mcp.CallToolRequest, in Move
 		return nil, writeError(te), nil
 	}
 	result := s.runWrite(ctx, builder, func(ctx context.Context) WriteResult {
-		return s.verifyModified(ctx, m.UUID(), string(m.Kind), baseline)
+		return s.verifyModified(ctx, m)
 	})
 	return nil, result, nil
 }

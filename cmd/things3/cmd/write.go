@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -111,16 +110,17 @@ func statusVerifier(action string, m resolve.Match, want things3.Status, client 
 		})
 }
 
-// modifiedVerifier verifies a schedule/move/edit modification for the item.
+// modifiedVerifier verifies a schedule/move/edit against the resolved item,
+// which is the state before the write.
 //
 //nolint:dupl // intentional mirror of statusVerifier
-func modifiedVerifier(action string, m resolve.Match, baseline time.Time, client *things3.Client) func(context.Context) writeResult {
+func modifiedVerifier(action string, m resolve.Match, client *things3.Client) func(context.Context) writeResult {
 	return itemVerifier(action, m,
 		func(ctx context.Context) (*things3.Todo, verify.Outcome, error) {
-			return verify.TodoModified(ctx, client, m.UUID(), baseline, verify.Options{})
+			return verify.TodoModified(ctx, client, m.Todo, verify.Options{})
 		},
 		func(ctx context.Context) (*things3.Project, verify.Outcome, error) {
-			return verify.ProjectModified(ctx, client, m.UUID(), baseline, verify.Options{})
+			return verify.ProjectModified(ctx, client, m.Project, verify.Options{})
 		})
 }
 
@@ -176,13 +176,6 @@ func unverifiedMessage(outcome verify.Outcome, err error) string {
 		return genericUnverified + ": " + err.Error()
 	}
 	return genericUnverified
-}
-
-func matchModifiedAt(m resolve.Match) time.Time {
-	if m.Kind == resolve.KindProject {
-		return m.Project.ModifiedAt
-	}
-	return m.Todo.ModifiedAt
 }
 
 func isNotFound(err error) bool {

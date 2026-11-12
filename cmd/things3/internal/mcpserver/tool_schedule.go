@@ -43,9 +43,8 @@ func (s *Server) handleSchedule(ctx context.Context, _ *mcp.CallToolRequest, in 
 	if err != nil {
 		return nil, writeError(changeError(err)), nil
 	}
-	baseline := baselineOf(m)
 	result := s.runWrite(ctx, builder, func(ctx context.Context) WriteResult {
-		return s.verifyModified(ctx, m.UUID(), string(m.Kind), baseline)
+		return s.verifyModified(ctx, m)
 	})
 	return nil, result, nil
 }

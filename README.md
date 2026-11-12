@@ -113,11 +113,12 @@ things3 done "Buy milk"              # resolve -> execute -> verify against the 
 things3 schedule "Ship v1" 2026-07-10
 things3 move "Ship v1" --to Launch
 things3 edit "Ship v1" --title "Ship v1.0" --clear-deadline
+things3 edit "Pack" --append-checklist Passport --reminder 08:00
 ```
 
 Targets resolve by exact UUID, UUID prefix (4+ chars), exact title, then title substring. When a title names several items, the single open one wins, so `done "Water plants"` reaches today's todo however many completed copies the Logbook holds. A target that is still ambiguous prints a candidate table with a UUID hint, executes nothing, and exits `2`; success (including a sent-but-unconfirmed write) exits `0`; every other error exits `1`. Trashed items and repeating series resolve by UUID and can be shown, but a write to one is refused with an explanation. Under `--json`, errors arrive on stderr as `{"error", "candidates"}`.
 
-Inherited URL-scheme limits (not worked around): no delete or trash, no move to Inbox, checklist is replace-only, repeating rules are read-only, and unknown tags are silently ignored by Things.
+Inherited URL-scheme limits (not worked around): no delete or trash, no move to Inbox, checklist items can be replaced or added but not checked off or changed one by one, a repeating series is read-only, and unknown tags are silently ignored by Things.
 
 ### MCP server
 
@@ -226,6 +227,8 @@ Relationships are flat: parent references come inline for free (`todo.ProjectTit
 
 Queries return live items by default. `IncludeTrashed()` adds the Trash, and `IncludeTemplates()` adds repeating templates: the hidden items that schedule a repeating series, flagged `Template` and carrying their next occurrence as `StartDate`.
 
+A repeating item carries its rule as `Repeat`, both the series and the copies Things creates from it: the interval, whether it counts from completion, an end date, whether the series is paused or has ended, and a `Summary` in words ("every 2 weeks on Mon, Fri").
+
 ### Writes
 
 ```go
@@ -243,10 +246,14 @@ client.AddProject().Title("New Project").Tags("work").Execute(ctx)
 client.UpdateTodo(uuid).Completed(true).Execute(ctx)   // auth token managed automatically
 client.UpdateProject(uuid).Notes("Updated").Execute(ctx)
 
+client.UpdateTodo(uuid).AppendChecklistItems("One more").Execute(ctx)
+
 client.Show(ctx, uuid)                                 // navigate the app
-client.Batch().AddTodo(func(t things3.BatchTodoConfigurator) {
-    t.Title("Task 1")
-}).Execute(ctx)                                        // multiple items in one URL
+client.Batch().AddProject(func(p things3.BatchProjectConfigurator) {
+    p.Title("Trip").
+        Heading("Before", func(t things3.BatchTodoConfigurator) { t.Title("Book flights").Reminder(9, 0) }).
+        Heading("After")
+}).Execute(ctx)                                        // several items in one URL; the only way to create headings
 ```
 
 ### Configuration

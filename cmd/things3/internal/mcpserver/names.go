@@ -42,9 +42,10 @@ more characters, an exact title, or a title substring. When a title names severa
 wins (the single closed one when reopening); a match that is still ambiguous returns candidate UUIDs to
 retry with. A todo reports the project and area it belongs to even when it sits under a heading or inside
 a project. Dates use YYYY-MM-DD; when also accepts today, tomorrow, evening, anytime, and someday; reminder
-uses HH:MM. Inherited URL-scheme limits: no delete or trash, no move to Inbox, checklists replace rather
-than append, and unknown tags are ignored by Things. Trashed items and repeating series (template true)
-can be read and opened by UUID but not changed.
+uses HH:MM. Inherited URL-scheme limits: no delete or trash, no move to Inbox, checklist items can be
+replaced or added but not checked off or changed one by one, and unknown tags are ignored by Things.
+Trashed items and repeating series (template true) can be read and opened by UUID but not changed; repeat
+says how a series recurs.
 
 Lists report total and pages. Start with the default page size, which answers most questions, and fetch
 further pages only when the question needs them. When only the count matters, pass limit 1 and read total.

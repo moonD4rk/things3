@@ -3,13 +3,13 @@ package cmd
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/moond4rk/things3"
+	"github.com/moond4rk/things3/cmd/things3/internal/change"
 	"github.com/moond4rk/things3/cmd/things3/internal/resolve"
 	"github.com/moond4rk/things3/cmd/things3/internal/verify"
 )
@@ -59,20 +59,18 @@ func runAddTodo(cmd *cobra.Command, args []string, client *things3.Client) error
 		builder = b
 	}
 	if f.Changed(flagDeadline) {
-		v, _ := f.GetString(flagDeadline)
-		d, err := time.Parse(time.DateOnly, v)
+		d, err := change.ParseDate(flagDeadline, mustString(f, flagDeadline))
 		if err != nil {
-			return fmt.Errorf("invalid --deadline %q: use YYYY-MM-DD", v)
+			return err
 		}
 		builder = builder.Deadline(d)
 	}
 	if f.Changed(flagReminder) {
-		v, _ := f.GetString(flagReminder)
-		hour, minute, err := parseHHMM(v)
+		clock, err := change.ParseClock(mustString(f, flagReminder))
 		if err != nil {
 			return err
 		}
-		builder = builder.Reminder(hour, minute)
+		builder = builder.Reminder(clock.Hour, clock.Minute)
 	}
 	if v, _ := f.GetString(flagTags); v != "" {
 		builder = builder.Tags(splitTags(v)...)
@@ -137,13 +135,15 @@ func newAddProjectCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "project <title>",
 		Short:   "Add a project",
-		Example: "  things3 add project \"Website\" --area Work\n  things3 add project \"Trip\" --todos Flights --todos Hotel",
+		Example: "  things3 add project \"Website\" --area Work --tags q3\n  things3 add project \"Trip\" --todos Flights --todos Hotel",
 		Args:    cobra.ExactArgs(1),
 		RunE:    withClient(runAddProject),
 	}
 	cmd.Flags().String(flagNotes, "", "notes")
 	cmd.Flags().String(flagWhen, "", "when: today|tomorrow|evening|anytime|someday|YYYY-MM-DD")
 	cmd.Flags().String(flagDeadline, "", "deadline (YYYY-MM-DD)")
+	cmd.Flags().String(flagReminder, "", "reminder time (HH:MM)")
+	cmd.Flags().String(flagTags, "", "tags (comma-separated)")
 	cmd.Flags().String(flagArea, "", "place in an area (name, prefix, or UUID)")
 	cmd.Flags().StringArray(flagTodos, nil, "initial todo (repeatable)")
 	addWriteFlags(cmd)
@@ -168,12 +168,21 @@ func runAddProject(cmd *cobra.Command, args []string, client *things3.Client) er
 		builder = b
 	}
 	if f.Changed(flagDeadline) {
-		v, _ := f.GetString(flagDeadline)
-		d, err := time.Parse(time.DateOnly, v)
+		d, err := change.ParseDate(flagDeadline, mustString(f, flagDeadline))
 		if err != nil {
-			return fmt.Errorf("invalid --deadline %q: use YYYY-MM-DD", v)
+			return err
 		}
 		builder = builder.Deadline(d)
+	}
+	if f.Changed(flagReminder) {
+		clock, err := change.ParseClock(mustString(f, flagReminder))
+		if err != nil {
+			return err
+		}
+		builder = builder.Reminder(clock.Hour, clock.Minute)
+	}
+	if v, _ := f.GetString(flagTags); v != "" {
+		builder = builder.Tags(splitTags(v)...)
 	}
 	if v, _ := f.GetString(flagArea); v != "" {
 		a, err := resolve.Area(ctx, client, v)

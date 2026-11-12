@@ -92,6 +92,8 @@ const (
 	KeyType = "type"
 	// KeyAttributes is the attributes field in a JSON payload entry.
 	KeyAttributes = "attributes"
+	// KeyItems holds a project's child to-dos and headings in a JSON payload.
+	KeyItems = "items"
 )
 
 // URL Scheme limits.

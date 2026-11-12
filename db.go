@@ -109,6 +109,7 @@ func convertTaskRowToTodo(r *database.TaskRow) Todo {
 		Evening:      r.Evening,
 		Repeating:    r.Repeating,
 		Template:     r.Template,
+		Repeat:       convertRepeat(r),
 	}
 	todo.CompletedAt, todo.CanceledAt = splitStopDate(todo.Status, r.StopDate)
 	return todo
@@ -132,6 +133,7 @@ func convertTaskRowToProject(r *database.TaskRow) Project {
 		Trashed:    r.Trashed,
 		Repeating:  r.Repeating,
 		Template:   r.Template,
+		Repeat:     convertRepeat(r),
 	}
 	project.CompletedAt, project.CanceledAt = splitStopDate(project.Status, r.StopDate)
 	return project

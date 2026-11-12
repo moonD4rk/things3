@@ -48,6 +48,9 @@ type Todo struct {
 	// that schedules a series and carries its next occurrence as StartDate. A
 	// template is never actionable and the URL scheme cannot modify it.
 	Template bool `json:"template,omitempty"`
+	// Repeat is the rule of the series the todo belongs to, nil when it does
+	// not repeat.
+	Repeat *Repeat `json:"repeat,omitempty"`
 }
 
 // Project represents a container for organizing todos in Things 3.
@@ -87,6 +90,9 @@ type Project struct {
 	// item that schedules a series and carries its next occurrence as StartDate.
 	// A template is never actionable and the URL scheme cannot modify it.
 	Template bool `json:"template,omitempty"`
+	// Repeat is the rule of the series the project belongs to, nil when it does
+	// not repeat.
+	Repeat *Repeat `json:"repeat,omitempty"`
 }
 
 // Heading represents a grouping label within a project.

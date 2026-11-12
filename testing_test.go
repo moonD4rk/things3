@@ -1,10 +1,14 @@
 package things3
 
 import (
+	"database/sql"
+	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/moond4rk/things3/thingstest"
 
@@ -148,4 +152,37 @@ func newTestDBOld(t *testing.T) (*db, error) {
 	t.Helper()
 	initTestPaths()
 	return newDB(database.WithPath(testDatabasePathOld))
+}
+
+// copyWritableFixture copies the tracked read-only fixture (and any WAL/SHM
+// sidecars) into a temp dir so a test can mutate it safely.
+func copyWritableFixture(t *testing.T) string {
+	t.Helper()
+	initTestPaths()
+	dst := filepath.Join(t.TempDir(), "main.sqlite")
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		data, err := os.ReadFile(testDatabasePath + suffix)
+		if err != nil {
+			if suffix == "" {
+				t.Fatalf("read fixture: %v", err)
+			}
+			continue
+		}
+		require.NoError(t, os.WriteFile(dst+suffix, data, 0o600)) //nolint:gosec // writes into t.TempDir
+	}
+	return dst
+}
+
+// execFixtureSQL runs a write statement against a fixture copy and returns the
+// number of affected rows.
+func execFixtureSQL(t *testing.T, dbPath, query string, args ...any) int64 {
+	t.Helper()
+	db, err := sql.Open("sqlite3", dbPath)
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+	res, err := db.ExecContext(t.Context(), query, args...)
+	require.NoError(t, err)
+	n, err := res.RowsAffected()
+	require.NoError(t, err)
+	return n
 }

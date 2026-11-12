@@ -118,6 +118,21 @@ func (w *whereBuilder) addIntEqual(column string, value *int) {
 	}
 }
 
+// addIntIn adds an integer membership condition (skips an empty set).
+func (w *whereBuilder) addIntIn(column string, values []int) {
+	switch len(values) {
+	case 0:
+	case 1:
+		w.addRawf("%s = %d", column, values[0])
+	default:
+		parts := make([]string, len(values))
+		for i, v := range values {
+			parts[i] = strconv.Itoa(v)
+		}
+		w.addRawf("%s IN (%s)", column, strings.Join(parts, ", "))
+	}
+}
+
 // addLikePrefix adds a prefix-match condition; LIKE metacharacters in value
 // match literally.
 func (w *whereBuilder) addLikePrefix(column, value string) {

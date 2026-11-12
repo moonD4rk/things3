@@ -62,8 +62,23 @@ func TestTaskFilter_buildWhere(t *testing.T) {
 		},
 		{
 			name:   "task type",
-			filter: TaskFilter{TaskType: new(0)},
+			filter: TaskFilter{Types: []int{0}},
 			want:   defaultPrefix + and + "TASK.type = 0",
+		},
+		{
+			name:   "several task types",
+			filter: TaskFilter{Types: []int{0, 1}},
+			want:   defaultPrefix + and + "TASK.type IN (0, 1)",
+		},
+		{
+			name:   "closed means completed or canceled",
+			filter: TaskFilter{Closed: true},
+			want:   defaultPrefix + and + "TASK.status != 0",
+		},
+		{
+			name:   "an explicit status wins over closed",
+			filter: TaskFilter{Closed: true, Status: new(3)},
+			want:   defaultPrefix + and + "TASK.status = 3",
 		},
 		{
 			name:   "status",
@@ -161,14 +176,27 @@ func TestTaskFilter_buildWhere(t *testing.T) {
 			want:   defaultPrefix + and + "NOT " + taskTagsSQL(""),
 		},
 		{
-			name:   "deadline suppressed true",
-			filter: TaskFilter{DeadlineSuppressed: new(true)},
-			want:   defaultPrefix + and + "TASK.deadlineSuppressionDate IS NOT NULL",
+			name:   "today membership",
+			filter: TaskFilter{InToday: true},
+			want: defaultPrefix + and +
+				"((TASK.start = 1 AND TASK.startDate IS NOT NULL)" +
+				" OR (TASK.start = 2 AND TASK.startDate <= " + todayPacked + ")" +
+				" OR (TASK.startDate IS NULL AND TASK.deadline <= " + todayPacked + " AND TASK.deadlineSuppressionDate IS NULL))",
 		},
 		{
-			name:   "deadline suppressed false",
-			filter: TaskFilter{DeadlineSuppressed: new(false)},
-			want:   defaultPrefix + and + "TASK.deadlineSuppressionDate IS NULL",
+			name:   "upcoming membership",
+			filter: TaskFilter{InUpcoming: true},
+			want: defaultPrefix + and +
+				"(" + startDate + " > " + todayPacked +
+				" OR (" + startDate + " IS NULL AND TASK.rt1_recurrenceRule IS NULL AND TASK.deadline > " + todayPacked + "))",
+		},
+		{
+			name:   "container predicates",
+			filter: TaskFilter{ContainerNotSomeday: true, ContainerOpen: true, ContainerNotTrashed: true},
+			want: defaultPrefix + and +
+				"COALESCE(PROJECT.start, PROJECT_OF_HEADING.start, 1) != 2" + and +
+				"COALESCE(PROJECT.status, PROJECT_OF_HEADING.status, 0) = 0" + and +
+				"COALESCE(PROJECT.trashed, PROJECT_OF_HEADING.trashed, 0) = 0",
 		},
 		{
 			name:   "start date exists true",
@@ -252,9 +280,9 @@ func TestTaskFilter_buildWhere(t *testing.T) {
 		{
 			name: "complex filter combination",
 			filter: TaskFilter{
-				TaskType: new(0),
-				Status:   new(0),
-				Start:    new(1),
+				Types:  []int{0},
+				Status: new(0),
+				Start:  new(1),
 				StartDateFilter: &DateFilterValue{
 					HasDate: new(true),
 				},
@@ -275,20 +303,30 @@ func TestTaskFilter_buildWhere(t *testing.T) {
 }
 
 func TestTaskFilter_buildOrder(t *testing.T) {
+	const index = `TASK."index"`
 	tests := []struct {
-		name   string
-		filter TaskFilter
-		want   string
+		name  string
+		order TaskOrder
+		want  string
 	}{
-		{"default", TaskFilter{}, `TASK."index"`},
-		{"explicit default", TaskFilter{Index: IndexDefault}, `TASK."index"`},
-		{"today index", TaskFilter{Index: IndexToday}, `TASK."todayIndex"`},
+		{
+			"sidebar is the default", OrderSidebar,
+			`AREA."index", COALESCE(PROJECT."index", PROJECT_OF_HEADING."index"), HEADING."index", ` +
+				index + ", TASK.userModificationDate DESC",
+		},
+		{"today", OrderToday, "TASK.todayIndex, TASK.todayIndexReferenceDate DESC, " + index},
+		{"upcoming", OrderUpcoming, sqlUpcomingDate + ", TASK.todayIndex, " + index},
+		{"deadline", OrderDeadline, "TASK.deadline, " + index},
+		{"stop date", OrderStopDateDesc, "TASK.stopDate DESC, " + index},
+		{"modified", OrderModifiedDesc, "TASK.userModificationDate DESC, " + index},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, tt.filter.buildOrder())
+			f := TaskFilter{Order: tt.order}
+			assert.Equal(t, tt.want, f.buildOrder())
 		})
 	}
+	assert.Equal(t, (&TaskFilter{}).buildOrder(), (&TaskFilter{Order: OrderSidebar}).buildOrder())
 }
 
 func TestAreaFilter_buildWhere(t *testing.T) {

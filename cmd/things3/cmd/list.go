@@ -104,7 +104,7 @@ type listFlags struct {
 // readListFlags resolves the shared list flags plus -o/-n for a command.
 func readListFlags(cmd *cobra.Command) listFlags {
 	lf := listFlags{page: 1}
-	_, lf.format = getOutput(cmd)
+	lf.format = resolveFormat(cmd)
 	if f := cmd.Flags().Lookup(flagPage); f != nil {
 		if p, ok := f.Value.(*pageValue); ok {
 			lf.page = int(*p)
@@ -248,95 +248,24 @@ func compareDatePtr(a, b *time.Time, desc bool) int {
 	}
 }
 
-// todoSortDate returns the display-relevant date for a todo with the same
-// precedence as todoRelevantDate: completed, else canceled, else deadline, else
-// start.
-func todoSortDate(t *things3.Todo) *time.Time {
-	switch {
-	case t.CompletedAt != nil:
-		return t.CompletedAt
-	case t.CanceledAt != nil:
-		return t.CanceledAt
-	case t.Deadline != nil:
-		return t.Deadline
-	case t.StartDate != nil:
-		return t.StartDate
-	default:
-		return nil
+// itemSortDate is the date --sort date orders by, with the precedence a row
+// displays: when the item was closed, else its deadline, else its start date.
+func itemSortDate(it things3.Item) *time.Time {
+	for _, d := range []*time.Time{it.StoppedAt(), it.Deadline(), it.StartDate()} {
+		if d != nil {
+			return d
+		}
 	}
+	return nil
 }
 
-// projectSortDate mirrors todoSortDate for projects.
-func projectSortDate(p *things3.Project) *time.Time {
-	switch {
-	case p.CompletedAt != nil:
-		return p.CompletedAt
-	case p.CanceledAt != nil:
-		return p.CanceledAt
-	case p.Deadline != nil:
-		return p.Deadline
-	case p.StartDate != nil:
-		return p.StartDate
-	default:
-		return nil
-	}
-}
-
-// todoAccessors adapts things3.Todo to the list pipeline.
-//
-//nolint:dupl // type-specific adapter, mirrors projectAccessors
-var todoAccessors = listAccessors[things3.Todo]{
-	tags:     func(t things3.Todo) []string { return t.Tags },
-	date:     func(t things3.Todo) *time.Time { return todoSortDate(&t) },
-	created:  func(t things3.Todo) time.Time { return t.CreatedAt },
-	modified: func(t things3.Todo) time.Time { return t.ModifiedAt },
-	title:    func(t things3.Todo) string { return t.Title },
-}
-
-// projectAccessors adapts things3.Project to the list pipeline.
-//
-//nolint:dupl // type-specific adapter, mirrors todoAccessors
-var projectAccessors = listAccessors[things3.Project]{
-	tags:     func(p things3.Project) []string { return p.Tags },
-	date:     func(p things3.Project) *time.Time { return projectSortDate(&p) },
-	created:  func(p things3.Project) time.Time { return p.CreatedAt },
-	modified: func(p things3.Project) time.Time { return p.ModifiedAt },
-	title:    func(p things3.Project) string { return p.Title },
-}
-
-// mixedAccessors adapts a mixedItem to the list pipeline by delegating to its
-// underlying todo or project.
-var mixedAccessors = listAccessors[mixedItem]{
-	tags: func(m mixedItem) []string {
-		if m.Project != nil {
-			return m.Project.Tags
-		}
-		return m.Todo.Tags
-	},
-	date: func(m mixedItem) *time.Time {
-		if m.Project != nil {
-			return projectSortDate(m.Project)
-		}
-		return todoSortDate(m.Todo)
-	},
-	created: func(m mixedItem) time.Time {
-		if m.Project != nil {
-			return m.Project.CreatedAt
-		}
-		return m.Todo.CreatedAt
-	},
-	modified: func(m mixedItem) time.Time {
-		if m.Project != nil {
-			return m.Project.ModifiedAt
-		}
-		return m.Todo.ModifiedAt
-	},
-	title: func(m mixedItem) string {
-		if m.Project != nil {
-			return m.Project.Title
-		}
-		return m.Todo.Title
-	},
+// itemAccessors adapts things3.Item to the list pipeline.
+var itemAccessors = listAccessors[things3.Item]{
+	tags:     things3.Item.Tags,
+	date:     itemSortDate,
+	created:  things3.Item.CreatedAt,
+	modified: things3.Item.ModifiedAt,
+	title:    things3.Item.Title,
 }
 
 // areaAccessors adapts things3.Area to the list pipeline. Areas carry no dates or
@@ -361,30 +290,32 @@ var tagAccessors = listAccessors[things3.Tag]{
 	title:    func(t things3.Tag) string { return t.Title },
 }
 
-// outputTodoList applies the shared pipeline to a todo view and renders the
-// page. group, when non-nil and returning a non-empty result, sections the page
-// in text mode; opts controls the container segment on each row.
-func outputTodoList(cmd *cobra.Command, todos []things3.Todo, group func([]things3.Todo) []todoGroup, opts rowOptions) error {
+// outputItems applies the shared pipeline to a list of todos and projects and
+// renders the page. group, when non-nil and returning a non-empty result,
+// sections the page in text mode; opts controls the container segment on each
+// row.
+func outputItems(cmd *cobra.Command, items []things3.Item, group func([]things3.Item) []itemGroup, opts rowOptions) error {
 	lf := readListFlags(cmd)
-	page, meta := applyListPipeline(todos, todoAccessors, &lf)
+	page, meta := applyListPipeline(items, itemAccessors, &lf)
 	w := cmd.OutOrStdout()
-	switch lf.format {
-	case formatJSON, formatYAML:
+	if lf.format != formatText {
 		return writeListEnvelope(w, page, meta, lf.format)
-	default:
-		var groups []todoGroup
-		if group != nil {
-			groups = group(page)
-		}
-		if len(groups) > 0 {
-			if err := writeGroupedTodos(w, groups, opts); err != nil {
-				return err
-			}
-		} else if err := writeTodos(w, page, opts); err != nil {
-			return err
-		}
-		return writeListFooter(w, meta)
 	}
+
+	var groups []itemGroup
+	if group != nil {
+		groups = group(page)
+	}
+	var err error
+	if len(groups) > 0 {
+		err = writeGroupedItems(w, groups, opts)
+	} else {
+		err = writeItems(w, page, opts)
+	}
+	if err != nil {
+		return err
+	}
+	return writeListFooter(w, meta)
 }
 
 // outputList runs the shared pipeline over a flat (ungrouped) list and renders
@@ -403,18 +334,6 @@ func outputList[T any](cmd *cobra.Command, items []T, acc listAccessors[T], writ
 		}
 		return writeListFooter(w, meta)
 	}
-}
-
-// outputProjectList applies the shared pipeline to a project list and renders
-// the page.
-func outputProjectList(cmd *cobra.Command, projects []things3.Project) error {
-	return outputList(cmd, projects, projectAccessors, writeProjects)
-}
-
-// outputMixedList applies the shared pipeline to a cross-type list and renders
-// the page.
-func outputMixedList(cmd *cobra.Command, items []mixedItem) error {
-	return outputList(cmd, items, mixedAccessors, writeMixed)
 }
 
 // outputAreas applies the shared pipeline to an area list and renders the page.

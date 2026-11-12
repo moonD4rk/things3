@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"time"
 )
 
@@ -33,32 +32,81 @@ const (
 	TemplatesAny
 )
 
+// TaskOrder selects the ORDER BY of a task query.
+type TaskOrder int
+
+const (
+	// OrderSidebar is the order the app lists items in: by area, then project,
+	// then heading, then the item's own position, with "none" leading each level.
+	OrderSidebar TaskOrder = iota
+	// OrderToday is the order of the Today list.
+	OrderToday
+	// OrderUpcoming is the order of the Upcoming list: by the day an item is
+	// filed under, then by its Today position.
+	OrderUpcoming
+	// OrderDeadline sorts by deadline, soonest first.
+	OrderDeadline
+	// OrderStopDateDesc sorts by completion or cancellation, most recent first.
+	OrderStopDateDesc
+	// OrderModifiedDesc sorts by last modification, most recent first.
+	OrderModifiedDesc
+)
+
 // TaskFilter captures all parameters for a task query.
 type TaskFilter struct {
-	UUID               *string
-	UUIDPrefix         *string
-	Title              *string
-	TaskType           *int
-	Status             *int
-	Start              *int
-	AreaUUID           *string
-	HasArea            *bool
-	ProjectUUID        *string
-	HasProject         *bool
-	HeadingUUID        *string
-	HasHeading         *bool
-	TagTitle           *string
-	HasTags            *bool
-	DeadlineSuppressed *bool
-	Trash              TrashScope
-	Templates          TemplateScope
-	CreatedAfter       *time.Time
-	SearchQuery        *string
-	Index              string
-	StartDateFilter    *DateFilterValue
-	StopDateFilter     *DateFilterValue
-	DeadlineFilter     *DateFilterValue
-	Limit              *int
+	// Identity.
+	UUID       *string
+	UUIDPrefix *string
+	Title      *string
+
+	// Types restricts the task types (TMTask.type); empty means any.
+	Types  []int
+	Status *int
+	// Closed keeps completed and canceled tasks; it is ignored when Status is set.
+	Closed bool
+	Start  *int
+
+	// Containers and tags. A value takes precedence over its Has counterpart.
+	AreaUUID    *string
+	HasArea     *bool
+	ProjectUUID *string
+	HasProject  *bool
+	HeadingUUID *string
+	HasHeading  *bool
+	TagTitle    *string
+	HasTags     *bool
+
+	// Scopes: both default to excluding.
+	Trash     TrashScope
+	Templates TemplateScope
+
+	// Dates.
+	StartDateFilter *DateFilterValue
+	StopDateFilter  *DateFilterValue
+	DeadlineFilter  *DateFilterValue
+	CreatedAfter    *time.Time
+
+	SearchQuery *string
+
+	// View membership, as the app composes its lists.
+
+	// InToday keeps the tasks the app lists in Today; see inTodaySQL.
+	InToday bool
+	// InUpcoming keeps the tasks the app files under a future day in Upcoming;
+	// see inUpcomingSQL.
+	InUpcoming bool
+	// ContainerNotSomeday drops tasks whose project sits in Someday, which is how
+	// the app hides a shelved project's todos from Anytime.
+	ContainerNotSomeday bool
+	// ContainerOpen drops tasks whose project is completed or canceled: the app
+	// folds them into the project's own Logbook row.
+	ContainerOpen bool
+	// ContainerNotTrashed drops tasks whose project is trashed: the app folds
+	// them into the project's own Trash row.
+	ContainerNotTrashed bool
+
+	Order TaskOrder
+	Limit *int
 }
 
 // buildWhere builds the WHERE clause for a task query. today anchors the
@@ -85,8 +133,12 @@ func (f *TaskFilter) buildWhere(today time.Time) string {
 	case TrashAny:
 	}
 
-	w.addIntEqual("TASK.type", f.TaskType)
-	w.addIntEqual("TASK.status", f.Status)
+	w.addIntIn("TASK.type", f.Types)
+	if f.Status != nil {
+		w.addIntEqual("TASK.status", f.Status)
+	} else if f.Closed {
+		w.add("TASK.status != 0")
+	}
 	w.addIntEqual("TASK.start", f.Start)
 
 	w.addStringEqual("TASK.uuid", f.UUID)
@@ -102,8 +154,20 @@ func (f *TaskFilter) buildWhere(today time.Time) string {
 	w.addFilter("TASK.heading", f.HeadingUUID, f.HasHeading)
 	w.addTagFilter(taskTagsSQL, f.TagTitle, f.HasTags)
 
-	if f.DeadlineSuppressed != nil {
-		w.addExists("TASK.deadlineSuppressionDate", *f.DeadlineSuppressed)
+	if f.InToday {
+		w.add(inTodaySQL(today))
+	}
+	if f.InUpcoming {
+		w.add(inUpcomingSQL(today))
+	}
+	if f.ContainerNotSomeday {
+		w.add(sqlProjectStart + " != 2")
+	}
+	if f.ContainerOpen {
+		w.add(sqlProjectStatus + " = 0")
+	}
+	if f.ContainerNotTrashed {
+		w.add(sqlProjectTrashed + " = 0")
 	}
 
 	w.addThingsDateFilter("("+sqlStartDate+")", f.StartDateFilter, today)
@@ -120,13 +184,32 @@ func (f *TaskFilter) buildWhere(today time.Time) string {
 	return w.sql()
 }
 
-// buildOrder builds the ORDER BY clause.
+// buildOrder builds the ORDER BY clause. Each order was matched against the
+// order the app itself lists items in.
 func (f *TaskFilter) buildOrder() string {
-	index := f.Index
-	if index == "" {
-		index = IndexDefault
+	const (
+		index    = `TASK."index"`
+		modified = "TASK." + colModificationDate + " DESC"
+	)
+	switch f.Order {
+	case OrderToday:
+		// On equal positions the item that entered Today most recently leads.
+		return "TASK.todayIndex, TASK.todayIndexReferenceDate DESC, " + index
+	case OrderUpcoming:
+		return sqlUpcomingDate + ", TASK.todayIndex, " + index
+	case OrderDeadline:
+		return "TASK." + colDeadline + ", " + index
+	case OrderStopDateDesc:
+		return "TASK." + colStopDate + " DESC, " + index
+	case OrderModifiedDesc:
+		return modified + ", " + index
+	default:
+		// SQLite sorts NULL first, which is where the app lists whatever has no
+		// area, project, or heading. Items sharing a position (new ones all start
+		// at 0) follow most recently modified first.
+		return `AREA."index", COALESCE(PROJECT."index", PROJECT_OF_HEADING."index"), HEADING."index", ` +
+			index + ", " + modified
 	}
-	return fmt.Sprintf("TASK.%q", index)
 }
 
 // AreaFilter captures all parameters for an area query.

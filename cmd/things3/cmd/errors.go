@@ -83,7 +83,7 @@ const maxErrorCandidates = 10
 // parsing itself failed the format falls back to text.
 func RenderError(root *cobra.Command, err error) {
 	w := root.ErrOrStderr()
-	_, format := getOutput(root)
+	format := resolveFormat(root)
 
 	var ambiguous *AmbiguousError
 	isAmbiguous := errors.As(err, &ambiguous)

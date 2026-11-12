@@ -54,33 +54,39 @@ func listProjects(t *testing.T, srv *Server, in ListProjectsInput) PageResult[It
 
 func TestListTodosViewCounts(t *testing.T) {
 	srv := newTestServer(t, Config{})
-	// The six single-builder views are status/bucket/existence-scoped, so their
-	// totals are stable regardless of the current date (unlike today/upcoming,
-	// which are checked by membership). Pinning every one is the WS1 parity guard
-	// that the push-of-scoping-into-SQL refactor preserved each view's result.
+	// Totals are stable because every test client is pinned to the fixture
+	// clock. projects counts the rows that are projects: the app lists them in
+	// every view except Inbox and Anytime.
 	zero := 0
 	cases := []struct {
-		view string
-		days *int
-		want int
+		view     string
+		days     *int
+		want     int
+		projects int
 	}{
-		{"inbox", nil, thingstest.Inbox},          // 2
-		{"anytime", nil, thingstest.TodosAnytime}, // 10
-		{"someday", nil, 1},
-		{"logbook", &zero, 22},                   // days:0 = all history; the 30-day default returns 0 on the aged fixture
-		{"deadlines", nil, thingstest.Deadlines}, // 4
-		{"trash", nil, 5},                        // trashed todos of any status; projects excluded
+		{"inbox", nil, thingstest.Inbox, 0},          // 2
+		{"today", nil, 5, 1},                         // 4 todos and "Project in Today"
+		{"upcoming", nil, 3, 0},                      // scheduled, repeating series, deadline-only
+		{"anytime", nil, thingstest.TodosAnytime, 0}, // 10
+		{"someday", nil, 2, 1},                       // one standalone todo and "Project in Someday"
+		{"logbook", &zero, 22, 2},                    // days:0 = all history; 2 todos fold into the canceled project
+		{"deadlines", nil, thingstest.Deadlines, 0},  // 4
+		{"trash", nil, 5, 1},                         // the trashed project folds its trashed todo in
 	}
 	for _, tc := range cases {
 		t.Run(tc.view, func(t *testing.T) {
-			page := listTodos(t, srv, ListTodosInput{View: ViewName(tc.view), Days: tc.days})
+			page := listTodos(t, srv, ListTodosInput{View: ViewName(tc.view), Days: tc.days, Limit: 100})
 			if page.Total != tc.want {
 				t.Errorf("%s total = %d, want %d", tc.view, page.Total, tc.want)
 			}
+			projects := 0
 			for i := range page.Items {
-				if page.Items[i].Type != typeTodo {
-					t.Errorf("%s item %d type = %q", tc.view, i, page.Items[i].Type)
+				if page.Items[i].Type == typeProject {
+					projects++
 				}
+			}
+			if projects != tc.projects {
+				t.Errorf("%s lists %d projects, want %d", tc.view, projects, tc.projects)
 			}
 		})
 	}

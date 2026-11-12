@@ -42,14 +42,10 @@ type todoQuery struct {
 
 // Todos creates a new todoQuery for querying todos.
 func (d *db) Todos() *todoQuery {
-	taskType := int(taskTypeTodo)
 	return &todoQuery{
 		inner: taskQuery{
 			database: d,
-			filter: database.TaskFilter{
-				Index:    database.IndexDefault,
-				TaskType: &taskType,
-			},
+			filter:   database.TaskFilter{Types: []int{int(taskTypeTodo)}},
 		},
 	}
 }
@@ -170,19 +166,6 @@ func (q *todoQuery) Deadline() DateFilter[TodoQueryBuilder] {
 	return &dateFilter[TodoQueryBuilder]{with: q.withFilter, field: dateFieldDeadline}
 }
 
-// deadlineSuppressed filters todos by whether the deadline has been suppressed.
-// It is unexported: deadline suppression is a database internal, and Today is
-// its only consumer.
-func (q *todoQuery) deadlineSuppressed(suppressed bool) TodoQueryBuilder {
-	return q.withFilter(func(f *database.TaskFilter) { f.DeadlineSuppressed = &suppressed })
-}
-
-// onlyTemplates restricts the query to repeating templates. It is unexported:
-// the views that place templates on a date are its only consumers.
-func (q *todoQuery) onlyTemplates() TodoQueryBuilder {
-	return q.withFilter(func(f *database.TaskFilter) { f.Templates = database.TemplatesOnly })
-}
-
 // CreatedAfter filters todos created after the specified time.
 func (q *todoQuery) CreatedAfter(t time.Time) TodoQueryBuilder {
 	return q.withFilter(func(f *database.TaskFilter) { f.CreatedAfter = &t })
@@ -195,7 +178,7 @@ func (q *todoQuery) Search(query string) TodoQueryBuilder {
 
 // OrderByTodayIndex orders results by today index instead of default index.
 func (q *todoQuery) OrderByTodayIndex() TodoQueryBuilder {
-	return q.withFilter(func(f *database.TaskFilter) { f.Index = database.IndexToday })
+	return q.withFilter(func(f *database.TaskFilter) { f.Order = database.OrderToday })
 }
 
 // Limit restricts the maximum number of results returned.
@@ -222,14 +205,11 @@ func (q *todoQuery) All(ctx context.Context) ([]Todo, error) {
 	for i := range rows {
 		todo := convertTaskRowToTodo(&rows[i])
 
-		// Load tags if present
-		if rows[i].HasTags {
-			tags, err := q.inner.database.inner.TagsOfTask(ctx, rows[i].UUID)
-			if err != nil {
-				return nil, err
-			}
-			todo.Tags = tags
+		tags, err := q.inner.database.tagsOf(ctx, &rows[i])
+		if err != nil {
+			return nil, err
 		}
+		todo.Tags = tags
 
 		// Load checklist if requested
 		if q.inner.includeChecklist && rows[i].HasChecklist {
@@ -281,14 +261,10 @@ type projectQuery struct {
 
 // Projects creates a new projectQuery for querying projects.
 func (d *db) Projects() *projectQuery {
-	taskType := int(taskTypeProject)
 	return &projectQuery{
 		inner: taskQuery{
 			database: d,
-			filter: database.TaskFilter{
-				Index:    database.IndexDefault,
-				TaskType: &taskType,
-			},
+			filter:   database.TaskFilter{Types: []int{int(taskTypeProject)}},
 		},
 	}
 }
@@ -412,14 +388,11 @@ func (q *projectQuery) All(ctx context.Context) ([]Project, error) {
 	for i := range rows {
 		project := convertTaskRowToProject(&rows[i])
 
-		// Load tags if present
-		if rows[i].HasTags {
-			tags, err := q.inner.database.inner.TagsOfTask(ctx, rows[i].UUID)
-			if err != nil {
-				return nil, err
-			}
-			project.Tags = tags
+		tags, err := q.inner.database.tagsOf(ctx, &rows[i])
+		if err != nil {
+			return nil, err
 		}
+		project.Tags = tags
 
 		projects = append(projects, project)
 	}
@@ -460,14 +433,10 @@ type headingQuery struct {
 
 // Headings creates a new headingQuery for querying headings.
 func (d *db) Headings() *headingQuery {
-	taskType := int(taskTypeHeading)
 	return &headingQuery{
 		inner: taskQuery{
 			database: d,
-			filter: database.TaskFilter{
-				Index:    database.IndexDefault,
-				TaskType: &taskType,
-			},
+			filter:   database.TaskFilter{Types: []int{int(taskTypeHeading)}},
 		},
 	}
 }

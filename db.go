@@ -41,6 +41,47 @@ func (d *db) Token(ctx context.Context) (string, error) {
 	return d.inner.AuthToken(ctx)
 }
 
+// items runs one mixed query and converts its rows, in query order, to Items.
+func (d *db) items(ctx context.Context, f *database.TaskFilter) ([]Item, error) {
+	return d.itemsOf(ctx, f)
+}
+
+// itemsOf concatenates the results of several mixed queries, in argument order.
+// The result is never nil.
+func (d *db) itemsOf(ctx context.Context, filters ...*database.TaskFilter) ([]Item, error) {
+	items := []Item{}
+	for _, f := range filters {
+		rows, err := d.inner.QueryTasks(ctx, f)
+		if err != nil {
+			return nil, err
+		}
+		for i := range rows {
+			tags, err := d.tagsOf(ctx, &rows[i])
+			if err != nil {
+				return nil, err
+			}
+			if rows[i].Type == int(taskTypeProject) {
+				project := convertTaskRowToProject(&rows[i])
+				project.Tags = tags
+				items = append(items, Item{Project: &project})
+				continue
+			}
+			todo := convertTaskRowToTodo(&rows[i])
+			todo.Tags = tags
+			items = append(items, Item{Todo: &todo})
+		}
+	}
+	return items, nil
+}
+
+// tagsOf loads a row's tag titles; a row without tags costs no query.
+func (d *db) tagsOf(ctx context.Context, r *database.TaskRow) ([]string, error) {
+	if !r.HasTags {
+		return nil, nil
+	}
+	return d.inner.TagsOfTask(ctx, r.UUID)
+}
+
 // =============================================================================
 // Row-to-Model Conversion
 // =============================================================================
@@ -70,12 +111,6 @@ func convertTaskRowToTodo(r *database.TaskRow) Todo {
 		Template:     r.Template,
 	}
 	todo.CompletedAt, todo.CanceledAt = splitStopDate(todo.Status, r.StopDate)
-
-	// A non-nil empty slice marks "has tags"; the titles load separately.
-	if r.HasTags {
-		todo.Tags = []string{}
-	}
-
 	return todo
 }
 
@@ -99,11 +134,6 @@ func convertTaskRowToProject(r *database.TaskRow) Project {
 		Template:   r.Template,
 	}
 	project.CompletedAt, project.CanceledAt = splitStopDate(project.Status, r.StopDate)
-
-	if r.HasTags {
-		project.Tags = []string{}
-	}
-
 	return project
 }
 

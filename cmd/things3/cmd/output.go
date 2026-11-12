@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/goccy/go-yaml"
 	"github.com/spf13/cobra"
@@ -22,9 +24,6 @@ const (
 	formatYAML outputFormat = "yaml"
 )
 
-// repeatsSuffix marks a repeating item in one-line output.
-const repeatsSuffix = " | repeats"
-
 // rowOptions controls optional segments of a one-line row.
 type rowOptions struct {
 	// showContainer appends the "@project / heading" or "@area" segment. Views
@@ -38,38 +37,29 @@ var defaultRow = rowOptions{showContainer: true}
 // noContainerRow suppresses the container segment for container-grouped views.
 var noContainerRow = rowOptions{showContainer: false}
 
-// todoContainer returns the "@project / heading" or "@area" segment for a todo,
-// or an empty string when it belongs to neither. The heading is shown only
-// alongside its project.
-func todoContainer(t *things3.Todo) string {
-	switch {
-	case t.ProjectTitle != "":
-		seg := "@" + t.ProjectTitle
-		if t.HeadingTitle != "" {
-			seg += " / " + t.HeadingTitle
-		}
-		return seg
-	case t.AreaTitle != "":
-		return "@" + t.AreaTitle
-	default:
+// itemContainer returns the "@Project / Heading" or "@Area" segment of a row, or
+// an empty string for an item that stands on its own. A project is contained
+// by its area; the heading is shown only alongside its project.
+func itemContainer(it things3.Item) string {
+	if it.Project != nil {
+		return prefixed("@", it.Project.AreaTitle)
+	}
+	t := it.Todo
+	if t.ProjectTitle == "" {
+		return prefixed("@", t.AreaTitle)
+	}
+	if t.HeadingTitle == "" {
+		return "@" + t.ProjectTitle
+	}
+	return "@" + t.ProjectTitle + " / " + t.HeadingTitle
+}
+
+// prefixed returns prefix+s, or "" when s is empty.
+func prefixed(prefix, s string) string {
+	if s == "" {
 		return ""
 	}
-}
-
-// projectContainer returns the "@area" segment for a project, or an empty
-// string when it belongs to no area.
-func projectContainer(p *things3.Project) string {
-	if p.AreaTitle != "" {
-		return "@" + p.AreaTitle
-	}
-	return ""
-}
-
-// getOutput reads the -n/--limit flag and resolves the output format for a
-// command from the inherited --text/--json/--yaml switches.
-func getOutput(cmd *cobra.Command) (limit int, format outputFormat) {
-	limit, _ = cmd.Flags().GetInt(flagLimit)
-	return limit, resolveFormat(cmd)
+	return prefix + s
 }
 
 // resolveFormat maps the mutually exclusive --json/--yaml switches to a format,
@@ -91,32 +81,9 @@ func resolveFormat(cmd *cobra.Command) outputFormat {
 	}
 }
 
-// applyLimit truncates a slice to at most limit items (0 = unlimited).
-func applyLimit[T any](items []T, limit int) []T {
-	if limit > 0 && len(items) > limit {
-		return items[:limit]
-	}
-	return items
-}
-
-// outputMixed renders a cross-type list honoring the format switches and -n. In
-// json/yaml the list is wrapped in the self-describing envelope with total set to
-// the pre-limit count.
-func outputMixed(cmd *cobra.Command, items []mixedItem) error {
-	limit, format := getOutput(cmd)
-	w := cmd.OutOrStdout()
-	page := applyLimit(items, limit)
-	switch format {
-	case formatJSON, formatYAML:
-		return writeListEnvelope(w, page, pageMeta{total: len(items), page: 1, pages: 1}, format)
-	default:
-		return writeMixed(w, page)
-	}
-}
-
 // outputTodoDetail renders one todo in full detail honoring the format switches.
 func outputTodoDetail(cmd *cobra.Command, todo *things3.Todo) error {
-	_, format := getOutput(cmd)
+	format := resolveFormat(cmd)
 	switch format {
 	case formatJSON:
 		return writeJSON(cmd.OutOrStdout(), todo)
@@ -136,7 +103,7 @@ type projectDetailOutput struct {
 // outputProjectDetail renders one project with its incomplete todos honoring the
 // format switches.
 func outputProjectDetail(cmd *cobra.Command, project *things3.Project, todos []things3.Todo) error {
-	_, format := getOutput(cmd)
+	format := resolveFormat(cmd)
 	w := cmd.OutOrStdout()
 	switch format {
 	case formatJSON:
@@ -149,52 +116,55 @@ func outputProjectDetail(cmd *cobra.Command, project *things3.Project, todos []t
 		}
 		if len(todos) > 0 {
 			fmt.Fprintln(w)
-			return writeTodos(w, todos, defaultRow)
+			return writeItems(w, todoItems(todos), defaultRow)
 		}
 		return nil
 	}
 }
 
-// writeTodos writes a flat todo list in text mode. Machine formats render the
-// self-describing envelope through writeListEnvelope instead.
-func writeTodos(w io.Writer, todos []things3.Todo, opts rowOptions) error {
-	if len(todos) > 0 {
-		if _, err := fmt.Fprintln(w, "STATUS   UUID      TITLE"); err != nil {
-			return err
-		}
-	}
+// todoItems wraps todos as list items.
+func todoItems(todos []things3.Todo) []things3.Item {
+	items := make([]things3.Item, len(todos))
 	for i := range todos {
-		if _, err := fmt.Fprintln(w, formatTodoLine(&todos[i], opts)); err != nil {
-			return err
-		}
+		items[i] = things3.Item{Todo: &todos[i]}
 	}
-	return nil
+	return items
 }
 
-// writeProjects writes a flat project list in text mode.
-func writeProjects(w io.Writer, projects []things3.Project) error {
-	if len(projects) > 0 {
+// projectItems wraps projects as list items.
+func projectItems(projects []things3.Project) []things3.Item {
+	items := make([]things3.Item, len(projects))
+	for i := range projects {
+		items[i] = things3.Item{Project: &projects[i]}
+	}
+	return items
+}
+
+// writeItems writes a flat list in text mode. Machine formats render the
+// self-describing envelope through writeListEnvelope instead.
+func writeItems(w io.Writer, items []things3.Item, opts rowOptions) error {
+	if len(items) > 0 {
 		if _, err := fmt.Fprintln(w, "STATUS   UUID      TITLE"); err != nil {
 			return err
 		}
 	}
-	for i := range projects {
-		if _, err := fmt.Fprintln(w, formatProjectLine(&projects[i])); err != nil {
+	for _, it := range items {
+		if _, err := fmt.Fprintln(w, formatItemLine(it, opts)); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// todoGroup is a labeled run of todos for sectioned/grouped text output.
-type todoGroup struct {
+// itemGroup is a labeled run of items for sectioned text output.
+type itemGroup struct {
 	Header string
-	Todos  []things3.Todo
+	Items  []things3.Item
 }
 
-// writeGroupedTodos writes todos grouped under headers in text mode. Machine
+// writeGroupedItems writes items grouped under headers in text mode. Machine
 // formats render the flat envelope instead, so grouping never leaks into them.
-func writeGroupedTodos(w io.Writer, groups []todoGroup, opts rowOptions) error {
+func writeGroupedItems(w io.Writer, groups []itemGroup, opts rowOptions) error {
 	for i := range groups {
 		if i > 0 {
 			if _, err := fmt.Fprintln(w); err != nil {
@@ -204,8 +174,8 @@ func writeGroupedTodos(w io.Writer, groups []todoGroup, opts rowOptions) error {
 		if _, err := fmt.Fprintln(w, groups[i].Header); err != nil {
 			return err
 		}
-		for j := range groups[i].Todos {
-			if _, err := fmt.Fprintln(w, formatTodoLine(&groups[i].Todos[j], opts)); err != nil {
+		for _, it := range groups[i].Items {
+			if _, err := fmt.Fprintln(w, formatItemLine(it, opts)); err != nil {
 				return err
 			}
 		}
@@ -213,147 +183,52 @@ func writeGroupedTodos(w io.Writer, groups []todoGroup, opts rowOptions) error {
 	return nil
 }
 
-// mixedItem wraps a todo or project for cross-type lists (trash, show, search).
-// Exactly one of Todo/Project is set.
-type mixedItem struct {
-	Type    string
-	Todo    *things3.Todo
-	Project *things3.Project
-}
-
-// todoMixed wraps a todo as a mixed item.
-func todoMixed(t *things3.Todo) mixedItem { return mixedItem{Type: typeTodo, Todo: t} }
-
-// projectMixed wraps a project as a mixed item.
-func projectMixed(p *things3.Project) mixedItem { return mixedItem{Type: typeProject, Project: p} }
-
-// asMap marshals the embedded model and adds the type discriminator so both
-// JSON and YAML carry the fields inline (encoding/json has no ",inline").
-func (m mixedItem) asMap() (map[string]any, error) {
-	var raw []byte
-	var err error
-	if m.Project != nil {
-		raw, err = json.Marshal(m.Project)
-	} else {
-		raw, err = json.Marshal(m.Todo)
-	}
-	if err != nil {
-		return nil, err
-	}
-	obj := map[string]any{}
-	if err := json.Unmarshal(raw, &obj); err != nil {
-		return nil, err
-	}
-	obj["type"] = m.Type
-	return obj, nil
-}
-
-// MarshalJSON renders the item with an inline "type" discriminator.
-func (m mixedItem) MarshalJSON() ([]byte, error) {
-	obj, err := m.asMap()
-	if err != nil {
-		return nil, err
-	}
-	return json.Marshal(obj)
-}
-
-// MarshalYAML mirrors MarshalJSON so YAML carries the same inline shape.
-func (m mixedItem) MarshalYAML() (any, error) {
-	return m.asMap()
-}
-
-// writeMixed writes a cross-type list with a TYPE column in text mode.
-func writeMixed(w io.Writer, items []mixedItem) error {
-	if len(items) > 0 {
-		if _, err := fmt.Fprintf(w, "%-8s %-9s %-8s %s\n", "STATUS", "UUID", "TYPE", "TITLE"); err != nil {
-			return err
-		}
-	}
-	for i := range items {
-		if _, err := fmt.Fprintln(w, formatMixedLine(items[i])); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// formatMixedLine formats one cross-type row:
-// STATUS UUID TYPE TITLE [| date] [| @container] [| #tags] [| repeats].
-func formatMixedLine(m mixedItem) string {
-	var (
-		status    things3.Status
-		uuid      string
-		title     string
-		date      string
-		container string
-		tags      string
-		repeating bool
-	)
-	if m.Project != nil {
-		status, uuid, title = m.Project.Status, m.Project.UUID, m.Project.Title
-		date, container, repeating = projectRelevantDate(m.Project), projectContainer(m.Project), m.Project.Repeating
-	} else {
-		status, uuid, title = m.Todo.Status, m.Todo.UUID, m.Todo.Title
-		date, container, tags, repeating = todoRelevantDate(m.Todo), todoContainer(m.Todo), formatTags(m.Todo.Tags), m.Todo.Repeating
-	}
-	line := fmt.Sprintf("%-8s %-9s %-8s %s", statusCheckbox(status), shortUUID(uuid), m.Type, title)
-	if date != "" {
-		line += " | " + date
-	}
-	if container != "" {
-		line += " | " + container
-	}
-	if tags != "" {
-		line += " | " + tags
-	}
-	if repeating {
-		line += repeatsSuffix
-	}
-	return line
-}
-
-// formatTodoLine formats a single todo as a compact one-line string:
+// formatItemLine formats one row:
 // STATUS UUID TITLE [| date] [| @container] [| #tags] [| repeats].
-func formatTodoLine(t *things3.Todo, opts rowOptions) string {
-	line := fmt.Sprintf("%-8s %-9s %s", statusCheckbox(t.Status), shortUUID(t.UUID), t.Title)
-	if date := todoRelevantDate(t); date != "" {
-		line += " | " + date
+func formatItemLine(it things3.Item, opts rowOptions) string {
+	segments := []string{
+		fmt.Sprintf("%-8s %-9s %s", statusMark(it), shortUUID(it.UUID()), it.Title()),
+		itemRelevantDate(it),
 	}
 	if opts.showContainer {
-		if container := todoContainer(t); container != "" {
-			line += " | " + container
-		}
+		segments = append(segments, itemContainer(it))
 	}
-	if tags := formatTags(t.Tags); tags != "" {
-		line += " | " + tags
+	segments = append(segments, formatTags(it.Tags()))
+	if isRepeating(it) {
+		segments = append(segments, "repeats")
 	}
-	if t.Repeating {
-		line += repeatsSuffix
-	}
-	return line
+	return strings.Join(slices.DeleteFunc(segments, func(s string) bool { return s == "" }), " | ")
 }
 
-// formatProjectLine formats a single project as a compact one-line string.
-func formatProjectLine(p *things3.Project) string {
-	line := fmt.Sprintf("%-8s %-9s %s", statusCheckbox(p.Status), shortUUID(p.UUID), p.Title)
-	if date := projectRelevantDate(p); date != "" {
-		line += " | " + date
+func isRepeating(it things3.Item) bool {
+	if it.Project != nil {
+		return it.Project.Repeating
 	}
-	if p.Repeating {
-		line += repeatsSuffix
-	}
-	return line
+	return it.Todo.Repeating
 }
 
-// statusCheckbox returns a checkbox string for the given status.
+// statusMark draws the row's status the way the app does: a square checkbox for
+// a todo, a round one for a project, so a mixed list needs no type column.
+func statusMark(it things3.Item) string {
+	if it.IsProject() {
+		return "(" + statusFill(it.Status()) + ")"
+	}
+	return statusCheckbox(it.Status())
+}
+
+// statusCheckbox returns a todo-style checkbox for the given status.
 func statusCheckbox(s things3.Status) string {
+	return "[" + statusFill(s) + "]"
+}
+
+func statusFill(s things3.Status) string {
 	switch s {
 	case things3.StatusCompleted:
-		return "[x]"
+		return "x"
 	case things3.StatusCanceled:
-		return "[-]"
+		return "-"
 	default:
-		return "[ ]"
+		return " "
 	}
 }
 
@@ -365,35 +240,16 @@ func shortUUID(uuid string) string {
 	return uuid
 }
 
-// todoRelevantDate returns the most relevant date for a todo row.
-func todoRelevantDate(t *things3.Todo) string {
-	const dateFormat = "2006-01-02"
+// itemRelevantDate returns the date a row shows: when the item was closed, else
+// its deadline (marked "due:"), else its start date.
+func itemRelevantDate(it things3.Item) string {
 	switch {
-	case t.CompletedAt != nil:
-		return t.CompletedAt.Format(dateFormat)
-	case t.CanceledAt != nil:
-		return t.CanceledAt.Format(dateFormat)
-	case t.Deadline != nil:
-		return "due:" + t.Deadline.Format(dateFormat)
-	case t.StartDate != nil:
-		return t.StartDate.Format(dateFormat)
-	default:
-		return ""
-	}
-}
-
-// projectRelevantDate returns the most relevant date for a project row.
-func projectRelevantDate(p *things3.Project) string {
-	const dateFormat = "2006-01-02"
-	switch {
-	case p.CompletedAt != nil:
-		return p.CompletedAt.Format(dateFormat)
-	case p.CanceledAt != nil:
-		return p.CanceledAt.Format(dateFormat)
-	case p.Deadline != nil:
-		return "due:" + p.Deadline.Format(dateFormat)
-	case p.StartDate != nil:
-		return p.StartDate.Format(dateFormat)
+	case it.StoppedAt() != nil:
+		return it.StoppedAt().Format(time.DateOnly)
+	case it.Deadline() != nil:
+		return "due:" + it.Deadline().Format(time.DateOnly)
+	case it.StartDate() != nil:
+		return it.StartDate().Format(time.DateOnly)
 	default:
 		return ""
 	}
@@ -560,10 +416,10 @@ func writeWriteResult(w io.Writer, r *writeResult, format outputFormat) error {
 		_, err := fmt.Fprintf(w, "%s: sent to Things (not yet confirmed)\n", verb)
 		return err
 	case r.Todo != nil:
-		_, err := fmt.Fprintf(w, "%s: %s\n", verb, formatTodoLine(r.Todo, defaultRow))
+		_, err := fmt.Fprintf(w, "%s: %s\n", verb, formatItemLine(things3.Item{Todo: r.Todo}, defaultRow))
 		return err
 	case r.Project != nil:
-		_, err := fmt.Fprintf(w, "%s: %s\n", verb, formatProjectLine(r.Project))
+		_, err := fmt.Fprintf(w, "%s: %s\n", verb, formatItemLine(things3.Item{Project: r.Project}, defaultRow))
 		return err
 	default:
 		_, err := fmt.Fprintf(w, "%s: %s\n", verb, r.Message)

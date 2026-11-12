@@ -22,339 +22,263 @@ func daysWindow(cmd *cobra.Command) (int, error) {
 	return days, nil
 }
 
-func newTodayCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     nameToday,
-		Short:   "List today's todos, including This Evening",
-		GroupID: groupViews,
-		Example: "  things3 today\n  things3 today --sort title\n  things3 today --json",
-		Args:    cobra.NoArgs,
-		RunE:    withClient(runToday),
-	}
-	return cmd
+// view is one sidebar list: how to fetch it and how to lay it out in text mode.
+type view struct {
+	fetch func(cmd *cobra.Command, client *things3.Client) ([]things3.Item, error)
+	group func([]things3.Item) []itemGroup
+	row   rowOptions
 }
 
-func runToday(cmd *cobra.Command, _ []string, client *things3.Client) error {
-	todos, err := client.Today(cmd.Context())
+// run adapts a view to a command body.
+func (v view) run(cmd *cobra.Command, _ []string, client *things3.Client) error {
+	items, err := v.fetch(cmd, client)
 	if err != nil {
 		return err
 	}
-	return outputTodoList(cmd, todos, todayGrouper, defaultRow)
+	return outputItems(cmd, items, v.group, v.row)
 }
 
-// todayGrouper sections a page into Today / This Evening, but only when evening
-// todos are present; otherwise a plain list reads cleaner.
-func todayGrouper(todos []things3.Todo) []todoGroup {
-	if !hasEvening(todos) {
-		return nil
+func newTodayCmd() *cobra.Command {
+	v := view{
+		fetch: func(cmd *cobra.Command, client *things3.Client) ([]things3.Item, error) {
+			return client.Today(cmd.Context())
+		},
+		group: groupToday,
+		row:   defaultRow,
 	}
-	return groupTodayTodos(todos)
-}
-
-func hasEvening(todos []things3.Todo) bool {
-	for i := range todos {
-		if todos[i].Evening {
-			return true
-		}
+	return &cobra.Command{
+		Use:     nameToday,
+		Short:   "List the Today list, This Evening last",
+		GroupID: groupViews,
+		Example: "  things3 today\n  things3 today --sort title\n  things3 today --json",
+		Args:    cobra.NoArgs,
+		RunE:    withClient(v.run),
 	}
-	return false
 }
 
 func newInboxCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     "inbox",
+	v := view{
+		fetch: func(cmd *cobra.Command, client *things3.Client) ([]things3.Item, error) {
+			return client.Inbox(cmd.Context())
+		},
+		row: defaultRow,
+	}
+	return &cobra.Command{
+		Use:     nameInbox,
 		Short:   "List todos in the Inbox",
 		GroupID: groupViews,
 		Example: "  things3 inbox\n  things3 inbox --json",
 		Args:    cobra.NoArgs,
-		RunE:    withClient(runInbox),
+		RunE:    withClient(v.run),
 	}
-	return cmd
-}
-
-func runInbox(cmd *cobra.Command, _ []string, client *things3.Client) error {
-	todos, err := client.Todos().Start().Inbox().Status().Incomplete().All(cmd.Context())
-	if err != nil {
-		return err
-	}
-	return outputTodoList(cmd, todos, nil, defaultRow)
 }
 
 func newUpcomingCmd() *cobra.Command {
+	v := view{
+		fetch: func(cmd *cobra.Command, client *things3.Client) ([]things3.Item, error) {
+			days, err := daysWindow(cmd)
+			if err != nil {
+				return nil, err
+			}
+			items, err := client.Upcoming(cmd.Context())
+			if err != nil || days == 0 {
+				return items, err
+			}
+			return withinDays(items, things3.Item.UpcomingDate, client.Now(), days), nil
+		},
+		group: groupByUpcomingDate,
+		row:   defaultRow,
+	}
 	cmd := &cobra.Command{
-		Use:     "upcoming",
-		Short:   "List scheduled todos grouped by date",
+		Use:     nameUpcoming,
+		Short:   "List scheduled items, repeating series, and deadlines by date",
 		GroupID: groupViews,
 		Example: "  things3 upcoming\n  things3 upcoming --days 7\n  things3 upcoming --tag work",
 		Args:    cobra.NoArgs,
-		RunE:    withClient(runUpcoming),
+		RunE:    withClient(v.run),
 	}
-	cmd.Flags().Int(flagDays, 0, "limit to todos scheduled within the next N days (0 = all)")
+	cmd.Flags().Int(flagDays, 0, "limit to the next N days (0 = all)")
 	return cmd
-}
-
-func runUpcoming(cmd *cobra.Command, _ []string, client *things3.Client) error {
-	days, err := daysWindow(cmd)
-	if err != nil {
-		return err
-	}
-	todos, err := client.Upcoming(cmd.Context())
-	if err != nil {
-		return err
-	}
-	if days > 0 {
-		cutoff := client.Now().AddDate(0, 0, days)
-		todos = slices.DeleteFunc(todos, func(t things3.Todo) bool {
-			return t.StartDate == nil || t.StartDate.After(cutoff)
-		})
-	}
-	return outputTodoList(cmd, todos, groupByStartDate, defaultRow)
 }
 
 func newAnytimeCmd() *cobra.Command {
-	cmd := &cobra.Command{
+	v := view{
+		fetch: func(cmd *cobra.Command, client *things3.Client) ([]things3.Item, error) {
+			return client.Anytime(cmd.Context())
+		},
+		group: groupByContainer,
+		// Rows drop the container segment because the view already groups by it.
+		row: noContainerRow,
+	}
+	return &cobra.Command{
 		Use:     nameAnytime,
-		Short:   "List Anytime todos grouped by project or area",
+		Short:   "List available todos grouped by project or area",
 		GroupID: groupViews,
 		Example: "  things3 anytime\n  things3 anytime --json",
 		Args:    cobra.NoArgs,
-		RunE:    withClient(runAnytime),
+		RunE:    withClient(v.run),
 	}
-	return cmd
-}
-
-func runAnytime(cmd *cobra.Command, _ []string, client *things3.Client) error {
-	todos, err := client.Todos().Start().Anytime().Status().Incomplete().All(cmd.Context())
-	if err != nil {
-		return err
-	}
-	// Rows drop the container segment because the view already groups by it.
-	return outputTodoList(cmd, todos, groupByContainer, noContainerRow)
 }
 
 func newSomedayCmd() *cobra.Command {
-	cmd := &cobra.Command{
+	v := view{
+		fetch: func(cmd *cobra.Command, client *things3.Client) ([]things3.Item, error) {
+			return client.Someday(cmd.Context())
+		},
+		row: defaultRow,
+	}
+	return &cobra.Command{
 		Use:     nameSomeday,
-		Short:   "List Someday todos with no scheduled date",
+		Short:   "List Someday todos and projects",
 		GroupID: groupViews,
 		Example: "  things3 someday",
 		Args:    cobra.NoArgs,
-		RunE:    withClient(runSomeday),
+		RunE:    withClient(v.run),
 	}
-	return cmd
-}
-
-func runSomeday(cmd *cobra.Command, _ []string, client *things3.Client) error {
-	todos, err := client.Todos().
-		StartDate().Exists(false).
-		Start().Someday().
-		Status().Incomplete().
-		All(cmd.Context())
-	if err != nil {
-		return err
-	}
-	return outputTodoList(cmd, todos, nil, defaultRow)
 }
 
 func newLogbookCmd() *cobra.Command {
+	v := view{
+		fetch: func(cmd *cobra.Command, client *things3.Client) ([]things3.Item, error) {
+			days, err := daysWindow(cmd)
+			if err != nil {
+				return nil, err
+			}
+			var since time.Time
+			if days > 0 {
+				since = client.Now().AddDate(0, 0, -days)
+			}
+			return client.Logbook(cmd.Context(), since)
+		},
+		row: defaultRow,
+	}
 	cmd := &cobra.Command{
-		Use:     "logbook",
-		Short:   "List completed and canceled todos, most recent first",
+		Use:     nameLogbook,
+		Short:   "List completed and canceled items, most recent first",
 		GroupID: groupViews,
 		Example: "  things3 logbook\n  things3 logbook --days 7\n  things3 logbook -n 5 --page 2",
 		Args:    cobra.NoArgs,
-		RunE:    withClient(runLogbook),
+		RunE:    withClient(v.run),
 	}
 	cmd.Flags().Int(flagDays, 30, "limit to the last N days (0 = all)")
 	return cmd
 }
 
-func runLogbook(cmd *cobra.Command, _ []string, client *things3.Client) error {
-	days, err := daysWindow(cmd)
-	if err != nil {
-		return err
-	}
-	q := client.Todos().Status().Any().StopDate().Exists(true)
-	if days > 0 {
-		q = q.StopDate().After(client.Now().AddDate(0, 0, -days))
-	}
-	todos, err := q.All(cmd.Context())
-	if err != nil {
-		return err
-	}
-	sortByStopTimeDesc(todos)
-	return outputTodoList(cmd, todos, nil, defaultRow)
-}
-
 func newDeadlinesCmd() *cobra.Command {
+	v := view{
+		fetch: func(cmd *cobra.Command, client *things3.Client) ([]things3.Item, error) {
+			days, err := daysWindow(cmd)
+			if err != nil {
+				return nil, err
+			}
+			items, err := client.Deadlines(cmd.Context())
+			if err != nil || days == 0 {
+				return items, err
+			}
+			return withinDays(items, things3.Item.Deadline, client.Now(), days), nil
+		},
+		row: defaultRow,
+	}
 	cmd := &cobra.Command{
 		Use:     nameDeadlines,
-		Short:   "List todos with deadlines, soonest first",
+		Short:   "List open items with deadlines, soonest first",
 		GroupID: groupViews,
 		Example: "  things3 deadlines\n  things3 deadlines --days 7\n  things3 deadlines --json",
 		Args:    cobra.NoArgs,
-		RunE:    withClient(runDeadlines),
+		RunE:    withClient(v.run),
 	}
 	cmd.Flags().Int(flagDays, 0, "limit to deadlines within the next N days, including overdue (0 = all)")
 	return cmd
 }
 
-func runDeadlines(cmd *cobra.Command, _ []string, client *things3.Client) error {
-	days, err := daysWindow(cmd)
-	if err != nil {
-		return err
-	}
-	q := client.Todos().Deadline().Exists(true).Status().Incomplete()
-	if days > 0 {
-		q = q.Deadline().OnOrBefore(client.Now().AddDate(0, 0, days))
-	}
-	todos, err := q.All(cmd.Context())
-	if err != nil {
-		return err
-	}
-	slices.SortStableFunc(todos, func(a, b things3.Todo) int {
-		return compareTimePtrAsc(a.Deadline, b.Deadline)
-	})
-	return outputTodoList(cmd, todos, nil, defaultRow)
-}
-
 func newTrashCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     "trash",
+	v := view{
+		fetch: func(cmd *cobra.Command, client *things3.Client) ([]things3.Item, error) {
+			return client.Trash(cmd.Context())
+		},
+		row: defaultRow,
+	}
+	return &cobra.Command{
+		Use:     nameTrash,
 		Short:   "List trashed todos and projects",
 		GroupID: groupViews,
 		Example: "  things3 trash\n  things3 trash --json",
 		Args:    cobra.NoArgs,
-		RunE:    withClient(runTrash),
+		RunE:    withClient(v.run),
 	}
-	return cmd
 }
 
-func runTrash(cmd *cobra.Command, _ []string, client *things3.Client) error {
-	ctx := cmd.Context()
-	todos, err := client.Todos().Trashed(true).Status().Any().All(ctx)
-	if err != nil {
-		return err
-	}
-	projects, err := client.Projects().Trashed(true).Status().Any().All(ctx)
-	if err != nil {
-		return err
-	}
-	items := make([]mixedItem, 0, len(todos)+len(projects))
-	for i := range todos {
-		items = append(items, todoMixed(&todos[i]))
-	}
-	for i := range projects {
-		items = append(items, projectMixed(&projects[i]))
-	}
-	return outputMixedList(cmd, items)
+// withinDays keeps the items whose date falls on or before now+days. An item
+// without that date is dropped: it has no place in a date window.
+func withinDays(items []things3.Item, date func(things3.Item) *time.Time, now time.Time, days int) []things3.Item {
+	cutoff := now.AddDate(0, 0, days)
+	return slices.DeleteFunc(items, func(it things3.Item) bool {
+		d := date(it)
+		return d == nil || d.After(cutoff)
+	})
 }
 
-// groupTodayTodos splits Today into the Today section and, when present, the
-// This Evening section (the app's bottom section).
-func groupTodayTodos(todos []things3.Todo) []todoGroup {
-	today := make([]things3.Todo, 0, len(todos))
-	var evening []things3.Todo
-	for i := range todos {
-		if todos[i].Evening {
-			evening = append(evening, todos[i])
+// groupToday sections a page into Today / This Evening, but only when evening
+// todos are present; otherwise a plain list reads cleaner.
+func groupToday(items []things3.Item) []itemGroup {
+	isEvening := func(it things3.Item) bool { return it.Todo != nil && it.Todo.Evening }
+	if !slices.ContainsFunc(items, isEvening) {
+		return nil
+	}
+	var today, evening []things3.Item
+	for _, it := range items {
+		if isEvening(it) {
+			evening = append(evening, it)
 			continue
 		}
-		today = append(today, todos[i])
+		today = append(today, it)
 	}
-	var groups []todoGroup
+	groups := make([]itemGroup, 0, 2)
 	if len(today) > 0 {
-		groups = append(groups, todoGroup{Header: "Today", Todos: today})
+		groups = append(groups, itemGroup{Header: "Today", Items: today})
 	}
-	if len(evening) > 0 {
-		groups = append(groups, todoGroup{Header: "This Evening", Todos: evening})
-	}
-	return groups
+	return append(groups, itemGroup{Header: "This Evening", Items: evening})
 }
 
-// groupByStartDate groups start-date-sorted todos under "YYYY-MM-DD Weekday"
-// headers in ascending order.
-func groupByStartDate(todos []things3.Todo) []todoGroup {
-	var groups []todoGroup
-	index := map[string]int{}
-	for i := range todos {
-		header := "No date"
-		if todos[i].StartDate != nil {
-			header = todos[i].StartDate.Format("2006-01-02 Monday")
+// groupByUpcomingDate groups date-sorted items under "YYYY-MM-DD Weekday"
+// headers, keyed by the day Upcoming files each one under.
+func groupByUpcomingDate(items []things3.Item) []itemGroup {
+	return groupBy(items, func(it things3.Item) string {
+		if d := it.UpcomingDate(); d != nil {
+			return d.Format("2006-01-02 Monday")
 		}
-		appendToGroup(&groups, index, header, &todos[i])
-	}
-	return groups
+		return "No date"
+	})
 }
 
 // groupByContainer groups todos by their project, else area, else "No Project",
 // preserving first-seen order.
-func groupByContainer(todos []things3.Todo) []todoGroup {
-	var groups []todoGroup
-	index := map[string]int{}
-	for i := range todos {
-		appendToGroup(&groups, index, containerHeader(&todos[i]), &todos[i])
-	}
-	return groups
-}
-
-func containerHeader(t *things3.Todo) string {
-	switch {
-	case t.ProjectTitle != "":
-		return t.ProjectTitle
-	case t.AreaTitle != "":
-		return t.AreaTitle
-	default:
-		return "No Project"
-	}
-}
-
-func appendToGroup(groups *[]todoGroup, index map[string]int, header string, todo *things3.Todo) {
-	if i, ok := index[header]; ok {
-		(*groups)[i].Todos = append((*groups)[i].Todos, *todo)
-		return
-	}
-	index[header] = len(*groups)
-	*groups = append(*groups, todoGroup{Header: header, Todos: []things3.Todo{*todo}})
-}
-
-// compareTimePtrAsc orders non-nil times ascending, sorting nil last.
-func compareTimePtrAsc(a, b *time.Time) int {
-	switch {
-	case a == nil && b == nil:
-		return 0
-	case a == nil:
-		return 1
-	case b == nil:
-		return -1
-	default:
-		return a.Compare(*b)
-	}
-}
-
-// stopTime returns when a todo left the active list: completion time, else
-// cancellation time, else nil.
-func stopTime(t *things3.Todo) *time.Time {
-	if t.CompletedAt != nil {
-		return t.CompletedAt
-	}
-	return t.CanceledAt
-}
-
-// sortByStopTimeDesc orders todos by stop time descending so -n N yields the N
-// most recent entries. Todos without a stop time sort last.
-func sortByStopTimeDesc(todos []things3.Todo) {
-	slices.SortStableFunc(todos, func(a, b things3.Todo) int {
-		ta, tb := stopTime(&a), stopTime(&b)
+func groupByContainer(items []things3.Item) []itemGroup {
+	return groupBy(items, func(it things3.Item) string {
 		switch {
-		case ta == nil && tb == nil:
-			return 0
-		case ta == nil:
-			return 1
-		case tb == nil:
-			return -1
+		case it.Todo != nil && it.Todo.ProjectTitle != "":
+			return it.Todo.ProjectTitle
+		case it.Todo != nil && it.Todo.AreaTitle != "":
+			return it.Todo.AreaTitle
 		default:
-			return tb.Compare(*ta)
+			return "No Project"
 		}
 	})
+}
+
+// groupBy buckets items by header in first-seen order.
+func groupBy(items []things3.Item, header func(things3.Item) string) []itemGroup {
+	var groups []itemGroup
+	index := map[string]int{}
+	for _, it := range items {
+		h := header(it)
+		i, ok := index[h]
+		if !ok {
+			i = len(groups)
+			index[h] = i
+			groups = append(groups, itemGroup{Header: h})
+		}
+		groups[i].Items = append(groups[i].Items, it)
+	}
+	return groups
 }

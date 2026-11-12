@@ -145,9 +145,9 @@ func TestWithClock(t *testing.T) {
 	upcomingAt := func(now time.Time) []string {
 		client := newFixtureClientAt(t, path, WithClock(func() time.Time { return now }))
 		assert.Equal(t, now, client.Now())
-		todos, err := client.Upcoming(t.Context())
+		items, err := client.Upcoming(t.Context())
 		require.NoError(t, err)
-		return extractTodoUUIDs(todos)
+		return itemUUIDs(items)
 	}
 
 	assert.Contains(t, upcomingAt(scheduled.AddDate(0, 0, -1)), testUUIDTodoWithReminder)

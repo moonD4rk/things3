@@ -155,7 +155,7 @@ func TestIntegration_StopDateMatchesLocaltimeCalendarDay(t *testing.T) {
 
 	taskType := typeTodo
 	rows, err := d.QueryTasks(ctx, &TaskFilter{
-		TaskType:       &taskType,
+		Types:          []int{taskType},
 		StopDateFilter: &DateFilterValue{HasDate: new(true)},
 	})
 	require.NoError(t, err)
@@ -183,11 +183,11 @@ func TestIntegration_CreatedAfterLocationInsensitive(t *testing.T) {
 	taskType := typeTodo
 	pivot := time.Date(2021, 3, 29, 6, 0, 0, 0, time.Local)
 
-	local, err := d.QueryTasks(ctx, &TaskFilter{TaskType: &taskType, CreatedAfter: &pivot})
+	local, err := d.QueryTasks(ctx, &TaskFilter{Types: []int{taskType}, CreatedAfter: &pivot})
 	require.NoError(t, err)
 
 	pivotUTC := pivot.UTC()
-	utc, err := d.QueryTasks(ctx, &TaskFilter{TaskType: &taskType, CreatedAfter: &pivotUTC})
+	utc, err := d.QueryTasks(ctx, &TaskFilter{Types: []int{taskType}, CreatedAfter: &pivotUTC})
 	require.NoError(t, err)
 
 	assert.ElementsMatch(t, taskUUIDs(local), taskUUIDs(utc),
@@ -210,7 +210,7 @@ func TestIntegration_HasProjectPartition(t *testing.T) {
 	incompleteTodos := func(hasProject *bool) []TaskRow {
 		taskType, status := typeTodo, statusIncomplete
 		rows, err := d.QueryTasks(ctx, &TaskFilter{
-			TaskType:   &taskType,
+			Types:      []int{taskType},
 			Status:     &status,
 			HasProject: hasProject,
 		})
@@ -266,7 +266,7 @@ func TestIntegration_AreaFilterReachesProjectChildren(t *testing.T) {
 	taskType, status := typeTodo, statusIncomplete
 	area := fixtureAreaWithTags
 
-	rows, err := d.QueryTasks(t.Context(), &TaskFilter{TaskType: &taskType, Status: &status, AreaUUID: &area})
+	rows, err := d.QueryTasks(t.Context(), &TaskFilter{Types: []int{taskType}, Status: &status, AreaUUID: &area})
 	require.NoError(t, err)
 
 	uuids := taskUUIDs(rows)
@@ -288,7 +288,7 @@ func TestIntegration_TrashScopes(t *testing.T) {
 	taskType := typeTodo
 
 	scoped := func(scope TrashScope) []string {
-		rows, err := d.QueryTasks(ctx, &TaskFilter{TaskType: &taskType, Trash: scope})
+		rows, err := d.QueryTasks(ctx, &TaskFilter{Types: []int{taskType}, Trash: scope})
 		require.NoError(t, err)
 		return taskUUIDs(rows)
 	}
@@ -392,7 +392,7 @@ func TestIntegration_SearchTreatsWildcardsLiterally(t *testing.T) {
 	taskType := typeTodo
 
 	literalPercent, err := d.QueryTasks(ctx, &TaskFilter{
-		TaskType:    &taskType,
+		Types:       []int{taskType},
 		SearchQuery: new("%"),
 	})
 	require.NoError(t, err)
@@ -400,7 +400,7 @@ func TestIntegration_SearchTreatsWildcardsLiterally(t *testing.T) {
 		"search for literal %% must only match rows containing a percent sign")
 
 	sanity, err := d.QueryTasks(ctx, &TaskFilter{
-		TaskType:    &taskType,
+		Types:       []int{taskType},
 		SearchQuery: new("To-Do"),
 	})
 	require.NoError(t, err)
@@ -413,16 +413,16 @@ func TestIntegration_TitleFilterTreatsUnderscoreLiterally(t *testing.T) {
 	taskType := typeTodo
 
 	underscore, err := d.QueryTasks(ctx, &TaskFilter{
-		TaskType: &taskType,
-		Title:    new("To_Do"),
+		Types: []int{taskType},
+		Title: new("To_Do"),
 	})
 	require.NoError(t, err)
 	assert.Empty(t, underscore,
 		"underscore in a title filter must not act as a single-character wildcard")
 
 	sanity, err := d.QueryTasks(ctx, &TaskFilter{
-		TaskType: &taskType,
-		Title:    new("To-Do"),
+		Types: []int{taskType},
+		Title: new("To-Do"),
 	})
 	require.NoError(t, err)
 	assert.NotEmpty(t, sanity, "plain title filter must still match")

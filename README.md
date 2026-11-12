@@ -8,11 +8,11 @@ Reads come straight from the Things SQLite database through typed query builders
 
 ## Highlights
 
-- **Complete read API** - typed, chainable query builders for todos, projects, headings, areas, and tags, plus composed `Today` and `Upcoming` views (`Upcoming` includes repeating tasks at their next occurrence, which the raw database does not materialize)
+- **Complete read API** - typed, chainable query builders for todos, projects, headings, areas, and tags, plus the eight sidebar views (`Inbox`, `Today`, `Upcoming`, `Anytime`, `Someday`, `Logbook`, `Deadlines`, `Trash`), each returning what the app lists there, in the app's order
 - **Type-safe writes** - create, update, and batch operations built as fluent URL-scheme builders with automatic auth-token management
 - **Verified writes in the CLI** - every action resolves its target in the database, executes the URL scheme, then polls the database to confirm the write actually landed
 - **Built for automation** - one global flag surface (`--json` / `--yaml` / `--text`), list output wrapped in a `{items, total, page, pages}` envelope so truncation is never silent, exit codes `0`/`1`/`2`, and every printed 8-char UUID usable as a query
-- **App-shaped commands** - the CLI mirrors the Things sidebar (`today`, `inbox`, `upcoming`, ...) and its verbs (`schedule`, `move`, `edit`), so knowing the app is knowing the tool
+- **App-faithful views** - the CLI mirrors the Things sidebar (`today`, `inbox`, `upcoming`, ...) and its verbs (`schedule`, `move`, `edit`), and every view was verified item for item against the app, so what a list shows is what the app shows
 
 > **Requirements**: macOS with Things 3 installed. CGO enabled when building from source (`github.com/mattn/go-sqlite3`). Write commands need Things running; reads only need the database file.
 
@@ -33,14 +33,14 @@ The whole surface, straight from `things3 -h`:
 
 ```text
 Views:
-  anytime     List Anytime todos grouped by project or area
-  deadlines   List todos with deadlines, soonest first
+  anytime     List available todos grouped by project or area
+  deadlines   List open items with deadlines, soonest first
   inbox       List todos in the Inbox
-  logbook     List completed and canceled todos, most recent first
-  someday     List Someday todos with no scheduled date
-  today       List today's todos, including This Evening
+  logbook     List completed and canceled items, most recent first
+  someday     List Someday todos and projects
+  today       List the Today list, This Evening last
   trash       List trashed todos and projects
-  upcoming    List scheduled todos grouped by date
+  upcoming    List scheduled items, repeating series, and deadlines by date
 
 Collections:
   areas       List all areas
@@ -79,8 +79,8 @@ The format switches (`--text` / `--json` / `--yaml`) are mutually exclusive, tex
 ### Read examples
 
 ```bash
-things3 today                        # Today view, This Evening sectioned
-things3 upcoming                     # scheduled todos grouped by date, repeating tasks included
+things3 today                        # the Today list, projects included, This Evening sectioned
+things3 upcoming                     # by date: scheduled items, repeating series, deadlines
 things3 logbook --days 7 -n 5        # five most recent completions this week
 things3 anytime --tag work --sort title
 things3 search meeting --page 2      # paginated full-text search
@@ -92,10 +92,11 @@ Text lists print rows like
 ```
 STATUS   UUID      TITLE
 [ ]      52vEKPy3  Buy concert tickets | 2026-07-03 | @Personal | #errand
+( )      8QdfrtG2  Plan the tour | 2026-07-03 | @Personal
 -- 1-10 of 44 (page 1/5) | next: --page 2 | all: --all
 ```
 
-and machine formats wrap every list in a self-describing envelope:
+where a square mark is a todo and a round one a project, as in the app. Every view lists exactly what the app lists there, in the app's order: `anytime` leaves out the todos of a Someday project, `logbook` folds a closed project's todos into the project's row, and so on. Machine formats wrap every list in a self-describing envelope:
 
 ```bash
 $ things3 upcoming --json --page 2 | jq '{total, page, pages, first: .items[0].title}'
@@ -165,9 +166,9 @@ func main() {
 
     ctx := context.Background()
 
-    // Composed views
-    today, _ := client.Today(ctx)
-    upcoming, _ := client.Upcoming(ctx) // includes repeating tasks' next occurrences
+    // Sidebar views: what the app lists, in the app's order
+    today, _ := client.Today(ctx)       // []things3.Item: todos and projects
+    upcoming, _ := client.Upcoming(ctx) // includes repeating series and deadlines
     fmt.Println(len(today), len(upcoming))
 
     // Typed query builders
@@ -186,6 +187,23 @@ func main() {
         Execute(ctx)
 }
 ```
+
+### Views
+
+A view returns `[]things3.Item`, where an item is a todo or a project (`item.Todo` or `item.Project`, with accessors such as `UUID()`, `Title()`, and `UpcomingDate()` for what the two share), because that is what the app's lists hold:
+
+```go
+client.Inbox(ctx)
+client.Today(ctx)                       // This Evening last
+client.Upcoming(ctx)                    // by date; series with no next occurrence trail
+client.Anytime(ctx)                     // without the todos of Someday projects
+client.Someday(ctx)                     // Someday projects and standalone Someday todos
+client.Logbook(ctx, time.Time{})        // or pass a day to keep what was closed after it
+client.Deadlines(ctx)
+client.Trash(ctx)
+```
+
+An `Item` marshals to JSON as the todo or project with a leading `"type"` field.
 
 ### Query builders
 

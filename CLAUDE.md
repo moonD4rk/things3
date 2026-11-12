@@ -32,7 +32,7 @@ Core principles, in order of importance:
 - **Flat data model**: no nested items. Upward relationships come inline for free from SQL JOINs (`todo.ProjectTitle`, `todo.AreaTitle`); downward relationships are separate builder queries (`Todos().InProject(uuid)`).
 - **Effective containers**: a todo reports where it lives, not what its row stores. The database leaves `project` and `area` NULL on a todo under a heading, and `area` NULL on anything inside a project; the read model resolves both (`internal/database/sql.go`), and `InProject`/`InArea` filter on the same expressions.
 - **Scopes are opt-out**: queries return live items only. `IncludeTrashed()` lifts the trash exclusion (which also hides todos inside a trashed project), `IncludeTemplates()` the repeating-template exclusion; a lookup by UUID wants both.
-- **View composition lives on Client**: anything beyond a single query is a Client method, not a builder trick - `Today()` (three-part composition with Evening ordering), `Upcoming()` (scheduled todos merged with repeating templates).
+- **Views live on Client and mean what the app means**: `Inbox`, `Today`, `Upcoming`, `Anytime`, `Someday`, `Logbook`, `Deadlines`, `Trash` each return `[]Item` (a todo or a project, since the app's lists mix them) with the membership and order of the app's own list. The rules were derived by diffing against the app through AppleScript (`tell application "Things3" to get id of to dos of list "Today"`); re-run that comparison before changing one. Membership rules that need an OR (`InToday`, `InUpcoming`) and the container predicates live in `internal/database` as `TaskFilter` fields; a view is a filter plus an order, never a builder trick.
 - **Naming**: `With*` identity, `In*` relationship, `Has*` existence; enums type-prefixed (`StatusCompleted`, `StartInbox`).
 
 Domain facts that are easy to get wrong:
@@ -42,6 +42,7 @@ Domain facts that are easy to get wrong:
 - Timestamps are fractional Unix seconds and decode at microsecond precision; write verification depends on it to tell two writes within the same second apart.
 - "Today" comes from the client's clock (`WithClock`, `Client.Now`), never from SQLite's `now` or a bare `time.Now()`, so a pinned clock governs every relative filter and view.
 - Repeating tasks: future occurrences are never materialized as rows. Only the template row (`rt1_recurrenceRule` set) exists, carrying the single next occurrence in `rt1_nextInstanceStartDate`. Normal queries exclude templates; `Upcoming()` opts them back in. A template's `StartDate` is always its next occurrence, and `Template` flags it.
+- View rules that are easy to get wrong: a todo in a Someday project still has `start = 1` itself (Anytime hides it by its project); a Someday todo inside a project is not in the Someday list; the Logbook and the Trash fold a closed or trashed project's todos into the project's row; Upcoming files an unscheduled item under its deadline and lists series without a next occurrence last; the default order is the sidebar's (area, project, heading, index).
 
 ## CLI Architecture (cmd/things3)
 
@@ -55,7 +56,7 @@ All flags are persistent on root; every command shows the same surface, non-list
 - List shaping: `-n` (page size), `--page`, `--all`, `--sort date|created|modified|title`, `--desc`, `--tag`
 - `--db <path>` overrides discovery (precedence: `--db` > `THINGSDB` env > auto)
 
-List pipeline is always fetch -> tag-filter -> sort -> paginate, default page size 10 in every format. Text prints a pagination footer; `json`/`yaml` lists are a self-describing envelope `{items, total, page, pages}` where `items` is always `[]`, never `null`. Detail views, write results, and stderr error objects stay bare. Write commands add `--dry-run` (print URL, do not execute) and `--no-verify`.
+Every list of todos and projects goes through one pipeline (`outputItems`): fetch -> tag-filter -> sort -> paginate, default page size 10 in every format. A text row marks its type by shape, as the app does (`[ ]` todo, `( )` project), so no list needs a type column; in `json`/`yaml` every item leads with `type`. Text prints a pagination footer; `json`/`yaml` lists are a self-describing envelope `{items, total, page, pages}` where `items` is always `[]`, never `null`. Detail views, write results, and stderr error objects stay bare. Write commands add `--dry-run` (print URL, do not execute) and `--no-verify`.
 
 ### Resolve -> execute -> verify
 
@@ -78,7 +79,7 @@ Commands only return errors; `main.go` owns rendering (`RenderError`, format-awa
 
 ## Development Workflow
 
-1. **Design first**: significant changes start as an RFC in `rfcs/NNN_snake_case_title.md` (header: Status/Author/Date; sections: Summary, Design, Implementation Notes). Current specs: RFC 009 (library query/model), RFC 012 (CLI) as amended by RFC 013 (list pagination, output envelope), RFC 014 (MCP server, implemented), RFC 015 (read model and target resolution corrections, implemented).
+1. **Design first**: significant changes start as an RFC in `rfcs/NNN_snake_case_title.md` (header: Status/Author/Date; sections: Summary, Design, Implementation Notes). Current specs: RFC 009 (library query/model), RFC 012 (CLI) as amended by RFC 013 (list pagination, output envelope), RFC 014 (MCP server, implemented), RFC 015 (read model and target resolution corrections, implemented), RFC 016 (app-faithful views, implemented).
 2. **Implement library before CLI** when a change spans both; keep the CLI a thin consumer.
 3. **Verify in both modules**: `go build`, `go test`, `golangci-lint run`, `gofumpt` before finishing.
 4. **Sync docs**: `README.md` and `cmd/things3/README.md` must match implemented behavior. Release notes use Library and CLI bullet sections with PR references.

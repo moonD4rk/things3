@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/moond4rk/things3"
 	"github.com/moond4rk/things3/cmd/things3/internal/verify"
@@ -158,5 +159,64 @@ func TestHeadingChildCarriesItsProject(t *testing.T) {
 	scoped := listTodos(t, srv, ListTodosInput{View: "anytime", Project: "Project in Area 1", Limit: 100})
 	if !slices.ContainsFunc(scoped.Items, func(it Item) bool { return it.UUID == uuidTodoInHeading }) {
 		t.Errorf("project filter should include the todo under its heading")
+	}
+}
+
+// Scoping a view that lists projects: an area keeps its projects along with its
+// todos, while a project filter keeps only what is inside that project.
+func TestScopingAViewThatListsProjects(t *testing.T) {
+	srv := newTestServer(t, Config{})
+	all := 0
+
+	inArea := listTodos(t, srv, ListTodosInput{View: "logbook", Days: &all, Area: "Area 1", Limit: 100})
+	var projects, todos int
+	for _, it := range inArea.Items {
+		if it.Area == nil || it.Area.Title != "Area 1" {
+			t.Errorf("%s %s is outside Area 1", it.Type, it.UUID)
+		}
+		if it.Type == typeProject {
+			projects++
+		} else {
+			todos++
+		}
+	}
+	if projects != 2 || todos == 0 {
+		t.Errorf("Area 1 logbook = %d projects and %d todos, want its 2 closed projects and its closed todos", projects, todos)
+	}
+
+	inProject := listTodos(t, srv, ListTodosInput{View: "today", Project: "Project in Area 1", Limit: 100})
+	if inProject.Total == 0 {
+		t.Fatalf("fixture drift: no Today todo in the project")
+	}
+	for _, it := range inProject.Items {
+		if it.Type != typeTodo || it.Project == nil || it.Project.Title != "Project in Area 1" {
+			t.Errorf("project scope kept %s %s", it.Type, it.UUID)
+		}
+	}
+}
+
+// Upcoming files an unscheduled item under its deadline, so the days window
+// must measure that day too.
+func TestUpcomingWindowCoversDeadlineOnlyItems(t *testing.T) {
+	srv := newTestServer(t, Config{})
+
+	has := func(days int) bool {
+		page := todosWithDays(t, srv, "upcoming", days, 100)
+		return slices.ContainsFunc(page.Items, func(it Item) bool { return it.UUID == uuidTodoInHeading })
+	}
+	deadline := time.Date(2040, time.November, 4, 0, 0, 0, 0, time.Local)
+	daysOut := int(deadline.Sub(thingstest.Now()).Hours()/24) + 1
+
+	if has(daysOut - 30) {
+		t.Errorf("a window ending before the deadline must not include the item")
+	}
+	if !has(daysOut + 30) {
+		t.Errorf("a window reaching the deadline must include the item")
+	}
+
+	page := listTodos(t, srv, ListTodosInput{View: "upcoming", Limit: 100})
+	i := slices.IndexFunc(page.Items, func(it Item) bool { return it.UUID == uuidTodoInHeading })
+	if i < 0 || page.Items[i].When != "" || page.Items[i].Deadline != "2040-11-04" {
+		t.Errorf("the item is filed by its deadline, not a start date: %+v", page.Items)
 	}
 }

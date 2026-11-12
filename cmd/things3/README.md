@@ -203,7 +203,7 @@ Paginated lists end with a text-only footer (see [List flags](#list-flags)):
 
 ### JSON and YAML
 
-`--json` and `--yaml` carry the full model objects and **ignore all text-only grouping**. YAML mirrors JSON field-for-field. Timestamps are RFC 3339; date-only and time-only fields are formatted accordingly. Fields marked optional below are omitted when empty or zero.
+`--json` and `--yaml` carry the full model objects and **ignore all text-only grouping**. YAML mirrors JSON field-for-field. Every date and time is an RFC 3339 string: a date-only field (`start_date`, `deadline`) is local midnight of that day, and `reminder` is a time of day carried on the zero date (`0000-01-01T09:30:00Z`). Fields marked optional below are omitted when empty or zero.
 
 **List envelope.** Every list command (all Views, `projects`, `search`, multi-match `show`, `areas`, `tags`) wraps its page in a self-describing envelope:
 
@@ -232,9 +232,9 @@ Paginated lists end with a text-only footer (see [List flags](#list-flags)):
 | `heading_uuid`, `heading_title` | string | parent heading, optional |
 | `tags` | array of string | optional |
 | `checklist` | array of item | populated on single-item `show` and on the todo a verified write returns; optional |
-| `start_date` | string (date) | scheduled date, optional |
-| `deadline` | string (date) | optional |
-| `reminder` | string (time) | optional |
+| `start_date` | string (RFC 3339) | scheduled date, at local midnight; optional |
+| `deadline` | string (RFC 3339) | at local midnight; optional |
+| `reminder` | string (RFC 3339) | time of day on the zero date; optional |
 | `created_at`, `modified_at` | string (RFC 3339) | microsecond precision |
 | `completed_at`, `canceled_at` | string (RFC 3339) | optional |
 | `trashed` | bool | optional (omitted when false) |
